@@ -63,6 +63,7 @@ export function createApp() {
       status: "ok",
       service: "Frictionless Workout Tracker API",
     }))
+    .get("/health", () => ({ status: "ok" }))
     .post(
       "/auth/login",
       async ({ body, jwt, cookie: { auth } }) =>
