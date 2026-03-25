@@ -33,4 +33,4 @@ RUN bunx drizzle-kit generate
 EXPOSE 3000
 
 # Start the server
-CMD ["bun", "run", "src/index.ts"]
+CMD ["bunx", "drizzle-kit", "migrate", "&&", "bun", "run", "src/index.ts"]
