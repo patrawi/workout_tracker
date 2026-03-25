@@ -6,7 +6,7 @@ builder = "dockerfile"
 
 [deploy]
 startCommand = "bunx drizzle-kit migrate && bun run src/index.ts"
-healthcheckPath = "/api/auth/verify"
+healthcheckPath = "/auth/verify"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
