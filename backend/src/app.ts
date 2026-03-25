@@ -59,10 +59,7 @@ export function createApp() {
       }),
     )
     .use(cookie())
-    .get("/", () => ({
-      status: "ok",
-      service: "Frictionless Workout Tracker API",
-    }))
+    .get("/", () => Bun.file("./public/index.html"))
     .get("/health", () => ({ status: "ok" }))
     .post(
       "/auth/login",
