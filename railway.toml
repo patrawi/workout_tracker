@@ -2,8 +2,7 @@
 # This file configures the API service deployment on Railway
 
 [build]
-builder = "bun"
-watchPatterns = ["backend/**/*.ts"]
+builder = "dockerfile"
 
 [deploy]
 startCommand = "bunx drizzle-kit migrate && bun run src/index.ts"

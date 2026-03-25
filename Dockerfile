@@ -12,6 +12,7 @@ WORKDIR /app
 # Copy all source code
 COPY backend/src ./backend/src/
 COPY backend/drizzle.config.ts ./backend/
+COPY backend/drizzle ./backend/drizzle/
 COPY frontend ./frontend/
 
 # Build frontend
