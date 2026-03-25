@@ -30,4 +30,4 @@ WORKDIR /app/backend
 EXPOSE 3000
 
 # Start the server (run migrations first, then start app)
-CMD ["/bin/sh", "-c", "bunx drizzle-kit migrate && bun src/index.ts"]
+CMD ["/bin/sh", "-c", "echo 'Running migrations...' && bunx drizzle-kit migrate && echo 'Starting server...' && bun src/index.ts"]
