@@ -6,9 +6,9 @@ const AUTH_COOKIE_MAX_AGE_SECONDS = 7 * 86400;
 
 export const AUTH_PUBLIC_PATHS = new Set([
   "/",
-  "/auth/login",
-  "/auth/logout",
-  "/auth/verify",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/verify",
   "/health",
   "/login",
   "/analytics",

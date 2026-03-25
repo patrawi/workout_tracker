@@ -47,64 +47,70 @@ export function createApp() {
       }),
     )
     // SPA fallback - serve index.html for client-side routes
+    .get("/", () => Bun.file("./public/index.html"))
     .get("/login", () => Bun.file("./public/index.html"))
     .get("/analytics", () => Bun.file("./public/index.html"))
     .get("/profile", () => Bun.file("./public/index.html"))
     .get("/history", () => Bun.file("./public/index.html"))
     .get("/history/*", () => Bun.file("./public/index.html"))
-    .use(
-      jwt({
-        name: "jwt",
-        secret: config.jwtSecret,
-        exp: "7d",
-      }),
-    )
-    .use(cookie())
-    .get("/", () => Bun.file("./public/index.html"))
     .get("/health", () => ({ status: "ok" }))
-    .post(
-      "/auth/login",
-      async ({ body, jwt, cookie: { auth } }) =>
-        handleAuthLogin({
-          body,
-          jwt,
-          auth,
-        }),
-      {
-        body:
-          authLoginBodySchema ??
-          t.Object({
-            password: t.String(),
+    // API routes under /api prefix
+    .group("/api", (app) =>
+      app
+        .use(
+          jwt({
+            name: "jwt",
+            secret: config.jwtSecret,
+            exp: "7d",
           }),
-      },
-    )
-    .post("/auth/logout", ({ cookie: { auth } }) => handleAuthLogout(auth))
-    .get("/auth/verify", async ({ jwt, cookie: { auth } }) =>
-      getAuthVerifyResponse({
-        jwt,
-        auth,
-      }),
-    )
-    .onBeforeHandle(async ({ jwt, cookie: { auth }, path, set }) => {
-      if (isPublicPath(path)) {
-        return;
-      }
+        )
+        .use(cookie())
+        .post(
+          "/auth/login",
+          async ({ body, jwt, cookie: { auth } }) =>
+            handleAuthLogin({
+              body,
+              jwt,
+              auth,
+            }),
+          {
+            body:
+              authLoginBodySchema ??
+              t.Object({
+                password: t.String(),
+              }),
+          },
+        )
+        .post("/auth/logout", ({ cookie: { auth } }) => handleAuthLogout(auth))
+        .get("/auth/verify", async ({ jwt, cookie: { auth } }) =>
+          getAuthVerifyResponse({
+            jwt,
+            auth,
+          }),
+        )
+        .onBeforeHandle(async ({ jwt, cookie: { auth }, path, set }) => {
+          if (isPublicPath(path)) {
+            return;
+          }
 
-      return requireAuthenticatedRequest({
-        jwt,
-        auth,
-        set,
-      });
-    });
-
-  registerRoutes(
-    app,
-    registerWorkoutRoutes as RouteRegistrar<typeof app>,
-    registerAnalyticsRoutes as RouteRegistrar<typeof app>,
-    registerBodyweightRoutes as RouteRegistrar<typeof app>,
-    registerRestDayRoutes as RouteRegistrar<typeof app>,
-    registerProfileRoutes as RouteRegistrar<typeof app>,
-  );
+          return requireAuthenticatedRequest({
+            jwt,
+            auth,
+            set,
+          });
+        })
+        .use((app) => {
+          registerRoutes(
+            app,
+            registerWorkoutRoutes as RouteRegistrar<typeof app>,
+            registerAnalyticsRoutes as RouteRegistrar<typeof app>,
+            registerBodyweightRoutes as RouteRegistrar<typeof app>,
+            registerRestDayRoutes as RouteRegistrar<typeof app>,
+            registerProfileRoutes as RouteRegistrar<typeof app>,
+          );
+          return app;
+        }),
+    );
 
   return app;
 }
