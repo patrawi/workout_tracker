@@ -9,7 +9,22 @@ export const AUTH_PUBLIC_PATHS = new Set([
   "/auth/login",
   "/auth/logout",
   "/auth/verify",
+  "/health",
+  "/login",
+  "/analytics",
+  "/profile",
+  "/history",
+  "/favicon.ico",
 ]);
+
+// Check if path is a static asset or public route
+export function isPublicPath(path: string): boolean {
+  if (AUTH_PUBLIC_PATHS.has(path)) return true;
+  if (path.startsWith("/history/")) return true;
+  if (path.startsWith("/assets/")) return true;
+  if (/\.(js|css|ico|png|jpg|svg|woff|woff2|ttf|eot)$/.test(path)) return true;
+  return false;
+}
 
 export const authLoginBodySchema = t.Object({
   password: t.String(),

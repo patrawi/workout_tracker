@@ -11,7 +11,7 @@ import { registerBodyweightRoutes } from "./routes/bodyweight.routes";
 import { registerRestDayRoutes } from "./routes/rest-days.routes";
 import { registerProfileRoutes } from "./routes/profile.routes.ts";
 import {
-  AUTH_PUBLIC_PATHS,
+  isPublicPath,
   authLoginBodySchema,
   getAuthVerifyResponse,
   handleAuthLogin,
@@ -47,6 +47,7 @@ export function createApp() {
       }),
     )
     // SPA fallback - serve index.html for client-side routes
+    .get("/login", () => Bun.file("./public/index.html"))
     .get("/analytics", () => Bun.file("./public/index.html"))
     .get("/profile", () => Bun.file("./public/index.html"))
     .get("/history", () => Bun.file("./public/index.html"))
@@ -85,7 +86,7 @@ export function createApp() {
       }),
     )
     .onBeforeHandle(async ({ jwt, cookie: { auth }, path, set }) => {
-      if (AUTH_PUBLIC_PATHS.has(path)) {
+      if (isPublicPath(path)) {
         return;
       }
 
