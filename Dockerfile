@@ -27,7 +27,7 @@ WORKDIR /app/backend
 
 # Generate Drizzle client and run migrations
 RUN bunx drizzle-kit generate
-RUN bunx drizzle-kit migrate
+
 
 # Expose port
 EXPOSE 3000
