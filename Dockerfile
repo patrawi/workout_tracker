@@ -25,12 +25,8 @@ RUN mkdir -p backend/public && cp -r frontend/dist/* backend/public/
 
 WORKDIR /app/backend
 
-# Generate Drizzle client and run migrations
-RUN bunx drizzle-kit generate
-
-
 # Expose port
 EXPOSE 3000
 
-# Start the server
-CMD ["bunx", "drizzle-kit", "migrate", "&&", "bun", "run", "src/index.ts"]
+# Start the server (run migrations first, then start app)
+CMD bunx drizzle-kit migrate && bun run src/index.ts
