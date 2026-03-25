@@ -1,0 +1,15 @@
+# Railway configuration
+# This file configures the API service deployment on Railway
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "cd backend && bun run src/index.ts"
+healthcheckPath = "/api/auth/verify"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Note: Add PostgreSQL database via Railway UI
+# Then set DATABASE_URL in Variables as: ${{Postgres.DATABASE_URL}}
