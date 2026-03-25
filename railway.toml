@@ -2,7 +2,8 @@
 # This file configures the API service deployment on Railway
 
 [build]
-builder = "nixpacks"
+builder = "bun"
+watchPatterns = ["backend/**/*.ts"]
 
 [deploy]
 startCommand = "bunx drizzle-kit migrate && bun run src/index.ts"
