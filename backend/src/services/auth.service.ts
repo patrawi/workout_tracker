@@ -104,18 +104,18 @@ export async function getAuthVerifyResponse({
   auth?: AuthCookie;
 }) {
   if (!isAuthEnabled) {
-    return { authenticated: true };
+    return ok({ authenticated: true });
   }
 
   if (!auth?.value || typeof auth.value !== "string") {
-    return { authenticated: false };
+    return ok({ authenticated: false });
   }
 
   try {
     const payload = await jwt.verify(auth.value);
-    return { authenticated: !!payload };
+    return ok({ authenticated: !!payload });
   } catch {
-    return { authenticated: false };
+    return ok({ authenticated: false });
   }
 }
 
