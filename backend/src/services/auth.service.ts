@@ -43,6 +43,7 @@ type AuthCookie = {
     maxAge: number;
     sameSite: "lax";
     path: string;
+    secure?: boolean;
   }): void;
   remove(): void;
 };
@@ -56,6 +57,7 @@ const authCookieOptions = {
   maxAge: AUTH_COOKIE_MAX_AGE_SECONDS,
   sameSite: "lax" as const,
   path: "/",
+  secure: process.env.NODE_ENV === "production" || true,
 };
 
 export async function handleAuthLogin({
