@@ -82,40 +82,38 @@ export default function RecentLogs({ workouts, isLoading, onEdit, onDelete, onAd
         setAddDefaultValues(undefined);
     }, []);
 
-    // 1. Group by Date, then by Exercise
-    // Map structure: Map<dateKey, Map<exerciseName, WorkoutRow[]>>
-    const groupedWorkouts = new Map<string, Map<string, WorkoutRow[]>>();
+    // 1. Group by Session, then by Exercise
+    // Map structure: Map<sessionId, { date: string, exercises: Map<exerciseName, WorkoutRow[]> }>
+    const groupedWorkouts = new Map<number, { date: string; exercises: Map<string, WorkoutRow[]> }>();
 
     for (const workout of workouts) {
-        // Assume created_at is "YYYY-MM-DD HH:MM:SS"
+        const sessionId = workout.session_id;
         const dateKey = workout.created_at.split(" ")[0] || workout.created_at.split("T")[0];
 
-        let dateGroup = groupedWorkouts.get(dateKey);
-        if (!dateGroup) {
-            dateGroup = new Map<string, WorkoutRow[]>();
-            groupedWorkouts.set(dateKey, dateGroup);
+        let sessionGroup = groupedWorkouts.get(sessionId);
+        if (!sessionGroup) {
+            sessionGroup = { date: dateKey, exercises: new Map<string, WorkoutRow[]>() };
+            groupedWorkouts.set(sessionId, sessionGroup);
         }
 
-        let exerciseGroup = dateGroup.get(workout.exercise_name);
+        let exerciseGroup = sessionGroup.exercises.get(workout.exercise_name);
         if (!exerciseGroup) {
             exerciseGroup = [];
-            dateGroup.set(workout.exercise_name, exerciseGroup);
+            sessionGroup.exercises.set(workout.exercise_name, exerciseGroup);
         }
 
         exerciseGroup.push(workout);
     }
 
     // 2. Flatten into an ordered list of groups for rendering
-    // Sort dates descending, and within dates we can just keep insertion order or sort by first set's time descending
-    const orderedGroups: { date: string; exercise: string; sets: WorkoutRow[] }[] = [];
+    // Sort sessions by date descending, then by session_id descending
+    const orderedGroups: { sessionId: number; date: string; exercise: string; sets: WorkoutRow[] }[] = [];
 
-    // Convert Map to Array and sort by date descending
-    const sortedDates = Array.from(groupedWorkouts.keys()).sort((a, b) => b.localeCompare(a));
+    // Convert Map to Array and sort by session_id descending (most recent first)
+    const sortedSessions = Array.from(groupedWorkouts.entries()).sort((a, b) => b[0] - a[0]);
 
-    for (const dateKey of sortedDates) {
-        const dateGroup = groupedWorkouts.get(dateKey)!;
-
-        const sortedExercises = Array.from(dateGroup.entries()).sort((a, b) => {
+    for (const [sessionId, sessionData] of sortedSessions) {
+        const sortedExercises = Array.from(sessionData.exercises.entries()).sort((a, b) => {
             const maxTimeA = Math.max(...a[1].map(w => new Date(w.created_at).getTime()));
             const maxTimeB = Math.max(...b[1].map(w => new Date(w.created_at).getTime()));
             if (maxTimeA === maxTimeB) {
@@ -133,7 +131,7 @@ export default function RecentLogs({ workouts, isLoading, onEdit, onDelete, onAd
                 if (timeDiff === 0) return a.id - b.id;
                 return timeDiff;
             });
-            orderedGroups.push({ date: dateKey, exercise: exerciseName, sets: chronoSortedSets });
+            orderedGroups.push({ sessionId, date: sessionData.date, exercise: exerciseName, sets: chronoSortedSets });
         }
     }
 
@@ -162,7 +160,7 @@ export default function RecentLogs({ workouts, isLoading, onEdit, onDelete, onAd
                 ) : (
                     orderedGroups.map((group, i) => (
                         <div
-                            key={`${group.date}-${group.exercise}`}
+                            key={`${group.sessionId}-${group.exercise}`}
                             className="animate-slide-up"
                             style={{ animationDelay: `${i * 40}ms` }}
                         >
