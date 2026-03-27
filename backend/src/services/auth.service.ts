@@ -1,6 +1,6 @@
 import { t } from "elysia";
 import { config, isAuthEnabled } from "../config";
-import { fail } from "../lib/api";
+import { ok, fail } from "../lib/api";
 
 const AUTH_COOKIE_MAX_AGE_SECONDS = 7 * 86400;
 
