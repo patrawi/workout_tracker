@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { workoutsApi } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import type { WorkoutRow, WorkoutData } from "@/types";
 
 interface UseWorkoutTrackerReturn {
@@ -24,93 +26,115 @@ interface UseWorkoutTrackerReturn {
         is_assisted?: boolean;
         muscle_group?: string;
         created_at?: string;
+        session_id?: number;
     }) => Promise<boolean>;
     refreshWorkouts: () => Promise<void>;
     clearError: () => void;
 }
 
 export function useWorkoutTracker(): UseWorkoutTrackerReturn {
-    const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isParsing, setIsParsing] = useState(false);
-    const [isConfirming, setIsConfirming] = useState(false);
+    const queryClient = useQueryClient();
     const [error, setError] = useState<string | null>(null);
 
-    const refreshWorkouts = useCallback(async () => {
-        try {
+    const { data: workouts = [], isLoading } = useQuery({
+        queryKey: queryKeys.workouts.list(),
+        queryFn: async () => {
             const res = await workoutsApi.list();
-            if (res.success && res.data) {
-                setWorkouts(res.data);
-            } else {
-                setError(res.error ?? "Failed to fetch workouts.");
-            }
-        } catch {
-            setError("Cannot reach the server. Is the backend running?");
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        refreshWorkouts();
-    }, [refreshWorkouts]);
-
-    const parseWorkout = useCallback(async (rawText: string) => {
-        setIsParsing(true);
-        setError(null);
-
-        try {
-            const res = await workoutsApi.parse(rawText);
-            if (res.success && res.data) {
-                return res.data;
-            }
-            setError(res.error ?? "AI processing failed.");
-            return null;
-        } catch {
-            setError("Failed to parse. Is the backend running?");
-            return null;
-        } finally {
-            setIsParsing(false);
-        }
-    }, []);
-
-    const confirmWorkout = useCallback(
-        async (rawText: string, items: WorkoutData[], createdAt: string) => {
-            setIsConfirming(true);
-            setError(null);
-
-            try {
-                const res = await workoutsApi.create(rawText, items, createdAt);
-                if (res.success && res.data) {
-                    setWorkouts((prev) => [...res.data!, ...prev]);
-                    return true;
-                }
-                setError(res.error ?? "Failed to save workouts.");
-                return false;
-            } catch {
-                setError("Failed to save. Is the backend running?");
-                return false;
-            } finally {
-                setIsConfirming(false);
-            }
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Failed to fetch workouts.");
         },
-        []
-    );
+    });
 
-    const deleteWorkout = useCallback(async (workoutId: number) => {
-        try {
+    const parseMutation = useMutation({
+        mutationFn: async (rawText: string) => {
+            const res = await workoutsApi.parse(rawText);
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "AI processing failed.");
+        },
+        onError: (err: Error) => setError(err.message),
+    });
+
+    const confirmMutation = useMutation({
+        mutationFn: async ({ rawText, items, createdAt }: { rawText: string; items: WorkoutData[]; createdAt: string }) => {
+            const res = await workoutsApi.create(rawText, items, createdAt);
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Failed to save workouts.");
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.workouts.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.heatmap.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.history.all });
+        },
+        onError: (err: Error) => setError(err.message),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (workoutId: number) => {
             const res = await workoutsApi.delete(workoutId);
-            if (res.success) {
-                setWorkouts((prev) => prev.filter((w) => w.id !== workoutId));
-                return true;
-            }
-            setError(res.error ?? "Failed to delete workout.");
-            return false;
+            if (res.success) return true;
+            throw new Error(res.error ?? "Failed to delete workout.");
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.workouts.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.heatmap.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.history.all });
+        },
+        onError: (err: Error) => setError(err.message),
+    });
+
+    const addMutation = useMutation({
+        mutationFn: async (workout: {
+            exercise_name: string;
+            weight?: number;
+            reps?: number;
+            rpe?: number;
+            is_bodyweight?: boolean;
+            is_assisted?: boolean;
+            muscle_group?: string;
+            created_at?: string;
+            session_id?: number;
+        }) => {
+            const res = await workoutsApi.add(workout);
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Failed to add workout.");
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.workouts.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.heatmap.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
+        },
+        onError: (err: Error) => setError(err.message),
+    });
+
+    const parseWorkout = useCallback(async (rawText: string): Promise<WorkoutData[] | null> => {
+        setError(null);
+        try {
+            return await parseMutation.mutateAsync(rawText);
         } catch {
-            setError("Failed to delete. Is the backend running?");
+            return null;
+        }
+    }, [parseMutation]);
+
+    const confirmWorkout = useCallback(async (rawText: string, items: WorkoutData[], createdAt: string): Promise<boolean> => {
+        setError(null);
+        try {
+            await confirmMutation.mutateAsync({ rawText, items, createdAt });
+            return true;
+        } catch {
             return false;
         }
-    }, []);
+    }, [confirmMutation]);
+
+    const deleteWorkout = useCallback(async (workoutId: number): Promise<boolean> => {
+        try {
+            await deleteMutation.mutateAsync(workoutId);
+            return true;
+        } catch {
+            return false;
+        }
+    }, [deleteMutation]);
 
     const addWorkout = useCallback(async (workout: {
         exercise_name: string;
@@ -121,29 +145,28 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
         is_assisted?: boolean;
         muscle_group?: string;
         created_at?: string;
-    }) => {
+        session_id?: number;
+    }): Promise<boolean> => {
         setError(null);
         try {
-            const res = await workoutsApi.add(workout);
-            if (res.success && res.data) {
-                setWorkouts((prev) => [res.data!, ...prev]);
-                return true;
-            }
-            setError(res.error ?? "Failed to add workout.");
-            return false;
+            await addMutation.mutateAsync(workout);
+            return true;
         } catch {
-            setError("Failed to add. Is the backend running?");
             return false;
         }
-    }, []);
+    }, [addMutation]);
+
+    const refreshWorkouts = useCallback(async () => {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.workouts.list() });
+    }, [queryClient]);
 
     const clearError = useCallback(() => setError(null), []);
 
     return {
         workouts,
         isLoading,
-        isParsing,
-        isConfirming,
+        isParsing: parseMutation.isPending,
+        isConfirming: confirmMutation.isPending,
         error,
         parseWorkout,
         confirmWorkout,
@@ -158,18 +181,11 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
  * Handle updating a workout in local state after edit
  */
 export function useWorkoutEditor() {
-    const updateWorkoutInState = useCallback(
-        (
-            _workouts: WorkoutRow[],
-            setWorkouts: React.Dispatch<React.SetStateAction<WorkoutRow[]>>,
-            updated: WorkoutRow
-        ) => {
-            setWorkouts((prev) =>
-                prev.map((w) => (w.id === updated.id ? updated : w))
-            );
-        },
-        []
-    );
+    const queryClient = useQueryClient();
 
-    return { updateWorkoutInState };
+    const invalidateWorkouts = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.all });
+    }, [queryClient]);
+
+    return { invalidateWorkouts };
 }

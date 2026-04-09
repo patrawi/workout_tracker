@@ -1,29 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
-import { workoutsApi } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { historyApi, type HistoryDate } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { formatHistoryDate } from "@/lib/date-utils";
 
 const ITEMS_PER_PAGE = 10;
 
 export default function HistoryPage() {
-    const [dates, setDates] = useState<string[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
 
-    useEffect(() => {
-        async function fetchDates() {
-            const res = await workoutsApi.getDates();
-            if (res.success && res.data) {
-                setDates(res.data);
-            } else {
-                setError(res.error || "Failed to fetch workout dates");
-            }
-            setIsLoading(false);
-        }
-        fetchDates();
-    }, []);
+    const { data: dates = [], isLoading, error } = useQuery({
+        queryKey: queryKeys.history.dates(),
+        queryFn: async () => {
+            const res = await historyApi.getDates();
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error || "Failed to fetch history dates");
+        },
+    });
 
     const totalPages = Math.ceil(dates.length / ITEMS_PER_PAGE);
     const paginatedDates = dates.slice(
@@ -44,7 +39,7 @@ export default function HistoryPage() {
     if (error) {
         return (
             <div className="pt-8 text-center text-red-400">
-                <p>{error}</p>
+                <p>{error.message}</p>
             </div>
         );
     }
@@ -56,7 +51,7 @@ export default function HistoryPage() {
                     <Calendar className="w-8 h-8 text-[var(--muted-foreground)] opacity-50" />
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">No History Yet</h2>
-                <p>Log a workout from the Home page to get started.</p>
+                <p>Log a workout or meal from the Home page to get started.</p>
             </div>
         );
     }
@@ -72,10 +67,8 @@ export default function HistoryPage() {
             </div>
 
             <div className="flex flex-col gap-3 relative z-0">
-
-
-                {paginatedDates.map((dateStr, index) => (
-                    <Link key={dateStr} to={`/history/${dateStr}`}>
+                {paginatedDates.map((entry: HistoryDate, index: number) => (
+                    <Link key={entry.date} to={`/history/${entry.date}`}>
                         <div
                             className="relative group bg-white/[0.02] border border-white/5 hover:border-[var(--chart-2)]/30 hover:bg-white/[0.04] rounded-2xl p-4 sm:p-5 flex items-center justify-between transition-all duration-300 ease-out cursor-pointer overflow-hidden backdrop-blur-sm shadow-sm hover:shadow-[var(--chart-2)]/5 hover:-translate-y-0.5"
                             style={{ animationDelay: `${index * 0.04}s` }}
@@ -88,24 +81,53 @@ export default function HistoryPage() {
                                 {/* Date Bubble */}
                                 <div className="hidden sm:flex flex-col items-center justify-center min-w-[4rem] h-[4rem] rounded-xl bg-white/5 border border-white/10 group-hover:border-[var(--chart-2)]/30 group-hover:bg-[var(--chart-2)]/10 transition-colors duration-300">
                                     <span className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider group-hover:text-[var(--chart-2)] transition-colors">
-                                        {formatHistoryDate(dateStr).split(',')[0]}
+                                        {formatHistoryDate(entry.date).split(',')[0]}
                                     </span>
                                     <span className="text-xl font-bold text-white group-hover:text-[var(--chart-2)] transition-colors">
-                                        {dateStr.split('-')[2]} {/* The Day Number */}
+                                        {entry.date.split('-')[2]}
                                     </span>
                                 </div>
 
                                 {/* Main Content */}
-                                <div className="flex-1">
+                                <div className="flex-1 min-w-0">
                                     <h3 className="text-lg sm:text-xl font-bold text-zinc-100 group-hover:text-white transition-colors duration-300 flex items-center gap-2">
                                         <span className="sm:hidden text-[var(--chart-2)] opacity-80 shrink-0">
-                                            {formatHistoryDate(dateStr).split(',')[0]}
+                                            {formatHistoryDate(entry.date).split(',')[0]}
                                         </span>
-                                        {formatHistoryDate(dateStr).split(',').slice(1).join(',')}
+                                        {formatHistoryDate(entry.date).split(',').slice(1).join(',')}
                                     </h3>
-                                    <p className="text-sm text-[var(--muted-foreground)] mt-1 opacity-70 group-hover:opacity-100 transition-opacity">
-                                        Daily Workout Log
-                                    </p>
+
+                                    {/* Activity tags */}
+                                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                        {entry.hasWorkout && (
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--chart-2)]/10 text-[var(--chart-2)] border border-[var(--chart-2)]/20">
+                                                🏋️ Workout
+                                            </span>
+                                        )}
+                                        {entry.hasRestDay && (
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                                😴 Rest Day
+                                            </span>
+                                        )}
+                                        {entry.hasNutrition && (
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                                🍽️ Nutrition
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Macro summary for dates with nutrition */}
+                                    {entry.hasNutrition && (
+                                        <div className="flex items-center gap-2 mt-1.5 text-[11px] tabular-nums text-surface-400">
+                                            <span className="text-emerald-400/70">P: {entry.protein.toFixed(0)}</span>
+                                            <span className="text-surface-300/30">|</span>
+                                            <span className="text-amber-400/70">C: {entry.carbs.toFixed(0)}</span>
+                                            <span className="text-surface-300/30">|</span>
+                                            <span className="text-rose-400/70">F: {entry.fat.toFixed(0)}</span>
+                                            <span className="text-surface-300/30">•</span>
+                                            <span className="text-white/60 font-medium">{entry.calories.toFixed(0)} kcal</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Action Icon */}

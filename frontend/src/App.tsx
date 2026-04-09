@@ -19,10 +19,10 @@ export default function App() {
     parseWorkout,
     confirmWorkout,
     deleteWorkout,
+    addWorkout,
     clearError,
   } = useWorkoutTracker();
 
-  const [heatmapRefresh, setHeatmapRefresh] = useState(0);
   const [showRestDayForm, setShowRestDayForm] = useState(false);
 
   const {
@@ -30,7 +30,6 @@ export default function App() {
     submitRestDay,
   } = useRestDay(() => {
     setShowRestDayForm(false);
-    setHeatmapRefresh((prev) => prev + 1);
   });
 
   // Review modal state
@@ -59,7 +58,6 @@ export default function App() {
         setReviewItems(null);
         setReviewRawText("");
         setReviewDate("");
-        setHeatmapRefresh((prev) => prev + 1);
       }
     },
     [confirmWorkout]
@@ -83,8 +81,28 @@ export default function App() {
   // Delete: remove the workout from DB and local state
   const handleDelete = useCallback(async (workoutId: number) => {
     await deleteWorkout(workoutId);
-    setHeatmapRefresh((prev) => prev + 1);
   }, [deleteWorkout]);
+
+  // Add: add a new workout to an existing session
+  const handleAddWorkout = useCallback(async (
+    exerciseName: string,
+    muscleGroup: string,
+    createdAt: string,
+    sessionId: number,
+    defaultValues?: Partial<WorkoutRow>
+  ) => {
+    await addWorkout({
+      exercise_name: exerciseName,
+      weight: defaultValues?.weight,
+      reps: defaultValues?.reps,
+      rpe: defaultValues?.rpe,
+      is_bodyweight: defaultValues?.is_bodyweight,
+      is_assisted: defaultValues?.is_assisted,
+      muscle_group: muscleGroup,
+      created_at: createdAt,
+      session_id: sessionId,
+    });
+  }, [addWorkout]);
 
   return (
     <main className="max-w-6xl mx-auto px-4 pb-16">
@@ -106,7 +124,7 @@ export default function App() {
         </div>
       ) : null}
 
-      <CalendarHeatmap refreshTrigger={heatmapRefresh} />
+      <CalendarHeatmap />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start pt-4">
         <div className="lg:col-span-5 lg:sticky lg:top-28">
@@ -144,6 +162,7 @@ export default function App() {
             isLoading={isLoadingLogs}
             onEdit={setEditingWorkout}
             onDelete={handleDelete}
+            onAdd={handleAddWorkout}
           />
         </div>
       </div>
@@ -171,4 +190,3 @@ export default function App() {
     </main>
   );
 }
-

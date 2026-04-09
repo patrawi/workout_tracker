@@ -1,10 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { profileApi, bodyweightApi, type BodyweightRecord } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import type { ProfileData } from "@/types";
 import { formatDate } from "@/lib/date-utils";
 
+function getLocalDateString(): string {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const local = new Date(now.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 10);
+}
+
 interface UseProfileReturn {
     profile: ProfileData;
+    bodyweightDate: string;
+    setBodyweightDate: (date: string) => void;
     bodyweights: { date: string; weight: number }[];
     selectedRange: string;
     setSelectedRange: (range: string) => void;
@@ -18,78 +29,89 @@ interface UseProfileReturn {
 }
 
 export function useProfile(): UseProfileReturn {
+    const queryClient = useQueryClient();
     const [profile, setProfile] = useState<ProfileData>({
         weight_kg: 0,
         height_cm: 0,
         tdee: 0,
         calories_intake: 0,
+        protein_target: 0,
+        carbs_target: 0,
+        fat_target: 0,
     });
-    const [bodyweights, setBodyweights] = useState<{ date: string; weight: number }[]>([]);
+    const [bodyweightDate, setBodyweightDate] = useState(getLocalDateString);
     const [selectedRange, setSelectedRange] = useState("180");
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [initialized, setInitialized] = useState(false);
 
-    const fetchData = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const [profileRes, bwRes] = await Promise.all([
-                profileApi.get(),
-                bodyweightApi.list(selectedRange),
-            ]);
-
-            if (profileRes.success && profileRes.data) {
+    // Fetch profile data
+    const { isLoading: isLoadingProfile } = useQuery({
+        queryKey: queryKeys.profile.all,
+        queryFn: async () => {
+            const res = await profileApi.get();
+            if (res.success && res.data) return res.data;
+            return null;
+        },
+        select: (data) => {
+            if (data && !initialized) {
                 setProfile({
-                    weight_kg: profileRes.data.weight_kg,
-                    height_cm: profileRes.data.height_cm,
-                    tdee: profileRes.data.tdee,
-                    calories_intake: profileRes.data.calories_intake,
+                    weight_kg: data.weight_kg,
+                    height_cm: data.height_cm,
+                    tdee: data.tdee,
+                    calories_intake: data.calories_intake,
+                    protein_target: data.protein_target,
+                    carbs_target: data.carbs_target,
+                    fat_target: data.fat_target,
                 });
+                setInitialized(true);
             }
+            return data;
+        },
+    });
 
-            if (bwRes.success && bwRes.data) {
-                setBodyweights(
-                    bwRes.data.map((r: BodyweightRecord) => ({
-                        date: formatDate(r.date),
-                        weight: r.weight_kg,
-                    }))
-                );
+    // Fetch bodyweight history
+    const { data: bodyweightsData, isLoading: isLoadingBw } = useQuery({
+        queryKey: queryKeys.bodyweight.list(selectedRange),
+        queryFn: async () => {
+            const res = await bodyweightApi.list(selectedRange);
+            if (res.success && res.data) {
+                return res.data.map((r: BodyweightRecord) => ({
+                    date: formatDate(r.date),
+                    weight: r.weight_kg,
+                }));
             }
-        } catch {
-            /* no-op */
-        } finally {
-            setIsLoading(false);
-        }
-    }, [selectedRange]);
+            return [];
+        },
+    });
 
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+    const bodyweights = bodyweightsData ?? [];
 
-    // Re-fetch when saved changes (to refresh bodyweight chart)
-    useEffect(() => {
-        if (saved) {
-            fetchData();
-        }
-    }, [saved, fetchData]);
+    const saveMutation = useMutation({
+        mutationFn: async () => {
+            const res = await profileApi.update({
+                ...profile,
+                bodyweight_date: bodyweightDate,
+            });
+            if (res.success) return true;
+            throw new Error("Failed to save profile");
+        },
+        onSuccess: () => {
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+            setInitialized(false);
+            queryClient.invalidateQueries({ queryKey: queryKeys.profile.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.bodyweight.all });
+        },
+    });
 
-    const saveProfile = useCallback(async () => {
-        setIsSaving(true);
-        setSaved(false);
+    const saveProfile = useCallback(async (): Promise<boolean> => {
         try {
-            const res = await profileApi.update(profile);
-            if (res.success) {
-                setSaved(true);
-                setTimeout(() => setSaved(false), 2000);
-                return true;
-            }
-            return false;
+            await saveMutation.mutateAsync();
+            return true;
         } catch {
             return false;
-        } finally {
-            setIsSaving(false);
         }
-    }, [profile]);
+    }, [saveMutation]);
 
     const updateField = useCallback((field: keyof ProfileData, value: number) => {
         setProfile((prev) => ({ ...prev, [field]: value }));
@@ -116,11 +138,13 @@ export function useProfile(): UseProfileReturn {
 
     return {
         profile,
+        bodyweightDate,
+        setBodyweightDate,
         bodyweights,
         selectedRange,
         setSelectedRange,
-        isLoading,
-        isSaving,
+        isLoading: isLoadingProfile || isLoadingBw,
+        isSaving: saveMutation.isPending,
         saved,
         updateField,
         saveProfile,

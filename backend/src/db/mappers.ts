@@ -1,5 +1,5 @@
-import { workouts, profile, restDays, bodyweightLogs } from "../schema";
-import type { WorkoutRow, ProfileRow } from "../types";
+import { workouts, profile, restDays, bodyweightLogs, nutritionLogs } from "../schema";
+import type { WorkoutRow, ProfileRow, NutritionRow } from "../types";
 
 export interface RestDayRow {
   id: number;
@@ -44,6 +44,9 @@ export function mapProfileRow(row: typeof profile.$inferSelect): ProfileRow {
     height_cm: row.height_cm ?? 0,
     tdee: row.tdee ?? 0,
     calories_intake: row.calories_intake ?? 0,
+    protein_target: row.protein_target ?? 0,
+    carbs_target: row.carbs_target ?? 0,
+    fat_target: row.fat_target ?? 0,
     updated_at: row.updated_at ?? "",
   };
 }
@@ -67,6 +70,22 @@ export function mapBodyweightLogRow(
     id: row.id,
     date: row.date,
     weight_kg: row.weight_kg,
+    created_at: row.created_at ?? "",
+  };
+}
+
+export function mapNutritionLogRow(
+  row: typeof nutritionLogs.$inferSelect,
+): NutritionRow {
+  return {
+    id: row.id,
+    date: row.date,
+    meal: row.meal,
+    food_name: row.food_name,
+    protein: row.protein ?? 0,
+    carbs: row.carbs ?? 0,
+    fat: row.fat ?? 0,
+    calories: row.calories ?? 0,
     created_at: row.created_at ?? "",
   };
 }

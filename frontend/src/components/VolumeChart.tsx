@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
     BarChart,
     Bar,
@@ -24,8 +25,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { analyticsApi } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { TIME_RANGES } from "@/lib/constants";
-import type { VolumeData } from "../types";
 
 function CustomTooltip({
     active,
@@ -58,21 +59,16 @@ function CustomTooltip({
 }
 
 export function VolumeChart() {
-    const [data, setData] = useState<VolumeData[]>([]);
     const [days, setDays] = useState("7");
-    const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        async function fetchVolume() {
-            setIsLoading(true);
+    const { data = [], isLoading } = useQuery({
+        queryKey: queryKeys.analytics.volume(days),
+        queryFn: async () => {
             const res = await analyticsApi.getVolume(days);
-            if (res.success && res.data) {
-                setData(res.data);
-            }
-            setIsLoading(false);
-        }
-        fetchVolume();
-    }, [days]);
+            if (res.success && res.data) return res.data;
+            return [];
+        },
+    });
 
     return (
         <Card className="glass-card mb-6">

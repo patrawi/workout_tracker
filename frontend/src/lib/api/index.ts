@@ -5,3 +5,5 @@ export { bodyweightApi, type BodyweightRecord } from "./bodyweight";
 export { analyticsApi } from "./analytics";
 export { restDaysApi, type RestDayData } from "./rest-days";
 export { heatmapApi, type HeatmapDay } from "./heatmap";
+export { nutritionApi } from "./nutrition";
+export { historyApi, type HistoryDate } from "./history";

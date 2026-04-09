@@ -43,6 +43,19 @@ export {
   type ProfileUpdateInput,
 } from "./repositories/profile.repository.ts";
 
-export { type WorkoutData, type WorkoutRow, type ProfileRow } from "./types";
+export {
+  insertNutritionItems,
+  getNutritionByDate,
+  getNutritionDates,
+  deleteNutritionItem,
+  deleteNutritionByDate,
+} from "./repositories/nutrition.repository";
+
+export {
+  getHistoryDates,
+  type HistoryDate,
+} from "./repositories/history.repository";
+
+export { type WorkoutData, type WorkoutRow, type ProfileRow, type NutritionItem, type NutritionRow } from "./types";
 
 export default db;

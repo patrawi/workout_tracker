@@ -13,8 +13,15 @@ export async function getProfile(): Promise<ProfileRow> {
 
 export async function updateProfile(
   data: ProfileUpdateInput,
+  bodyweightDate?: string,
 ): Promise<ProfileRow> {
+  const currentProfile = await getProfileRepository();
   await updateProfileRepository(data);
-  await insertBodyweightLog(getLocalDateString(), data.weight_kg);
+
+  if (data.weight_kg !== currentProfile.weight_kg) {
+    const date = bodyweightDate && bodyweightDate.trim() ? bodyweightDate : getLocalDateString();
+    await insertBodyweightLog(date, data.weight_kg);
+  }
+
   return getProfileRepository();
 }

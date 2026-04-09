@@ -10,6 +10,8 @@ import { registerAnalyticsRoutes } from "./routes/analytics.routes";
 import { registerBodyweightRoutes } from "./routes/bodyweight.routes";
 import { registerRestDayRoutes } from "./routes/rest-days.routes";
 import { registerProfileRoutes } from "./routes/profile.routes.ts";
+import { registerNutritionRoutes } from "./routes/nutrition.routes.ts";
+import { registerHistoryRoutes } from "./routes/history.routes.ts";
 import {
   isPublicPath,
   authLoginBodySchema,
@@ -53,6 +55,7 @@ export function createApp() {
     .get("/profile", () => Bun.file("./public/index.html"))
     .get("/history", () => Bun.file("./public/index.html"))
     .get("/history/*", () => Bun.file("./public/index.html"))
+    .get("/nutrition", () => Bun.file("./public/index.html"))
     .get("/health", () => ({ status: "ok" }))
     // API routes under /api prefix
     .group("/api", (app) =>
@@ -107,6 +110,8 @@ export function createApp() {
             registerBodyweightRoutes as RouteRegistrar<typeof app>,
             registerRestDayRoutes as RouteRegistrar<typeof app>,
             registerProfileRoutes as RouteRegistrar<typeof app>,
+            registerNutritionRoutes as RouteRegistrar<typeof app>,
+            registerHistoryRoutes as RouteRegistrar<typeof app>,
           );
           return app;
         }),

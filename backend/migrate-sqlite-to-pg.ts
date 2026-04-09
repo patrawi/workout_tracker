@@ -64,7 +64,9 @@ async function migrate() {
             VALUES (${s.raw_input}, ${s.created_at}::timestamp)
             RETURNING id
         `;
-        sessionIdMap.set(s.id, inserted.id);
+        if (inserted) {
+            sessionIdMap.set(s.id, inserted.id);
+        }
     }
     console.log(`✅ Migrated ${sqliteSessions.length} sessions\n`);
 
@@ -142,15 +144,7 @@ async function migrate() {
     }
 
     // ——— Verify ———
-    const [sessionCount] = await sql`SELECT COUNT(*) as count FROM sessions`;
-    const [workoutCountPg] = await sql`SELECT COUNT(*) as count FROM workouts`;
-    const [profileCount] = await sql`SELECT COUNT(*) as count FROM profile`;
 
-    console.log("📊 PostgreSQL verification:");
-    console.log(`   Sessions: ${sessionCount.count}`);
-    console.log(`   Workouts: ${workoutCountPg.count}`);
-    console.log(`   Profile:  ${profileCount.count}`);
-    console.log("\n🎉 Migration complete!");
 
     sqlite.close();
     await sql.end();

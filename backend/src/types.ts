@@ -29,11 +29,38 @@ export interface ProfileData {
   height_cm: number;
   tdee: number;
   calories_intake: number;
+  protein_target: number;
+  carbs_target: number;
+  fat_target: number;
 }
 
 export interface ProfileRow extends ProfileData {
   id: number;
   updated_at: string;
+}
+
+export type MealType = "Breakfast" | "Lunch" | "Dinner" | "Snack";
+
+export interface NutritionItem {
+  food_name: string;
+  meal: MealType;
+  protein: number;       // grams (after scaling)
+  carbs: number;
+  fat: number;
+  calories: number;      // computed: P×4 + C×4 + F×9
+  has_missing_macros: boolean;  // AI flag, used in review UI only
+}
+
+export interface NutritionRow {
+  id: number;
+  date: string;
+  meal: MealType;
+  food_name: string;
+  protein: number;
+  carbs: number;
+  fat: number;
+  calories: number;
+  created_at: string;
 }
 
 export interface LogRequest {

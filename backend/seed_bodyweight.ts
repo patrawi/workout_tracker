@@ -1,7 +1,7 @@
 import { insertBodyweightLog, updateProfile } from './src/db.ts';
 
 async function run() {
-    await updateProfile({ weight_kg: 71.7, height_cm: 180, tdee: 2500, calories_intake: 2300 });
+    await updateProfile({ weight_kg: 71.7, height_cm: 180, tdee: 2500, calories_intake: 2300, protein_target: 0, carbs_target: 0, fat_target: 0 });
 
     // Based on the provided chart screenshot points (approximate matching the line)
     await insertBodyweightLog('2026-01-05', 72.5);

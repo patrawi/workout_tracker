@@ -7,7 +7,17 @@ import {
     boolean,
     timestamp,
     jsonb,
+    pgEnum,
+    index,
 } from "drizzle-orm/pg-core";
+
+// ——— Enums ———
+export const mealTypeEnum = pgEnum("meal_type", [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+]);
 
 // ——— Sessions Table ———
 export const sessions = pgTable("sessions", {
@@ -43,6 +53,9 @@ export const profile = pgTable("profile", {
     height_cm: real("height_cm").default(0),
     tdee: real("tdee").default(0),
     calories_intake: real("calories_intake").default(0),
+    protein_target: real("protein_target").default(0),
+    carbs_target: real("carbs_target").default(0),
+    fat_target: real("fat_target").default(0),
     updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
 });
 
@@ -64,3 +77,23 @@ export const bodyweightLogs = pgTable("bodyweight_logs", {
     weight_kg: real("weight_kg").notNull(),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
 });
+
+// ——— Nutrition Logs Table ———
+export const nutritionLogs = pgTable(
+    "nutrition_logs",
+    {
+        id: serial("id").primaryKey(),
+        date: text("date").notNull(),                          // "YYYY-MM-DD"
+        meal: mealTypeEnum("meal").notNull(),                  // "Breakfast" | "Lunch" | "Dinner" | "Snack"
+        food_name: text("food_name").notNull(),
+        protein: real("protein").default(0),                   // grams, after scaling
+        carbs: real("carbs").default(0),                       // grams, after scaling
+        fat: real("fat").default(0),                           // grams, after scaling
+        calories: real("calories").default(0),                 // computed: P×4 + C×4 + F×9
+        created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+    },
+    (table) => [
+        index("nutrition_logs_date_idx").on(table.date),
+    ],
+);
+

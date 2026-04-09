@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { analyticsApi, profileApi } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import type { WorkoutRow } from "@/types";
 import {
     computeKPIs,
@@ -27,65 +29,63 @@ interface UseAnalyticsDataReturn {
 }
 
 export function useAnalyticsData(): UseAnalyticsDataReturn {
-    const [exercises, setExercises] = useState<string[]>([]);
     const [selectedExercise, setSelectedExercise] = useState("");
     const [selectedRange, setSelectedRange] = useState("0");
-    const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
-    const [notes, setNotes] = useState<WorkoutRow[]>([]);
-    const [profileWeight, setProfileWeight] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
 
-    // Fetch exercise list + profile on mount
-    useEffect(() => {
-        (async () => {
-            try {
-                const [exRes, profileRes] = await Promise.all([
-                    analyticsApi.getExercises(),
-                    profileApi.get(),
-                ]);
+    // Fetch exercise list on mount
+    const { data: exercisesData } = useQuery({
+        queryKey: queryKeys.analytics.exercises(),
+        queryFn: async () => {
+            const res = await analyticsApi.getExercises();
+            if (res.success && res.data) return res.data;
+            return [];
+        },
+    });
 
-                if (exRes.success && exRes.data && exRes.data.length > 0) {
-                    setExercises(exRes.data);
-                    setSelectedExercise(exRes.data[0]);
-                }
-                if (profileRes.success && profileRes.data) {
-                    setProfileWeight(profileRes.data.weight_kg);
-                }
-            } catch {
-                /* no-op */
-            } finally {
-                setIsLoading(false);
-            }
-        })();
-    }, []);
+    const exercises = exercisesData ?? [];
+
+    // Auto-select first exercise when list loads
+    const effectiveExercise = selectedExercise || exercises[0] || "";
+
+    // Fetch profile weight
+    const { data: profileData } = useQuery({
+        queryKey: queryKeys.profile.all,
+        queryFn: async () => {
+            const res = await profileApi.get();
+            if (res.success && res.data) return res.data;
+            return null;
+        },
+    });
+
+    const profileWeight = profileData?.weight_kg ?? 0;
 
     // Fetch analytics data when exercise or range changes
-    const fetchAnalytics = useCallback(async () => {
-        if (!selectedExercise) return;
-        setIsLoading(true);
+    const { data: analyticsData, isLoading: isLoadingAnalytics } = useQuery({
+        queryKey: queryKeys.analytics.exerciseData(effectiveExercise, selectedRange),
+        queryFn: async () => {
+            const res = await analyticsApi.getExerciseData(effectiveExercise, selectedRange);
+            if (res.success && res.data) return res.data;
+            return [] as WorkoutRow[];
+        },
+        enabled: !!effectiveExercise,
+        initialData: [] as WorkoutRow[],
+    });
 
-        try {
-            const [analyticsRes, notesRes] = await Promise.all([
-                analyticsApi.getExerciseData(selectedExercise, selectedRange),
-                analyticsApi.getNotes(selectedExercise),
-            ]);
+    const workouts = analyticsData;
 
-            if (analyticsRes.success && analyticsRes.data) {
-                setWorkouts(analyticsRes.data);
-            }
-            if (notesRes.success && notesRes.data) {
-                setNotes(notesRes.data);
-            }
-        } catch {
-            /* no-op */
-        } finally {
-            setIsLoading(false);
-        }
-    }, [selectedExercise, selectedRange]);
+    // Fetch notes for selected exercise
+    const { data: notesData } = useQuery({
+        queryKey: queryKeys.analytics.notes(effectiveExercise),
+        queryFn: async () => {
+            const res = await analyticsApi.getNotes(effectiveExercise);
+            if (res.success && res.data) return res.data;
+            return [] as WorkoutRow[];
+        },
+        enabled: !!effectiveExercise,
+        initialData: [] as WorkoutRow[],
+    });
 
-    useEffect(() => {
-        fetchAnalytics();
-    }, [fetchAnalytics]);
+    const notes = notesData;
 
     // Computed chart data
     const kpis = useMemo(
@@ -107,14 +107,14 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
 
     return {
         exercises,
-        selectedExercise,
+        selectedExercise: effectiveExercise,
         setSelectedExercise,
         selectedRange,
         setSelectedRange,
         workouts,
         notes,
         profileWeight,
-        isLoading,
+        isLoading: isLoadingAnalytics,
         kpis,
         strengthData,
         volumeData,

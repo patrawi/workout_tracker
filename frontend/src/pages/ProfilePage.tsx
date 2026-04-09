@@ -47,6 +47,8 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
 export default function ProfilePage() {
     const {
         profile,
+        bodyweightDate,
+        setBodyweightDate,
         bodyweights,
         selectedRange,
         setSelectedRange,
@@ -124,6 +126,17 @@ export default function ProfilePage() {
                                                 kg
                                             </span>
                                         </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-surface-400 block mb-1.5">
+                                            Weigh-in Date
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={bodyweightDate}
+                                            onChange={(e) => setBodyweightDate(e.target.value)}
+                                            className="glass-input w-full px-4 py-3 text-base text-white focus:ring-accent-500/50 focus:border-accent-500/50"
+                                        />
                                     </div>
                                     <div>
                                         <label className="text-xs text-surface-400 block mb-1.5">
@@ -218,6 +231,63 @@ export default function ProfilePage() {
                                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-surface-400">
                                                 kcal
                                             </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Macro Targets */}
+                                    <div className="pt-2 border-t border-surface-300/15">
+                                        <p className="text-xs text-surface-400 font-medium uppercase tracking-wider mb-3">
+                                            Daily Macro Targets
+                                        </p>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="text-xs text-emerald-400/70 block mb-1">
+                                                    Protein
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        value={profile.protein_target || ""}
+                                                        onChange={(e) => updateField("protein_target", Number(e.target.value))}
+                                                        className="glass-input w-full pl-2.5 py-2.5 text-sm text-white pr-6 focus:ring-chart-2/50 focus:border-chart-2/50"
+                                                        min="0"
+                                                        placeholder="158"
+                                                    />
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-400">g</span>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-amber-400/70 block mb-1">
+                                                    Carbs
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        value={profile.carbs_target || ""}
+                                                        onChange={(e) => updateField("carbs_target", Number(e.target.value))}
+                                                        className="glass-input w-full pl-2.5 py-2.5 text-sm text-white pr-6 focus:ring-chart-2/50 focus:border-chart-2/50"
+                                                        min="0"
+                                                        placeholder="305"
+                                                    />
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-400">g</span>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-rose-400/70 block mb-1">
+                                                    Fat
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        value={profile.fat_target || ""}
+                                                        onChange={(e) => updateField("fat_target", Number(e.target.value))}
+                                                        className="glass-input w-full pl-2.5 py-2.5 text-sm text-white pr-6 focus:ring-chart-2/50 focus:border-chart-2/50"
+                                                        min="0"
+                                                        placeholder="60"
+                                                    />
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-400">g</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

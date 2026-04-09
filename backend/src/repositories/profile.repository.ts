@@ -9,6 +9,9 @@ export interface ProfileUpdateInput {
   height_cm: number;
   tdee: number;
   calories_intake: number;
+  protein_target: number;
+  carbs_target: number;
+  fat_target: number;
 }
 
 export async function ensureProfileRow(): Promise<void> {
@@ -33,6 +36,9 @@ export async function updateProfile(data: ProfileUpdateInput): Promise<void> {
       height_cm: data.height_cm,
       tdee: data.tdee,
       calories_intake: data.calories_intake,
+      protein_target: data.protein_target,
+      carbs_target: data.carbs_target,
+      fat_target: data.fat_target,
       updated_at: sql`now()`,
     })
     .where(eq(profile.id, 1));

@@ -1,50 +1,36 @@
 import { useState, useCallback } from "react";
-import { workoutsApi, type AddWorkoutInput } from "@/lib/api";
 import type { WorkoutRow } from "../types";
 
 interface AddModalProps {
     exerciseName: string;
     defaultValues?: Partial<WorkoutRow>;
     sessionId: number;
-    onSave: (newWorkout: WorkoutRow) => void;
+    onSave: (newWorkout: {
+        weight: number;
+        reps: number;
+        rpe: number;
+        is_bodyweight: boolean;
+        is_assisted: boolean;
+    }) => void;
     onCancel: () => void;
 }
 
-export default function AddModal({ exerciseName, defaultValues, sessionId, onSave, onCancel }: AddModalProps) {
-    const [name, setName] = useState(exerciseName);
+export default function AddModal({ exerciseName, defaultValues, onSave, onCancel }: AddModalProps) {
     const [weight, setWeight] = useState(defaultValues?.weight ?? 0);
     const [reps, setReps] = useState(defaultValues?.reps ?? 10);
     const [rpe, setRpe] = useState(defaultValues?.rpe ?? 7);
     const [isBodyweight, setIsBodyweight] = useState(defaultValues?.is_bodyweight ?? false);
     const [isAssisted, setIsAssisted] = useState(defaultValues?.is_assisted ?? false);
 
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const handleSave = useCallback(async () => {
-        if (isSaving) return;
-        setIsSaving(true);
-        setError(null);
-
-        const input: AddWorkoutInput = {
-            exercise_name: name,
+    const handleSave = useCallback(() => {
+        onSave({
             weight,
             reps,
             rpe,
             is_bodyweight: isBodyweight,
             is_assisted: isAssisted,
-            session_id: sessionId,
-        };
-
-        const res = await workoutsApi.add(input);
-
-        if (res.success && res.data) {
-            onSave(res.data);
-        } else {
-            setError(res.error ?? "Failed to add workout.");
-        }
-        setIsSaving(false);
-    }, [name, weight, reps, rpe, isBodyweight, isAssisted, sessionId, onSave, isSaving]);
+        });
+    }, [weight, reps, rpe, isBodyweight, isAssisted, onSave]);
 
     return (
         <div
@@ -88,21 +74,14 @@ export default function AddModal({ exerciseName, defaultValues, sessionId, onSav
 
                     {/* Body */}
                     <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                        {/* Error */}
-                        {error ? (
-                            <div className="px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-sm animate-fade-in">
-                                {error}
-                            </div>
-                        ) : null}
-
                         {/* Exercise name */}
                         <div>
                             <label className="text-xs text-surface-400 block mb-1">Exercise Name</label>
                             <input
                                 type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="glass-input w-full px-3 py-2 text-sm text-white font-medium"
+                                value={exerciseName}
+                                readOnly
+                                className="glass-input w-full px-3 py-2 text-sm text-white font-medium opacity-60 cursor-not-allowed"
                             />
                         </div>
 
@@ -185,21 +164,10 @@ export default function AddModal({ exerciseName, defaultValues, sessionId, onSav
                         <button
                             type="button"
                             onClick={handleSave}
-                            disabled={isSaving || !name.trim()}
+                            disabled={!exerciseName.trim()}
                             className="btn-primary text-sm flex items-center gap-2"
                         >
-                            {isSaving ? (
-                                <>
-                                    <span
-                        className="inline-block w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full"
-                        style={{ animation: "spin 0.6s linear infinite" }}
-                        aria-hidden="true"
-                    />
-                    Saving...
-                                </>
-                            ) : (
-                                <>➕ Add Set</>
-                            )}
+                            ➕ Add Set
                         </button>
                     </div>
                 </div>

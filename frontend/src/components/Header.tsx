@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, BarChart3, BookOpen, User as UserIcon, LogOut } from "lucide-react";
+import { Menu, X, BarChart3, BookOpen, UtensilsCrossed, User as UserIcon, LogOut } from "lucide-react";
 
 interface HeaderProps {
     onLogout?: () => void;
@@ -15,6 +15,7 @@ export default function Header({ onLogout }: HeaderProps) {
     const navLinks = [
         { name: "Analytics", path: "/analytics", icon: <BarChart3 className="w-4 h-4" /> },
         { name: "History", path: "/history", icon: <BookOpen className="w-4 h-4" /> },
+        { name: "Nutrition", path: "/nutrition", icon: <UtensilsCrossed className="w-4 h-4" /> },
         { name: "Profile", path: "/profile", icon: <UserIcon className="w-4 h-4" /> },
     ];
 

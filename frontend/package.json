@@ -11,6 +11,7 @@
     "start": "bunx serve -s dist -l ${PORT:-3000}"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.97.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.574.0",
     "radix-ui": "^1.4.3",

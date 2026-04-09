@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { restDaysApi, type RestDayData } from "@/lib/api/rest-days";
+import { queryKeys } from "@/lib/query-keys";
 
 interface UseRestDayReturn {
     showForm: boolean;
@@ -12,41 +14,45 @@ interface UseRestDayReturn {
 }
 
 export function useRestDay(onSuccess?: () => void): UseRestDayReturn {
+    const queryClient = useQueryClient();
     const [showForm, setShowForm] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const mutation = useMutation({
+        mutationFn: async (data: RestDayData) => {
+            const res = await restDaysApi.create(data);
+            if (res.success) return true;
+            throw new Error(res.error ?? "Failed to log rest day.");
+        },
+        onSuccess: () => {
+            setShowForm(false);
+            queryClient.invalidateQueries({ queryKey: queryKeys.heatmap.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.history.all });
+            onSuccess?.();
+        },
+        onError: (err: Error) => setError(err.message),
+    });
 
     const openForm = useCallback(() => setShowForm(true), []);
     const closeForm = useCallback(() => setShowForm(false), []);
     const clearError = useCallback(() => setError(null), []);
 
     const submitRestDay = useCallback(
-        async (data: RestDayData) => {
-            setIsSubmitting(true);
+        async (data: RestDayData): Promise<boolean> => {
             setError(null);
-
             try {
-                const res = await restDaysApi.create(data);
-                if (res.success) {
-                    setShowForm(false);
-                    onSuccess?.();
-                    return true;
-                }
-                setError(res.error ?? "Failed to log rest day.");
-                return false;
+                await mutation.mutateAsync(data);
+                return true;
             } catch {
-                setError("Failed to log rest day. Is the backend running?");
                 return false;
-            } finally {
-                setIsSubmitting(false);
             }
         },
-        [onSuccess]
+        [mutation]
     );
 
     return {
         showForm,
-        isSubmitting,
+        isSubmitting: mutation.isPending,
         error,
         openForm,
         closeForm,

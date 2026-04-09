@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { heatmapApi, type HeatmapDay } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { formatDateLabel } from "@/lib/date-utils";
 
 const DAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
@@ -13,21 +15,16 @@ function getIntensity(count: number): number {
     return 4;
 }
 
-export default function CalendarHeatmap({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
-    const [heatmapData, setHeatmapData] = useState<HeatmapDay[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
-
-    useEffect(() => {
-        async function fetchHeatmap() {
+export default function CalendarHeatmap() {
+    const { data: heatmapData = [], isLoading } = useQuery({
+        queryKey: queryKeys.heatmap.all,
+        queryFn: async () => {
             const res = await heatmapApi.get();
-            if (res.success && res.data) {
-                setHeatmapData(res.data);
-            }
-            setIsLoading(false);
-        }
-        fetchHeatmap();
-    }, [refreshTrigger]);
+            if (res.success && res.data) return res.data;
+            return [];
+        },
+    });
+    const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
     // Build the grid: 53 weeks × 7 days, ending on today
     const { grid, monthLabels, stats } = useMemo(() => {
