@@ -13,7 +13,7 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'service-worker.ts',
       registerType: 'autoUpdate',
-      injectRegister: 'script-defer',
+      injectRegister: null,
       includeAssets: ['icon-192.svg', 'icon-512.svg', 'robots.txt'],
       manifest: {
         name: 'Workout Tracker',

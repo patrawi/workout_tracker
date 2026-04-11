@@ -8,6 +8,15 @@ import './index.css'
 import Layout from './components/Layout.tsx'
 import App from './App.tsx'
 
+// Manual service worker registration (more reliable than VitePWA's auto-inject)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+      .then(reg => console.log('[SW] Registered:', reg.scope))
+      .catch(err => console.error('[SW] Registration failed:', err))
+  })
+}
+
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage.tsx'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage.tsx'))
 const HistoryPage = lazy(() => import('./pages/HistoryPage.tsx'))
