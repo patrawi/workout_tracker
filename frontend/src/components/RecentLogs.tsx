@@ -88,7 +88,7 @@ export default function RecentLogs({ workouts, isLoading, onEdit, onDelete, onAd
 
     for (const workout of workouts) {
         const sessionId = workout.session_id;
-        const dateKey = workout.created_at.split(" ")[0] || workout.created_at.split("T")[0];
+        const dateKey = (workout.created_at || "").split(" ")[0] || (workout.created_at || "").split("T")[0] || new Date().toISOString().slice(0, 10);
 
         let sessionGroup = groupedWorkouts.get(sessionId);
         if (!sessionGroup) {

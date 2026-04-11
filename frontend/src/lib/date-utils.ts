@@ -2,29 +2,37 @@
  * Format a date string (YYYY-MM-DD) into "Mon DD" format
  */
 export function formatDate(dateStr: string): string {
+    if (!dateStr) return "Unknown date";
+    const d = new Date(dateStr + "Z");
+    if (isNaN(d.getTime())) return "Unknown date";
     return new Intl.DateTimeFormat("en-US", {
         month: "short",
         day: "numeric",
-    }).format(new Date(dateStr + "Z"));
+    }).format(d);
 }
 
 /**
  * Format a date string (YYYY-MM-DD or ISO) into "Mon DD, HH:MM" format
  */
 export function formatDateTime(dateStr: string): string {
+    if (!dateStr) return "Unknown date";
+    const d = new Date(dateStr + "Z");
+    if (isNaN(d.getTime())) return "Unknown date";
     return new Intl.DateTimeFormat("en-US", {
         month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-    }).format(new Date(dateStr + "Z"));
+    }).format(d);
 }
 
 /**
  * Format a date string for full display in tooltip (e.g., "Monday, March 17, 2025")
  */
 export function formatDateLabel(dateStr: string): string {
+    if (!dateStr) return "Unknown date";
     const d = new Date(dateStr + "T12:00:00");
+    if (isNaN(d.getTime())) return "Unknown date";
     return d.toLocaleDateString("en-US", {
         weekday: "short",
         month: "short",
@@ -37,25 +45,31 @@ export function formatDateLabel(dateStr: string): string {
  * Format a date for full display (e.g., "Monday, March 17, 2025")
  */
 export function formatFullDate(dateStr: string): string {
+    if (!dateStr) return "Unknown date";
+    const d = new Date(dateStr + "T00:00:00");
+    if (isNaN(d.getTime())) return "Unknown date";
     return new Intl.DateTimeFormat("en-US", {
         weekday: "long",
         year: "numeric",
         month: "long",
         day: "numeric",
-    }).format(new Date(dateStr + "T00:00:00"));
+    }).format(d);
 }
 
 /**
  * Format a date with weekday, month, day, year, hour, minute
  */
 export function formatEditModalDate(dateStr: string): string {
+    if (!dateStr) return "Unknown date";
+    const d = new Date(dateStr + "Z");
+    if (isNaN(d.getTime())) return "Unknown date";
     return new Intl.DateTimeFormat("en-US", {
         weekday: "short",
         month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-    }).format(new Date(dateStr + "Z"));
+    }).format(d);
 }
 
 /**
@@ -72,7 +86,9 @@ export function getLocalDateStr(): string {
  * Format date for history page (weekday, month day, year)
  */
 export function formatHistoryDate(dateStr: string): string {
+    if (!dateStr) return "Unknown date";
     const date = new Date(dateStr + "T00:00:00");
+    if (isNaN(date.getTime())) return "Unknown date";
     return new Intl.DateTimeFormat("en-US", {
         weekday: "short",
         year: "numeric",

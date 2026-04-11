@@ -7,7 +7,7 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 // Railway's proxy can return Vary: * on responses, which causes Cache.put() to fail.
 // Strip it before caching so the SW can install successfully.
 const varyStarFixPlugin = {
-  async cacheWillSave({ response }: { response: Response }) {
+  async cacheWillUpdate({ response }: { response: Response }) {
     if (response.headers.get('Vary') === '*') {
       const headers = new Headers(response.headers)
       headers.delete('Vary')

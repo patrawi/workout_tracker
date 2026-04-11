@@ -11,7 +11,9 @@ interface GroupedWorkoutCardProps {
 }
 
 function formatDate(dateStr: string) {
+    if (!dateStr) return "Unknown date";
     const d = new Date(dateStr + "Z");
+    if (isNaN(d.getTime())) return "Unknown date";
     const today = new Date();
 
     // Check if it's today
