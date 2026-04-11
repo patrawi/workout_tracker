@@ -5,6 +5,7 @@
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/web-push": "^3.6.4",
     "drizzle-kit": "^0.31.9"
   },
   "peerDependencies": {
