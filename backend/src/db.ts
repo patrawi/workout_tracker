@@ -56,6 +56,12 @@ export {
   type HistoryDate,
 } from "./repositories/history.repository";
 
+export {
+  savePushSubscription,
+  getAllPushSubscriptions,
+  deletePushSubscription,
+} from "./repositories/push-subscription.repository";
+
 export { type WorkoutData, type WorkoutRow, type ProfileRow, type NutritionItem, type NutritionRow } from "./types";
 
 export default db;

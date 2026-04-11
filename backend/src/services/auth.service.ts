@@ -22,6 +22,8 @@ export function isPublicPath(path: string): boolean {
   if (AUTH_PUBLIC_PATHS.has(path)) return true;
   if (path.startsWith("/history/")) return true;
   if (path.startsWith("/assets/")) return true;
+  if (path.startsWith("/notifications/")) return true;
+  if (path.startsWith("/cron/")) return true;
   if (/\.(js|css|ico|png|jpg|svg|woff|woff2|ttf|eot)$/.test(path)) return true;
   return false;
 }
@@ -57,7 +59,7 @@ const authCookieOptions = {
   maxAge: AUTH_COOKIE_MAX_AGE_SECONDS,
   sameSite: "lax" as const,
   path: "/",
-  secure: process.env.NODE_ENV === "production" || true,
+  secure: true,
 };
 
 export async function handleAuthLogin({

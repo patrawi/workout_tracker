@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { TIME_RANGES } from "@/lib/constants";
 import { useProfile } from "@/features/profile/hooks/useProfile";
+import PushNotificationToggle from "@/components/PushNotificationToggle";
 
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; color: string }>; label?: string }) => {
     if (active && payload && payload.length) {
@@ -342,6 +343,14 @@ export default function ProfilePage() {
                                     "Save Profile Data"
                                 )}
                             </button>
+                        </div>
+
+                        {/* Push Notifications Settings */}
+                        <div className="glass-card p-6 space-y-4">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                🔔 Settings
+                            </h3>
+                            <PushNotificationToggle />
                         </div>
 
                         {/* Chart Row */}

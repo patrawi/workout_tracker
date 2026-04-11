@@ -97,3 +97,12 @@ export const nutritionLogs = pgTable(
     ],
 );
 
+// ——— Push Subscriptions Table ———
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id: serial('id').primaryKey(),
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  created_at: timestamp('created_at').defaultNow().notNull(),
+});
+

@@ -12,6 +12,8 @@ import { registerRestDayRoutes } from "./routes/rest-days.routes";
 import { registerProfileRoutes } from "./routes/profile.routes.ts";
 import { registerNutritionRoutes } from "./routes/nutrition.routes.ts";
 import { registerHistoryRoutes } from "./routes/history.routes.ts";
+import { notificationsRoutes } from "./routes/notifications.ts";
+import { cronRoutes } from "./routes/cron.ts";
 import {
   isPublicPath,
   authLoginBodySchema,
@@ -57,6 +59,9 @@ export function createApp() {
     .get("/history/*", () => Bun.file("./public/index.html"))
     .get("/nutrition", () => Bun.file("./public/index.html"))
     .get("/health", () => ({ status: "ok" }))
+    // Public routes (no auth required)
+    .use(notificationsRoutes)
+    .use(cronRoutes)
     // API routes under /api prefix
     .group("/api", (app) =>
       app

@@ -163,3 +163,151 @@ Research topics organized by problem type, discovered during code review and mig
 **Resources**:
 - https://elysiajs.com/introduction.html
 - Search: "Elysia JWT authentication middleware pattern"
+
+
+## 10. Progressive Web App (PWA) with Vite
+
+**Context**: Frontend converted to PWA using `vite-plugin-pwa` with `injectManifest` strategy.
+
+**What was done**:
+- Added `vite-plugin-pwa` with `injectManifest` mode (custom `src/service-worker.ts`)
+- Service worker handles precaching, runtime caching (API: NetworkFirst, fonts/images: CacheFirst), and push notifications
+- App manifest generated with icons, theme color, standalone display
+- Apple-specific meta tags added for iOS support
+- `registerSW.js` deferred to avoid render-blocking LCP penalty
+- Offline detection banner added in `Layout.tsx`
+
+**Research topics**:
+- `generateSW` vs `injectManifest` strategies in vite-plugin-pwa
+  - `generateSW`: auto-generated SW, zero config, but no custom logic
+  - `injectManifest`: you write the SW, plugin injects `__WB_MANIFEST`, full control
+- Service Worker lifecycle: `install`, `activate`, `fetch`, `push`, `notificationclick`
+- Workbox runtime: `precacheAndRoute`, `registerRoute`, `NavigationRoute`, strategy plugins
+- `navigator.onLine` always returns `true` on localhost — use DevTools Network throttling for offline testing
+- Chrome bfcache is disabled when a service worker is active (browser limitation, not a code bug)
+- PWA icon requirements: PNG needed for actual install (SVG works for manifest but not all platforms)
+
+**Files involved**:
+- `frontend/vite.config.ts` — VitePWA plugin config
+- `frontend/src/service-worker.ts` — custom SW with caching + push
+- `frontend/src/components/PWAInstallPrompt.tsx` — install banner
+- `frontend/src/pages/OfflinePage.tsx` — offline fallback
+- `frontend/src/components/Layout.tsx` — offline detection banner
+
+**Resources**:
+- https://vite-pwa-org.netlify.app/
+- https://developers.google.com/web/tools/workbox/
+- https://web.dev/progressive-web-apps/
+- https://web.dev/articles/service-worker-lifecycle
+
+
+## 11. Web Push Notifications
+
+**Context**: Added browser push notifications for workout reminders. Uses `web-push` library on backend + Push API on frontend.
+
+**Architecture**:
+```
+Browser (SW) <--push-- Backend (web-push) <--cron-- Railway Scheduler
+```
+
+**What was done**:
+- Backend: installed `web-push`, generated VAPID key pair, created `push_subscriptions` table
+- Frontend: custom service worker listens for `push` events, shows native notification via `showNotification()`
+- Frontend: `PushNotificationToggle` component (Profile page) requests permission, creates subscription, sends to backend
+- Backend: `GET /notifications/config` returns VAPID public key (public endpoint)
+- Backend: `POST /notifications/subscribe` saves subscription to DB (public endpoint)
+- Backend: `GET /cron/check-notifications` sends push to all subscribers (protected by `CRON_SECRET` header)
+
+**Key decisions**:
+- Notification routes are **public** (no JWT) — subscription happens from the browser, no user context needed
+- Cron route uses **header-based auth** (`Authorization: Bearer $CRON_SECRET`) instead of JWT — Railway sends this automatically
+- Single subscription model (delete old, insert new) — personal use, one device at a time
+- VAPID keys stored in `.env`, NOT committed to git
+
+**Trade-offs**:
+- `injectManifest` vs `importScripts` for push listener in SW: chose `injectManifest` for type safety and single SW output
+- Notification payload is simple JSON (title/body/icon) — no deep linking or action buttons yet
+- Cron endpoint sends a test notification currently — real scheduling logic (workout time windows) requires extending `cron.ts`
+
+**Environment variables needed**:
+```
+VAPID_PUBLIC_KEY=<generated>
+VAPID_PRIVATE_KEY=<generated>
+VAPID_SUBJECT=mailto:your-email@example.com
+CRON_SECRET=<strong-random-string>
+```
+
+**Railway cron setup**:
+```json
+{
+  "cron": [{
+    "path": "/cron/check-notifications",
+    "schedule": "0 6,18 * * *",
+    "headers": { "Authorization": "Bearer $CRON_SECRET" }
+  }]
+}
+```
+
+**Files involved**:
+- `backend/src/routes/notifications.ts` — config + subscribe endpoints
+- `backend/src/routes/cron.ts` — cron trigger endpoint
+- `backend/src/repositories/push-subscription.repository.ts` — DB operations
+- `backend/src/schema.ts` — `push_subscriptions` table
+- `backend/src/config.ts` — VAPID + CRON_SECRET config
+- `frontend/src/service-worker.ts` — push event listener
+- `frontend/src/components/PushNotificationToggle.tsx` — enable/disable UI
+
+**Resources**:
+- https://web.dev/articles/codelab-push-notifications
+- https://github.com/web-push-libs/web-push
+- https://developer.mozilla.org/en-US/docs/Web/API/Push_API
+- https://vite-pwa-org.netlify.app/guide/push-notifications.html
+
+
+## 12. Auth Security for Single-User Apps (CIA Assessment)
+
+**Context**: Backend uses a single master password + JWT cookie for authentication. No user registration, no multi-tenancy, no role-based access.
+
+**Auth flow**:
+1. User enters `MASTER_PASSWORD` on login page
+2. Backend validates against env var, signs a JWT with `JWT_SECRET`, sets as `httpOnly` cookie
+3. All subsequent `/api` requests require a valid JWT cookie (checked via `onBeforeHandle`)
+4. Public routes: `/api/auth/*`, `/notifications/*`, `/cron/*`, static assets, SPA fallback pages
+
+**CIA assessment for personal use**:
+
+| Principle | Status | Notes |
+|---|---|---|
+| Confidentiality | Adequate | Single password, no data exfiltration vector beyond the API itself |
+| Integrity | Adequate | JWT prevents tampering; `httpOnly` cookie prevents XSS token theft |
+| Availability | Adequate | No rate limiting (acceptable for single user); password stored in `.env` so recovery is easy |
+
+**Cookie security settings** (correct, do not weaken):
+- `httpOnly: true` — JavaScript cannot read the cookie (XSS protection)
+- `sameSite: lax` — CSRF protection (only sent on same-site navigation)
+- `secure: true` — only sent over HTTPS (production)
+- `maxAge: 7 days` — reasonable session duration
+
+**Critical deployment rule**: `JWT_SECRET` must be a random string (32+ chars). The code has a default fallback `"frictionless-tracker-secret-change-me"` in `config.ts` — this is visible in source and **must be overridden** in `.env` for any deployed instance. Never use the default.
+
+**What's NOT needed for personal use**:
+- Password hashing (bcrypt) — the password is compared in-memory, never stored
+- OAuth / social login — no multi-user context
+- 2FA / TOTP — threat model doesn't justify the complexity
+- Session rotation / token refresh — 7-day expiry is fine for single user
+- Rate limiting — only you can brute-force your own password
+
+**What WAS done**:
+- Generated 256-bit `JWT_SECRET` via `openssl rand -hex 32`
+- Documented security requirements in `AGENTS.md` under "Security Notes"
+- Verified cookie settings are correct
+
+**Files involved**:
+- `backend/src/services/auth.service.ts` — login, logout, verify, auth guard
+- `backend/src/config.ts` — `masterPassword`, `jwtSecret`, `isAuthEnabled`
+- `backend/src/app.ts` — JWT plugin setup, auth guard via `onBeforeHandle`
+
+**Resources**:
+- https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/
+- https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#security_considerations
+- Search: "OWASP session management cheat sheet"

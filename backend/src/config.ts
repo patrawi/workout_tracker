@@ -35,6 +35,10 @@ export const config = {
     masterPassword: getOptionalEnv("MASTER_PASSWORD"),
     jwtSecret: getOptionalEnv("JWT_SECRET", "frictionless-tracker-secret-change-me"),
     geminiApiKey: getOptionalEnv("GEMINI_API_KEY"),
+    VAPID_PUBLIC_KEY: getOptionalEnv("VAPID_PUBLIC_KEY"),
+    VAPID_PRIVATE_KEY: getOptionalEnv("VAPID_PRIVATE_KEY"),
+    VAPID_SUBJECT: getOptionalEnv("VAPID_SUBJECT", "mailto:admin@localhost"),
+    CRON_SECRET: getOptionalEnv("CRON_SECRET"),
 };
 
 export const isAuthEnabled = config.masterPassword.length > 0;

@@ -86,7 +86,24 @@ PostgreSQL with Drizzle ORM. Schema in `backend/src/schema.ts`, migrations in `b
 Required: `DATABASE_URL`
 Optional: `PORT` (default 3000), `MASTER_PASSWORD`, `JWT_SECRET`, `GEMINI_API_KEY`
 
+For web push notifications: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`
+
 Bun auto-loads `.env` files, but the project also uses `dotenv/config` imports.
+
+### Security Notes
+
+**Auth model**: Single-user master password + JWT cookie. No user registration or multi-tenancy.
+- `MASTER_PASSWORD` — the only credential; set to a strong value in production
+- `JWT_SECRET` — must be a random string (min 32 chars); **never use the default fallback**
+- JWT cookie is `httpOnly`, `sameSite: lax`, `secure: true` — correct settings, do not weaken
+- `/api/notifications/*` and `/cron/*` are public by design (browser subscription + cron health check)
+- `/cron/check-notifications` uses `Authorization: Bearer $CRON_SECRET` header for auth
+- `backend/.env` is gitignored — never commit secrets
+
+**Deployment checklist**:
+- Rotate all secrets: `JWT_SECRET`, `MASTER_PASSWORD`, `CRON_SECRET`, `GEMINI_API_KEY`
+- Set `VAPID_SUBJECT` to a real email (required by web push spec)
+- Never use default `JWT_SECRET` — the code has a fallback string that is visible in source
 
 ## Conventions
 
