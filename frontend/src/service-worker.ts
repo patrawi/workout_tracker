@@ -6,41 +6,54 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 declare const self: ServiceWorkerGlobalScope
 
-// Railway's proxy can return Vary: * on responses, which causes Cache.put() to fail.
-// Strip it before caching so the SW can install successfully.
-const varyStarFixPlugin = {
-  async cacheWillUpdate({ response }: { response: Response }) {
-    if (response.headers.get('Vary') === '*') {
-      const headers = new Headers(response.headers)
+// Monkey-patch Cache.prototype.put to strip Vary: * before caching
+// Railway returns Vary: * which causes the native cache.put() to throw
+const _originalCachePut = Cache.prototype.put
+Cache.prototype.put = function (request: Request | string, response: Response): Promise<void> {
+  if (response.headers.get('Vary') === '*') {
+    const headers = new Headers(response.headers)
+    headers.delete('Vary')
+    response = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
+  }
+  return _originalCachePut.call(this, request, response)
+}
+
+// Also intercept cache.put via the Cache API for workbox's internal usage
+const _originalCacheAddAll = Cache.prototype.addAll
+Cache.prototype.addAll = function (responses: Response[]): Promise<void> {
+  const cleaned = responses.map(r => {
+    if (r.headers.get('Vary') === '*') {
+      const headers = new Headers(r.headers)
       headers.delete('Vary')
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
+      return new Response(r.body, {
+        status: r.status,
+        statusText: r.statusText,
         headers,
       })
     }
-    return response
-  },
+    return r
+  })
+  return _originalCacheAddAll.call(this, cleaned)
 }
 
-// Precache injected manifest with Vary fix
-// Filter out index.html — it will be served via NetworkFirst navigation route
-// to avoid Railway 500 errors during SW precache install
-const manifestWithoutIndexHTML = self.__WB_MANIFEST.filter((entry: string | ManifestEntry) => {
-  const url = typeof entry === 'string' ? entry : entry.url
-  return !url.endsWith('index.html')
+// Precache injected manifest
+precacheAndRoute(self.__WB_MANIFEST, {
+  plugins: [
+    new CacheableResponsePlugin({ statuses: [0, 200] }),
+  ],
 })
-precacheAndRoute(manifestWithoutIndexHTML, { plugins: [varyStarFixPlugin] })
 
 // Navigation route — NetworkFirst for SPA fallback
-// Fetches from network first (Railway serves SPA correctly for /), cache fallback
 const spaHandler = new NetworkFirst({
   cacheName: 'spa-cache',
   networkTimeoutSeconds: 10,
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
     new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 24 * 60 * 60 }),
-    varyStarFixPlugin,
   ],
 })
 
