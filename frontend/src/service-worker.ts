@@ -6,6 +6,26 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 declare const self: ServiceWorkerGlobalScope
 
+// === Railway Vary: * fix ===
+// Railway returns Vary: * on responses which causes cache.put() to throw.
+// Wrap the native fetch to strip Vary: * from all same-origin responses
+// before workbox (or anything else) sees them.
+const _originalFetch = self.fetch
+self.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return _originalFetch.call(self, input, init).then(async (response) => {
+    if (response.headers.get('Vary') === '*') {
+      const headers = new Headers(response.headers)
+      headers.delete('Vary')
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      })
+    }
+    return response
+  })
+}
+
 // Precache all assets (index.html excluded via vite.config.ts manifestTransforms)
 precacheAndRoute(self.__WB_MANIFEST)
 
