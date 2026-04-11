@@ -7,7 +7,7 @@ export default function PushNotificationToggle() {
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  console.log("test");
   useEffect(() => {
     if ("Notification" in window) {
       setPermission(Notification.permission);
