@@ -12,7 +12,7 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'service-worker.ts',
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
       injectRegister: 'script-defer',
       includeAssets: ['icon-192.svg', 'icon-512.svg', 'robots.txt'],
       manifest: {
@@ -50,6 +50,18 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split heavy vendor libs into separate chunks for better caching
+          recharts: ['recharts'],
+          'radix-select': ['radix-ui'],
+          'react-query': ['@tanstack/react-query'],
+        },
+      },
     },
   },
   server: {

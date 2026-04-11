@@ -42,6 +42,7 @@ export function createApp() {
       staticPlugin({
         assets: "./public",
         prefix: "/",
+        maxAge: 365 * 24 * 60 * 60, // 1 year for content-hashed assets
       }),
     )
     .use(
