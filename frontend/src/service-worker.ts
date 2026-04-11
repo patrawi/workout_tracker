@@ -1,8 +1,10 @@
-import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching'
+import { precacheAndRoute, ManifestEntry } from 'workbox-precaching'
 import { registerRoute, NavigationRoute } from 'workbox-routing'
 import { NetworkFirst, CacheFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
+
+declare const self: ServiceWorkerGlobalScope
 
 // Railway's proxy can return Vary: * on responses, which causes Cache.put() to fail.
 // Strip it before caching so the SW can install successfully.
@@ -22,10 +24,27 @@ const varyStarFixPlugin = {
 }
 
 // Precache injected manifest with Vary fix
-precacheAndRoute(self.__WB_MANIFEST, { plugins: [varyStarFixPlugin] })
+// Filter out index.html — it will be served via NetworkFirst navigation route
+// to avoid Railway 500 errors during SW precache install
+const manifestWithoutIndexHTML = self.__WB_MANIFEST.filter((entry: string | ManifestEntry) => {
+  const url = typeof entry === 'string' ? entry : entry.url
+  return !url.endsWith('index.html')
+})
+precacheAndRoute(manifestWithoutIndexHTML, { plugins: [varyStarFixPlugin] })
 
-// Navigation route - SPA fallback
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
+// Navigation route — NetworkFirst for SPA fallback
+// Fetches from network first (Railway serves SPA correctly for /), cache fallback
+const spaHandler = new NetworkFirst({
+  cacheName: 'spa-cache',
+  networkTimeoutSeconds: 10,
+  plugins: [
+    new CacheableResponsePlugin({ statuses: [0, 200] }),
+    new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 24 * 60 * 60 }),
+    varyStarFixPlugin,
+  ],
+})
+
+registerRoute(new NavigationRoute(spaHandler))
 
 // Runtime caching: API calls — NetworkFirst (fresh data, cache fallback)
 registerRoute(
