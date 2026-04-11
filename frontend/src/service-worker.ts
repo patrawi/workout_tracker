@@ -1,11 +1,30 @@
-import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching'
+import { PrecacheController, PrecacheRoute, createHandlerBoundToURL } from 'workbox-precaching'
 import { registerRoute, NavigationRoute } from 'workbox-routing'
 import { NetworkFirst, CacheFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
-// Precache (auto-injected by vite-plugin-pwa)
-precacheAndRoute(self.__WB_MANIFEST)
+// Railway's proxy can return Vary: * on responses, which causes Cache.put() to fail.
+// Strip it before caching so the SW can install successfully.
+const varyStarFixPlugin = {
+  async cacheWillSave({ response }: { response: Response }) {
+    if (response.headers.get('Vary') === '*') {
+      const headers = new Headers(response.headers)
+      headers.delete('Vary')
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      })
+    }
+    return response
+  },
+}
+
+// Use PrecacheController directly so we can inject the Vary fix plugin
+const controller = new PrecacheController({ plugins: [varyStarFixPlugin] })
+controller.precache(self.__WB_MANIFEST)
+registerRoute(new PrecacheRoute(controller))
 
 // Navigation route - SPA fallback
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
