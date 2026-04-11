@@ -15,6 +15,14 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: null,
       includeAssets: ['icon-192.svg', 'icon-512.svg', 'robots.txt'],
+      injectManifest: {
+        manifestTransforms: [
+          (manifest: any[]) => ({
+            manifest: manifest.filter((e: any) => !e.url.endsWith('index.html')),
+            warnings: [],
+          }),
+        ],
+      },
       manifest: {
         name: 'Workout Tracker',
         short_name: 'Workouts',
