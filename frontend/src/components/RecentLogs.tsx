@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { WorkoutRow } from "../types";
 import GroupedWorkoutCard from "./GroupedWorkoutCard";
 import AddModal from "./AddModal";
@@ -84,56 +84,69 @@ export default function RecentLogs({ workouts, isLoading, onEdit, onDelete, onAd
 
     // 1. Group by Session, then by Exercise
     // Map structure: Map<sessionId, { date: string, exercises: Map<exerciseName, WorkoutRow[]> }>
-    const groupedWorkouts = new Map<number, { date: string; exercises: Map<string, WorkoutRow[]> }>();
+    const orderedGroups = useMemo(() => {
+        const groupedWorkouts = new Map<number, { date: string; exercises: Map<string, WorkoutRow[]> }>();
 
-    for (const workout of workouts) {
-        const sessionId = workout.session_id;
-        const dateKey = (workout.created_at || "").split(" ")[0] || (workout.created_at || "").split("T")[0] || new Date().toISOString().slice(0, 10);
+        for (const workout of workouts) {
+            const sessionId = workout.session_id;
+            const dateKey = (workout.created_at || "").split(" ")[0] || (workout.created_at || "").split("T")[0] || new Date().toISOString().slice(0, 10);
 
-        let sessionGroup = groupedWorkouts.get(sessionId);
-        if (!sessionGroup) {
-            sessionGroup = { date: dateKey, exercises: new Map<string, WorkoutRow[]>() };
-            groupedWorkouts.set(sessionId, sessionGroup);
-        }
-
-        let exerciseGroup = sessionGroup.exercises.get(workout.exercise_name);
-        if (!exerciseGroup) {
-            exerciseGroup = [];
-            sessionGroup.exercises.set(workout.exercise_name, exerciseGroup);
-        }
-
-        exerciseGroup.push(workout);
-    }
-
-    // 2. Flatten into an ordered list of groups for rendering
-    // Sort sessions by date descending, then by session_id descending
-    const orderedGroups: { sessionId: number; date: string; exercise: string; sets: WorkoutRow[] }[] = [];
-
-    // Convert Map to Array and sort by session_id descending (most recent first)
-    const sortedSessions = Array.from(groupedWorkouts.entries()).sort((a, b) => b[0] - a[0]);
-
-    for (const [sessionId, sessionData] of sortedSessions) {
-        const sortedExercises = Array.from(sessionData.exercises.entries()).sort((a, b) => {
-            const maxTimeA = Math.max(...a[1].map(w => new Date(w.created_at).getTime()));
-            const maxTimeB = Math.max(...b[1].map(w => new Date(w.created_at).getTime()));
-            if (maxTimeA === maxTimeB) {
-                const maxIdA = Math.max(...a[1].map(w => w.id));
-                const maxIdB = Math.max(...b[1].map(w => w.id));
-                return maxIdB - maxIdA;
+            let sessionGroup = groupedWorkouts.get(sessionId);
+            if (!sessionGroup) {
+                sessionGroup = { date: dateKey, exercises: new Map<string, WorkoutRow[]>() };
+                groupedWorkouts.set(sessionId, sessionGroup);
             }
-            return maxTimeB - maxTimeA;
-        });
 
-        for (const [exerciseName, sets] of sortedExercises) {
-            // Guarantee sets display sequentially as Set 1, Set 2
-            const chronoSortedSets = [...sets].sort((a, b) => {
-                const timeDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-                if (timeDiff === 0) return a.id - b.id;
-                return timeDiff;
-            });
-            orderedGroups.push({ sessionId, date: sessionData.date, exercise: exerciseName, sets: chronoSortedSets });
+            let exerciseGroup = sessionGroup.exercises.get(workout.exercise_name);
+            if (!exerciseGroup) {
+                exerciseGroup = [];
+                sessionGroup.exercises.set(workout.exercise_name, exerciseGroup);
+            }
+
+            exerciseGroup.push(workout);
         }
-    }
+
+        // 2. Flatten into an ordered list of groups for rendering
+        const ordered: { sessionId: number; date: string; exercise: string; sets: WorkoutRow[] }[] = [];
+
+        // Convert Map to Array and sort by session_id descending (most recent first)
+        const sortedSessions = Array.from(groupedWorkouts.entries()).sort((a, b) => b[0] - a[0]);
+
+        for (const [sessionId, sessionData] of sortedSessions) {
+            const sortedExercises = Array.from(sessionData.exercises.entries()).sort((a, b) => {
+                let maxTimeA = -Infinity;
+                let maxIdA = -Infinity;
+                for (const w of a[1]) {
+                    const t = w.created_at ? new Date(w.created_at).getTime() : 0;
+                    if (t > maxTimeA) maxTimeA = t;
+                    if (w.id > maxIdA) maxIdA = w.id;
+                }
+                let maxTimeB = -Infinity;
+                let maxIdB = -Infinity;
+                for (const w of b[1]) {
+                    const t = w.created_at ? new Date(w.created_at).getTime() : 0;
+                    if (t > maxTimeB) maxTimeB = t;
+                    if (w.id > maxIdB) maxIdB = w.id;
+                }
+                if (maxTimeA === maxTimeB) {
+                    return maxIdB - maxIdA;
+                }
+                return maxTimeB - maxTimeA;
+            });
+
+            for (const [exerciseName, sets] of sortedExercises) {
+                // Pre-compute timestamps for sorting
+                const setsWithTime = sets.map(s => ({ ...s, _ts: s.created_at ? new Date(s.created_at).getTime() : 0 }));
+                const chronoSortedSets = setsWithTime.sort((a, b) => {
+                    if (a._ts === b._ts) return a.id - b.id;
+                    return a._ts - b._ts;
+                });
+                ordered.push({ sessionId, date: sessionData.date, exercise: exerciseName, sets: chronoSortedSets });
+            }
+        }
+
+        return ordered;
+    }, [workouts]);
 
     return (
         <section aria-label="Recent workout logs" className="pb-10">

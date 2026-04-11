@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { profileApi, bodyweightApi, type BodyweightRecord } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
@@ -42,32 +42,31 @@ export function useProfile(): UseProfileReturn {
     const [bodyweightDate, setBodyweightDate] = useState(getLocalDateString);
     const [selectedRange, setSelectedRange] = useState("180");
     const [saved, setSaved] = useState(false);
-    const [initialized, setInitialized] = useState(false);
 
     // Fetch profile data
-    const { isLoading: isLoadingProfile } = useQuery({
+    const { data: profileData, isLoading: isLoadingProfile } = useQuery({
         queryKey: queryKeys.profile.all,
         queryFn: async () => {
             const res = await profileApi.get();
             if (res.success && res.data) return res.data;
             return null;
         },
-        select: (data) => {
-            if (data && !initialized) {
-                setProfile({
-                    weight_kg: data.weight_kg,
-                    height_cm: data.height_cm,
-                    tdee: data.tdee,
-                    calories_intake: data.calories_intake,
-                    protein_target: data.protein_target,
-                    carbs_target: data.carbs_target,
-                    fat_target: data.fat_target,
-                });
-                setInitialized(true);
-            }
-            return data;
-        },
     });
+
+    // Sync fetched data into local state via useEffect (not select side-effect)
+    useEffect(() => {
+        if (profileData) {
+            setProfile({
+                weight_kg: profileData.weight_kg,
+                height_cm: profileData.height_cm,
+                tdee: profileData.tdee,
+                calories_intake: profileData.calories_intake,
+                protein_target: profileData.protein_target,
+                carbs_target: profileData.carbs_target,
+                fat_target: profileData.fat_target,
+            });
+        }
+    }, [profileData]);
 
     // Fetch bodyweight history
     const { data: bodyweightsData, isLoading: isLoadingBw } = useQuery({
@@ -98,20 +97,23 @@ export function useProfile(): UseProfileReturn {
         onSuccess: () => {
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
-            setInitialized(false);
             queryClient.invalidateQueries({ queryKey: queryKeys.profile.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.bodyweight.all });
         },
     });
 
+    // Use ref for stable save callback
+    const saveRef = useRef(saveMutation.mutateAsync);
+    saveRef.current = saveMutation.mutateAsync;
+
     const saveProfile = useCallback(async (): Promise<boolean> => {
         try {
-            await saveMutation.mutateAsync();
+            await saveRef.current();
             return true;
         } catch {
             return false;
         }
-    }, [saveMutation]);
+    }, []);
 
     const updateField = useCallback((field: keyof ProfileData, value: number) => {
         setProfile((prev) => ({ ...prev, [field]: value }));

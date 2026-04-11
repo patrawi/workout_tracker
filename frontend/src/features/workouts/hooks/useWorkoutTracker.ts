@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { workoutsApi } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
@@ -108,33 +108,46 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
         onError: (err: Error) => setError(err.message),
     });
 
+    // Use refs to hold stable references to mutation methods
+    // This avoids the useCallback dependency on unstable mutation objects
+    const parseRef = useRef(parseMutation.mutateAsync);
+    const confirmRef = useRef(confirmMutation.mutateAsync);
+    const deleteRef = useRef(deleteMutation.mutateAsync);
+    const addRef = useRef(addMutation.mutateAsync);
+
+    // Keep refs updated
+    parseRef.current = parseMutation.mutateAsync;
+    confirmRef.current = confirmMutation.mutateAsync;
+    deleteRef.current = deleteMutation.mutateAsync;
+    addRef.current = addMutation.mutateAsync;
+
     const parseWorkout = useCallback(async (rawText: string): Promise<WorkoutData[] | null> => {
         setError(null);
         try {
-            return await parseMutation.mutateAsync(rawText);
+            return await parseRef.current(rawText);
         } catch {
             return null;
         }
-    }, [parseMutation]);
+    }, []);
 
     const confirmWorkout = useCallback(async (rawText: string, items: WorkoutData[], createdAt: string): Promise<boolean> => {
         setError(null);
         try {
-            await confirmMutation.mutateAsync({ rawText, items, createdAt });
+            await confirmRef.current({ rawText, items, createdAt });
             return true;
         } catch {
             return false;
         }
-    }, [confirmMutation]);
+    }, []);
 
     const deleteWorkout = useCallback(async (workoutId: number): Promise<boolean> => {
         try {
-            await deleteMutation.mutateAsync(workoutId);
+            await deleteRef.current(workoutId);
             return true;
         } catch {
             return false;
         }
-    }, [deleteMutation]);
+    }, []);
 
     const addWorkout = useCallback(async (workout: {
         exercise_name: string;
@@ -149,12 +162,12 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
     }): Promise<boolean> => {
         setError(null);
         try {
-            await addMutation.mutateAsync(workout);
+            await addRef.current(workout);
             return true;
         } catch {
             return false;
         }
-    }, [addMutation]);
+    }, []);
 
     const refreshWorkouts = useCallback(async () => {
         await queryClient.invalidateQueries({ queryKey: queryKeys.workouts.list() });

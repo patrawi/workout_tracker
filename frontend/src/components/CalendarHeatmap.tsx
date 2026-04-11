@@ -204,11 +204,14 @@ export default function CalendarHeatmap() {
                         <div key={weekIdx} className="flex flex-col gap-[3px]">
                             {/* Month label */}
                             <div className="h-[14px] flex items-end">
-                                {monthLabels.find((m) => m.col === weekIdx) && (
-                                    <span className="text-[9px] text-[var(--muted-foreground)] font-medium leading-none">
-                                        {monthLabels.find((m) => m.col === weekIdx)!.label}
-                                    </span>
-                                )}
+                                {(() => {
+                                    const monthLabel = monthLabels.find((m) => m.col === weekIdx);
+                                    return monthLabel && (
+                                        <span className="text-[9px] text-[var(--muted-foreground)] font-medium leading-none">
+                                            {monthLabel.label}
+                                        </span>
+                                    );
+                                })()}
                             </div>
 
                             {/* Day cells */}

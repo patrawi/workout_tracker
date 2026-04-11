@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { nutritionApi, profileApi } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
@@ -164,31 +164,45 @@ export function useNutrition(initialDate?: string): UseNutritionReturn {
         onError: (err: Error) => setError(err.message),
     });
 
+    // Use refs to hold stable references to mutation methods
+    const parseRef = useRef(parseMutation.mutateAsync);
+    const confirmRef = useRef(confirmMutation.mutateAsync);
+    const deleteItemRef = useRef(deleteItemMutation.mutateAsync);
+    const updateItemRef = useRef(updateItemMutation.mutateAsync);
+    const deleteDayRef = useRef(deleteDayMutation.mutateAsync);
+
+    // Keep refs updated
+    parseRef.current = parseMutation.mutateAsync;
+    confirmRef.current = confirmMutation.mutateAsync;
+    deleteItemRef.current = deleteItemMutation.mutateAsync;
+    updateItemRef.current = updateItemMutation.mutateAsync;
+    deleteDayRef.current = deleteDayMutation.mutateAsync;
+
     const parseText = useCallback(async (rawText: string) => {
         setError(null);
-        await parseMutation.mutateAsync(rawText).catch(() => {});
-    }, [parseMutation]);
+        await parseRef.current(rawText).catch(() => {});
+    }, []);
 
     const confirmItems = useCallback(async (editedItems: NutritionItem[]) => {
         setError(null);
-        await confirmMutation.mutateAsync(editedItems).catch(() => {});
-    }, [confirmMutation]);
+        await confirmRef.current(editedItems).catch(() => {});
+    }, []);
 
     const cancelReview = useCallback(() => {
         setParsedItems(null);
     }, []);
 
     const deleteItem = useCallback(async (id: number) => {
-        await deleteItemMutation.mutateAsync(id).catch(() => {});
-    }, [deleteItemMutation]);
+        await deleteItemRef.current(id).catch(() => {});
+    }, []);
 
     const updateItem = useCallback(async (id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "calories">>) => {
-        await updateItemMutation.mutateAsync({ id, updates }).catch(() => {});
-    }, [updateItemMutation]);
+        await updateItemRef.current({ id, updates }).catch(() => {});
+    }, []);
 
     const deleteDay = useCallback(async () => {
-        await deleteDayMutation.mutateAsync().catch(() => {});
-    }, [deleteDayMutation]);
+        await deleteDayRef.current().catch(() => {});
+    }, []);
 
     return {
         selectedDate,
