@@ -311,3 +311,154 @@ CRON_SECRET=<strong-random-string>
 - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/
 - https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#security_considerations
 - Search: "OWASP session management cheat sheet"
+
+
+## 13. React Re-Render Performance (Vercel Best Practices Audit)
+
+**Context**: Applied Vercel React best practices skill to audit the codebase for performance anti-patterns. Found 5 fixable issues across re-render stability, computation memoization, and JS performance.
+
+### 13a. Unstable `useCallback` from `useMutation` Dependencies
+
+**Problem found**: `useWorkoutTracker` and `useNutrition` hooks wrapped mutation calls in `useCallback` with the mutation object as a dependency (e.g., `useCallback(async () => { await parseMutation.mutateAsync(...) }, [parseMutation])`). `useMutation` returns a **new object every render**, so the dependency changes every time — the callback is recreated every render, and every component receiving it as a prop also re-renders.
+
+**Fix applied**: Replaced `useCallback([mutation])` with `useRef` pattern:
+```typescript
+const parseRef = useRef(parseMutation.mutateAsync);
+parseRef.current = parseMutation.mutateAsync;
+const parseWorkout = useCallback(async (rawText: string) => {
+    return await parseRef.current(rawText);
+}, []);  // stable — no dependencies
+```
+The ref holds the latest `mutateAsync` function, and `useCallback` with `[]` deps produces a stable reference.
+
+**Vercel rules**: `rerender-functional-setstate`, `rerender-memo`
+
+### 13b. Expensive Computation Running on Every Render
+
+**Problem found**: `RecentLogs.tsx` rebuilt the entire workout grouping/sorting logic (Map construction, 3 nested sorts, `new Date()` calls per set) on **every render**, not just when `workouts` changed. With 100+ sets, this creates hundreds of `Date` objects per render.
+
+**Fix applied**: Wrapped the entire computation in `useMemo(() => { ... }, [workouts])` and pre-computed timestamps before sorting instead of calling `new Date()` inside sort comparators:
+```typescript
+// Before: new Date() called O(n log n) times per sort
+.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+// After: timestamp computed once per item
+const setsWithTime = sets.map(s => ({ ...s, _ts: new Date(s.created_at).getTime() }));
+setsWithTime.sort((a, b) => a._ts === b._ts ? a.id - b.id : a._ts - b._ts);
+```
+
+**Vercel rules**: `rerender-derived-state-no-effect`, `js-min-max-loop`, `js-cache-property-access`
+
+### 13c. `useQuery.select` Used for Side Effects
+
+**Problem found**: `useProfile` hook used `useQuery`'s `select` option to call `setProfile()` and `setInitialized(true)` — side effects inside a function that should be pure. `select` runs during render and can cause unexpected re-renders.
+
+**Fix applied**: Moved the state sync into a `useEffect` that watches the query data:
+```typescript
+// Before: side effect inside select
+select: (data) => { if (data && !initialized) { setProfile(...); setInitialized(true); } return data; }
+
+// After: pure query + separate effect
+const { data: profileData } = useQuery({ ... });
+useEffect(() => {
+    if (profileData) setProfile({ ...profileData });
+}, [profileData]);
+```
+
+**Vercel rules**: `rerender-move-effect-to-event`, `server-serialization`
+
+### 13d. Duplicate `.find()` in JSX Render
+
+**Problem found**: `CalendarHeatmap.tsx` called `monthLabels.find()` twice per week cell (53 cells total): once to check existence, once to read the value.
+
+**Fix applied**: Capture the result in an IIFE:
+```typescript
+// Before: find() called twice
+{monthLabels.find(m => m.col === weekIdx) && (
+    <span>{monthLabels.find(m => m.col === weekIdx)!.label}</span>
+)}
+
+// After: find() called once
+{(() => {
+    const found = monthLabels.find(m => m.col === weekIdx);
+    return found && <span>{found.label}</span>;
+})()}
+```
+
+**Vercel rules**: `js-cache-property-access`
+
+### 13e. Date Formatting Without Validation
+
+**Problem found**: All date utility functions (`formatDate`, `formatDateTime`, `formatFullDate`, etc.) called `new Intl.DateTimeFormat().format(new Date(dateStr))` without checking if `dateStr` is valid. When `created_at` is `undefined` or empty, `new Date("")` produces `Invalid Date` (a finite-but-NaN date object), causing `RangeError: date value is not finite in DateTimeFormat format()`.
+
+**Fix applied**: Added guard clauses to every date utility function:
+```typescript
+export function formatDate(dateStr: string): string {
+    if (!dateStr) return "Unknown date";
+    const d = new Date(dateStr + "Z");
+    if (isNaN(d.getTime())) return "Unknown date";
+    return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
+}
+```
+
+### 13f. Service Worker `cacheWillSave` Hook Does Not Exist
+
+**Problem found**: `service-worker.ts` used `cacheWillSave` as a Workbox plugin hook to strip `Vary: *` headers. This is **not a valid Workbox lifecycle hook** — the correct hook is `cacheWillUpdate`. The plugin was never called, causing `Cache.put()` to reject responses with `Vary: *` from Railway's proxy.
+
+**Fix applied**: Renamed `cacheWillSave` to `cacheWillUpdate`.
+
+### 13g. PWA `registerType: 'prompt'` Causing Update Spam
+
+**Problem found**: `registerType: 'prompt'` told Vite PWA to check for service worker updates on every page load, but no prompt UI component consumed the update event. Result: a new service worker installed silently on every refresh.
+
+**Fix applied**: Changed to `registerType: 'autoUpdate'` — the browser's standard HTTP caching controls when the SW updates.
+
+### 13h. Bundle Optimization with `manualChunks`
+
+**Problem found**: A single shared async chunk (`constants-*.js`) bundled recharts (~250 KiB), radix-ui (~150 KiB), and react-query (~50 KiB) together at 496 KiB, all lumped by Vite's default chunking.
+
+**Fix applied**: Added explicit `manualChunks` in `vite.config.ts`:
+```typescript
+manualChunks: {
+    recharts: ['recharts'],
+    'radix-select': ['radix-ui'],
+    'react-query': ['@tanstack/react-query'],
+}
+```
+Result: 5 independently cacheable vendor chunks (largest: recharts at 112 KiB gzipped).
+
+### 13i. Render-Blocking Google Fonts
+
+**Problem found**: `<link rel="stylesheet" href="https://fonts.googleapis.com/...">` blocked initial render, adding ~780ms to LCP.
+
+**Fix applied**: Changed to non-blocking preload + media swap pattern:
+```html
+<link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" as="style" />
+<link rel="stylesheet" href="..." media="print" onload="this.media='all'; this.onload=null" />
+<noscript><link rel="stylesheet" href="..." /></noscript>
+```
+
+### 13j. Static Assets Cache Lifetime Set to 1 Day
+
+**Problem found**: Elysia's `staticPlugin` served content-hashed JS/CSS bundles with only 1-day `Cache-Control`, wasting bandwidth on repeat visits.
+
+**Fix applied**: Added `maxAge: 365 * 24 * 60 * 60` (1 year) to the static plugin config.
+
+**Files involved**:
+- `frontend/src/features/workouts/hooks/useWorkoutTracker.ts` — ref-based stable callbacks
+- `frontend/src/features/nutrition/hooks/useNutrition.ts` — ref-based stable callbacks
+- `frontend/src/features/profile/hooks/useProfile.ts` — useEffect instead of select side-effect
+- `frontend/src/components/RecentLogs.tsx` — useMemo + pre-computed timestamps
+- `frontend/src/components/CalendarHeatmap.tsx` — single find() call
+- `frontend/src/lib/date-utils.ts` — validation guards
+- `frontend/src/components/GroupedWorkoutCard.tsx` — validation guard
+- `frontend/src/service-worker.ts` — cacheWillUpdate fix
+- `frontend/vite.config.ts` — autoUpdate, manualChunks
+- `frontend/index.html` — non-blocking fonts
+- `backend/src/app.ts` — 1-year maxAge on static files
+
+**Resources**:
+- https://vercel.com/docs/concepts/nextjs/optimization (Vercel React best practices)
+- https://tanstack.com/query/latest/docs/react/guides/mutations (stable mutation callbacks)
+- https://tkdodo.eu/blog/status-and-errors-in-react-query (pure select pattern)
+- https://developers.google.com/web/tools/workbox/modules/workbox-build (cacheWillUpdate lifecycle)

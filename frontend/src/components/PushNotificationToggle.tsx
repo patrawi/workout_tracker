@@ -19,8 +19,8 @@ export default function PushNotificationToggle() {
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.getSubscription()
       setSubscribed(!!sub)
-    } catch {
-      // Service worker not ready
+    } catch (err) {
+      console.warn('[PushNotification] checkSubscription failed:', err)
     }
   }
 
@@ -32,7 +32,7 @@ export default function PushNotificationToggle() {
       const perm = await Notification.requestPermission()
       if (perm !== 'granted') {
         setPermission(perm)
-        setError('Permission denied')
+        setError('Permission denied. Please enable notifications in your browser settings.')
         return
       }
       setPermission(perm)
@@ -41,16 +41,23 @@ export default function PushNotificationToggle() {
       const configRes = await fetch('/notifications/config', {
         credentials: 'include',
       })
+      if (!configRes.ok) {
+        throw new Error('Failed to fetch notification config from server')
+      }
       const config = await configRes.json()
       const vapidKey = config.vapidPublicKey
 
       if (!vapidKey) {
-        setError('VAPID key not configured on server')
+        setError('VAPID key not configured on server. Please contact support.')
         return
       }
 
-      // Subscribe
+      // Subscribe via service worker
       const reg = await navigator.serviceWorker.ready
+      if (!reg.pushManager) {
+        throw new Error('Push notifications are not supported in this browser.')
+      }
+
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource
@@ -69,12 +76,15 @@ export default function PushNotificationToggle() {
       })
 
       if (!subRes.ok) {
-        throw new Error('Failed to save subscription')
+        const errorText = await subRes.text()
+        throw new Error(`Failed to save subscription: ${subRes.status} ${errorText}`)
       }
 
       setSubscribed(true)
     } catch (err: any) {
-      setError(err.message || 'Failed to enable notifications')
+      console.error('[PushNotification] Failed to enable:', err)
+      const message = err?.message || 'Failed to enable notifications'
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -89,7 +99,8 @@ export default function PushNotificationToggle() {
         setSubscribed(false)
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to disable notifications')
+      console.error('[PushNotification] Failed to disable:', err)
+      setError(err?.message || 'Failed to disable notifications')
     }
   }
 
