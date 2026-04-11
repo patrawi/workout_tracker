@@ -16,8 +16,18 @@ export default function PushNotificationToggle() {
   }, []);
 
   const checkSubscription = async () => {
+    if (!("serviceWorker" in navigator)) return;
     try {
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<ServiceWorkerRegistration>((resolve) =>
+          setTimeout(() => {
+            console.warn("[PushNotification] Service worker not ready");
+            resolve(null as unknown as ServiceWorkerRegistration);
+          }, 5000),
+        ),
+      ]);
+      if (!reg) return;
       const sub = await reg.pushManager.getSubscription();
       setSubscribed(!!sub);
     } catch (err) {
@@ -56,9 +66,35 @@ export default function PushNotificationToggle() {
       }
 
       // Subscribe via service worker
-      console.log("test");
-      const reg = await navigator.serviceWorker.ready;
-      console.log(reg);
+      if (!("serviceWorker" in navigator)) {
+        throw new Error("Service workers are not supported in this browser.");
+      }
+
+      let reg: ServiceWorkerRegistration;
+      try {
+        reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    "Service worker registration timed out. Please ensure the service worker is registered.",
+                  ),
+                ),
+              10000,
+            ),
+          ),
+        ]);
+      } catch (err: any) {
+        if (err.message?.includes("timed out")) {
+          throw err;
+        }
+        throw new Error(
+          "Service worker is not available. Please ensure the app is served over HTTPS.",
+        );
+      }
+
       if (!reg.pushManager) {
         throw new Error(
           "Push notifications are not supported in this browser.",
@@ -100,6 +136,7 @@ export default function PushNotificationToggle() {
   };
 
   const handleDisable = async () => {
+    if (!("serviceWorker" in navigator)) return;
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
