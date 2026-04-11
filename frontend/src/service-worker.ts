@@ -1,4 +1,4 @@
-import { PrecacheController, PrecacheRoute, createHandlerBoundToURL } from 'workbox-precaching'
+import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching'
 import { registerRoute, NavigationRoute } from 'workbox-routing'
 import { NetworkFirst, CacheFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
@@ -21,10 +21,8 @@ const varyStarFixPlugin = {
   },
 }
 
-// Use PrecacheController directly so we can inject the Vary fix plugin
-const controller = new PrecacheController({ plugins: [varyStarFixPlugin] })
-controller.precache(self.__WB_MANIFEST)
-registerRoute(new PrecacheRoute(controller))
+// Precache injected manifest with Vary fix
+precacheAndRoute(self.__WB_MANIFEST, { plugins: [varyStarFixPlugin] })
 
 // Navigation route - SPA fallback
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
