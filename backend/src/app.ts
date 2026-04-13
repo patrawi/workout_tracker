@@ -53,7 +53,7 @@ export function createApp(ctx: AppContext) {
     .get("/history", () => Bun.file("./public/index.html"))
     .get("/history/*", () => Bun.file("./public/index.html"))
     .get("/nutrition", () => Bun.file("./public/index.html"))
-    .get("/health", () => ({ status: "ok" }))
+    .get("/health", () => ({ status: "ok", timestamp: new Date().toISOString() }))
     // Public routes (no auth required)
     .use(notificationsRoutes)
     .use(cronRoutes)
