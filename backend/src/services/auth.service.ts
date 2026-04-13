@@ -1,8 +1,12 @@
-import { t } from "elysia";
-import { config, isAuthEnabled } from "../config";
-import { ok, fail } from "../lib/api";
+// src/services/auth.service.ts
 
-const AUTH_COOKIE_MAX_AGE_SECONDS = 7 * 86400;
+import { t } from "elysia";
+import type { ConfigService } from "./config.service";
+import { ok, fail } from "../lib/api";
+import { AUTH_COOKIE_MAX_AGE_SECONDS } from "../constants";
+import { createChildLogger } from "../lib/logger";
+
+const logger = createChildLogger("auth-service");
 
 export const AUTH_PUBLIC_PATHS = new Set([
   "/",
@@ -17,7 +21,6 @@ export const AUTH_PUBLIC_PATHS = new Set([
   "/favicon.ico",
 ]);
 
-// Check if path is a static asset or public route
 export function isPublicPath(path: string): boolean {
   if (AUTH_PUBLIC_PATHS.has(path)) return true;
   if (path.startsWith("/history/")) return true;
@@ -62,6 +65,107 @@ const authCookieOptions = {
   secure: true,
 };
 
+export interface AuthService {
+  authLoginBodySchema: ReturnType<typeof t.Object>;
+  isAuthEnabled: boolean;
+  isPublicPath(path: string): boolean;
+  handleLogin(body: { password: string }, jwt: JwtService, auth?: AuthCookie): Promise<Record<string, unknown>>;
+  handleLogout(auth?: AuthCookie): Record<string, unknown>;
+  handleVerify(jwt: JwtService, auth?: AuthCookie): Promise<Record<string, unknown>>;
+  requireAuth(jwt: JwtService, auth?: AuthCookie, set?: StatusSetter): Promise<void | Record<string, unknown>>;
+}
+
+export function createAuthService(config: ConfigService): AuthService {
+  return {
+    authLoginBodySchema,
+    get isAuthEnabled() {
+      return config.masterPassword.length > 0;
+    },
+
+    isPublicPath(path: string): boolean {
+      return isPublicPath(path);
+    },
+
+    async handleLogin(
+      body: { password: string },
+      jwt: JwtService,
+      auth?: AuthCookie
+    ): Promise<Record<string, unknown>> {
+      if (!auth) {
+        return fail("Cookie not available.");
+      }
+
+      if (this.isAuthEnabled && body.password !== config.masterPassword) {
+        return fail("Wrong password.");
+      }
+
+      const token = await jwt.sign({ role: "owner" });
+
+      auth.set({
+        value: token,
+        ...authCookieOptions,
+      });
+
+      logger.info("User logged in");
+      return { success: true };
+    },
+
+    handleLogout(auth?: AuthCookie): Record<string, unknown> {
+      if (!auth) {
+        return fail("Cookie not available.");
+      }
+
+      auth.remove();
+      logger.info("User logged out");
+      return { success: true };
+    },
+
+    async handleVerify(
+      jwt: JwtService,
+      auth?: AuthCookie
+    ): Promise<Record<string, unknown>> {
+      if (!this.isAuthEnabled) {
+        return ok({ authenticated: true });
+      }
+
+      if (!auth?.value || typeof auth.value !== "string") {
+        return ok({ authenticated: false });
+      }
+
+      try {
+        const payload = await jwt.verify(auth.value);
+        return ok({ authenticated: !!payload });
+      } catch {
+        return ok({ authenticated: false });
+      }
+    },
+
+    async requireAuth(
+      jwt: JwtService,
+      auth?: AuthCookie,
+      set?: StatusSetter
+    ): Promise<void | Record<string, unknown>> {
+      if (!this.isAuthEnabled) {
+        return;
+      }
+
+      if (!auth?.value || typeof auth.value !== "string") {
+        if (set) set.status = 401;
+        return fail("Unauthorized. Please log in.");
+      }
+
+      const payload = await jwt.verify(auth.value);
+
+      if (!payload) {
+        if (set) set.status = 401;
+        return fail("Session expired. Please log in again.");
+      }
+    },
+  };
+}
+
+// Backward compatibility exports
+/** @deprecated Use createAuthService factory instead */
 export async function handleAuthLogin({
   body,
   jwt,
@@ -71,33 +175,19 @@ export async function handleAuthLogin({
   jwt: JwtService;
   auth?: AuthCookie;
 }) {
-  if (!auth) {
-    return fail("Cookie not available.");
-  }
-
-  if (isAuthEnabled && body.password !== config.masterPassword) {
-    return fail("Wrong password.");
-  }
-
-  const token = await jwt.sign({ role: "owner" });
-
-  auth.set({
-    value: token,
-    ...authCookieOptions,
-  });
-
-  return { success: true };
+  const config = (globalThis as any).__authServiceConfig;
+  const authService = createAuthService(config);
+  return authService.handleLogin(body, jwt, auth);
 }
 
+/** @deprecated Use createAuthService factory instead */
 export function handleAuthLogout(auth?: AuthCookie) {
-  if (!auth) {
-    return fail("Cookie not available.");
-  }
-
-  auth.remove();
-  return { success: true };
+  const config = (globalThis as any).__authServiceConfig;
+  const authService = createAuthService(config);
+  return authService.handleLogout(auth);
 }
 
+/** @deprecated Use createAuthService factory instead */
 export async function getAuthVerifyResponse({
   jwt,
   auth,
@@ -105,22 +195,12 @@ export async function getAuthVerifyResponse({
   jwt: JwtService;
   auth?: AuthCookie;
 }) {
-  if (!isAuthEnabled) {
-    return ok({ authenticated: true });
-  }
-
-  if (!auth?.value || typeof auth.value !== "string") {
-    return ok({ authenticated: false });
-  }
-
-  try {
-    const payload = await jwt.verify(auth.value);
-    return ok({ authenticated: !!payload });
-  } catch {
-    return ok({ authenticated: false });
-  }
+  const config = (globalThis as any).__authServiceConfig;
+  const authService = createAuthService(config);
+  return authService.handleVerify(jwt, auth);
 }
 
+/** @deprecated Use createAuthService factory instead */
 export async function requireAuthenticatedRequest({
   jwt,
   auth,
@@ -130,19 +210,7 @@ export async function requireAuthenticatedRequest({
   auth?: AuthCookie;
   set: StatusSetter;
 }) {
-  if (!isAuthEnabled) {
-    return;
-  }
-
-  if (!auth?.value || typeof auth.value !== "string") {
-    set.status = 401;
-    return fail("Unauthorized. Please log in.");
-  }
-
-  const payload = await jwt.verify(auth.value);
-
-  if (!payload) {
-    set.status = 401;
-    return fail("Session expired. Please log in again.");
-  }
+  const config = (globalThis as any).__authServiceConfig;
+  const authService = createAuthService(config);
+  return authService.requireAuth(jwt, auth, set);
 }

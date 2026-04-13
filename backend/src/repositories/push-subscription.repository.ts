@@ -1,17 +1,21 @@
-import { db } from '../db/client';
-import { pushSubscriptions } from '../schema';
 import { eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { pushSubscriptions } from '../schema';
 
-export async function savePushSubscription(endpoint: string, p256dh: string, auth: string) {
-  // For personal use, delete any existing subscription and insert new one
-  await db.delete(pushSubscriptions);
-  return db.insert(pushSubscriptions).values({ endpoint, p256dh, auth });
-}
+export function createPushSubscriptionRepository(dbInstance: PostgresJsDatabase) {
+  return {
+    async save(endpoint: string, p256dh: string, auth: string) {
+      // For personal use, delete any existing subscription and insert new one
+      await dbInstance.delete(pushSubscriptions);
+      return dbInstance.insert(pushSubscriptions).values({ endpoint, p256dh, auth });
+    },
 
-export async function getAllPushSubscriptions() {
-  return db.select().from(pushSubscriptions);
-}
+    async getAll() {
+      return dbInstance.select().from(pushSubscriptions);
+    },
 
-export async function deletePushSubscription(endpoint: string) {
-  return db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+    async delete(endpoint: string) {
+      return dbInstance.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+    },
+  };
 }

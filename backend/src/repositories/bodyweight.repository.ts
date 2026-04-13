@@ -1,5 +1,5 @@
 import { asc, gte, sql } from "drizzle-orm";
-import db from "../db/client";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { mapBodyweightLogRow } from "../db/mappers";
 import { bodyweightLogs } from "../schema";
 
@@ -10,39 +10,32 @@ export interface BodyweightLogRow {
   created_at: string;
 }
 
-export async function insertBodyweightLog(
-  date: string,
-  weight_kg: number,
-): Promise<void> {
-  await db
-    .insert(bodyweightLogs)
-    .values({
-      date,
-      weight_kg,
-    })
-    .onConflictDoUpdate({
-      target: bodyweightLogs.date,
-      set: {
-        weight_kg,
-      },
-    });
-}
+export function createBodyweightRepository(dbInstance: PostgresJsDatabase) {
+  return {
+    async insert(date: string, weight_kg: number): Promise<void> {
+      await dbInstance
+        .insert(bodyweightLogs)
+        .values({ date, weight_kg })
+        .onConflictDoUpdate({
+          target: bodyweightLogs.date,
+          set: { weight_kg },
+        });
+    },
 
-export async function getBodyweightLogs(
-  daysBack = 0,
-): Promise<BodyweightLogRow[]> {
-  let query = db.select().from(bodyweightLogs).$dynamic();
+    async getAll(daysBack = 0): Promise<BodyweightLogRow[]> {
+      let query = dbInstance.select().from(bodyweightLogs).$dynamic();
 
-  if (daysBack > 0) {
-    query = query.where(
-      gte(
-        bodyweightLogs.created_at,
-        sql`now() - interval '${sql.raw(String(daysBack))} days'`,
-      ),
-    );
-  }
+      if (daysBack > 0) {
+        query = query.where(
+          gte(
+            bodyweightLogs.created_at,
+            sql`now() - interval '${sql.raw(String(daysBack))} days'`,
+          ),
+        );
+      }
 
-  const rows = await query.orderBy(asc(bodyweightLogs.date));
-
-  return rows.map(mapBodyweightLogRow);
+      const rows = await query.orderBy(asc(bodyweightLogs.date));
+      return rows.map(mapBodyweightLogRow);
+    },
+  };
 }

@@ -4,24 +4,16 @@ import { jwt } from "@elysiajs/jwt";
 import { cookie } from "@elysiajs/cookie";
 import { staticPlugin } from "@elysiajs/static";
 
-import { config } from "./config";
+import type { AppContext } from "./context";
 import { registerWorkoutRoutes } from "./routes/workouts.routes";
 import { registerAnalyticsRoutes } from "./routes/analytics.routes";
 import { registerBodyweightRoutes } from "./routes/bodyweight.routes";
 import { registerRestDayRoutes } from "./routes/rest-days.routes";
-import { registerProfileRoutes } from "./routes/profile.routes.ts";
-import { registerNutritionRoutes } from "./routes/nutrition.routes.ts";
-import { registerHistoryRoutes } from "./routes/history.routes.ts";
-import { notificationsRoutes } from "./routes/notifications.ts";
-import { cronRoutes } from "./routes/cron.ts";
-import {
-  isPublicPath,
-  authLoginBodySchema,
-  getAuthVerifyResponse,
-  handleAuthLogin,
-  handleAuthLogout,
-  requireAuthenticatedRequest,
-} from "./services/auth.service.ts";
+import { registerProfileRoutes } from "./routes/profile.routes";
+import { registerNutritionRoutes } from "./routes/nutrition.routes";
+import { registerHistoryRoutes } from "./routes/history.routes";
+import { notificationsRoutes } from "./routes/notifications";
+import { cronRoutes } from "./routes/cron";
 
 type RouteRegistrar<TApp> = (app: TApp) => unknown;
 
@@ -36,7 +28,9 @@ function registerRoutes<TApp>(
   return app;
 }
 
-export function createApp() {
+export function createApp(ctx: AppContext) {
+  const { configService, authService } = ctx;
+
   const app = new Elysia()
     .use(
       staticPlugin({
@@ -69,7 +63,7 @@ export function createApp() {
         .use(
           jwt({
             name: "jwt",
-            secret: config.jwtSecret,
+            secret: configService.jwtSecret,
             exp: "7d",
           }),
         )
@@ -77,47 +71,36 @@ export function createApp() {
         .post(
           "/auth/login",
           async ({ body, jwt, cookie: { auth } }) =>
-            handleAuthLogin({
-              body,
-              jwt,
-              auth,
-            }),
+            authService.handleLogin(body as { password: string }, jwt, auth),
           {
             body:
-              authLoginBodySchema ??
+              authService.authLoginBodySchema ??
               t.Object({
                 password: t.String(),
               }),
           },
         )
-        .post("/auth/logout", ({ cookie: { auth } }) => handleAuthLogout(auth))
+        .post("/auth/logout", ({ cookie: { auth } }) => authService.handleLogout(auth))
         .get("/auth/verify", async ({ jwt, cookie: { auth } }) =>
-          getAuthVerifyResponse({
-            jwt,
-            auth,
-          }),
+          authService.handleVerify(jwt, auth),
         )
         .onBeforeHandle(async ({ jwt, cookie: { auth }, path, set }) => {
-          if (isPublicPath(path)) {
+          if (authService.isPublicPath(path)) {
             return;
           }
 
-          return requireAuthenticatedRequest({
-            jwt,
-            auth,
-            set,
-          });
+          return authService.requireAuth(jwt, auth, set);
         })
         .use((app) => {
           registerRoutes(
             app,
-            registerWorkoutRoutes as RouteRegistrar<typeof app>,
-            registerAnalyticsRoutes as RouteRegistrar<typeof app>,
-            registerBodyweightRoutes as RouteRegistrar<typeof app>,
-            registerRestDayRoutes as RouteRegistrar<typeof app>,
-            registerProfileRoutes as RouteRegistrar<typeof app>,
-            registerNutritionRoutes as RouteRegistrar<typeof app>,
-            registerHistoryRoutes as RouteRegistrar<typeof app>,
+            (a) => registerWorkoutRoutes(a, ctx),
+            (a) => registerAnalyticsRoutes(a, ctx),
+            (a) => registerBodyweightRoutes(a, ctx),
+            (a) => registerRestDayRoutes(a, ctx),
+            (a) => registerProfileRoutes(a, ctx),
+            (a) => registerNutritionRoutes(a, ctx),
+            (a) => registerHistoryRoutes(a, ctx),
           );
           return app;
         }),

@@ -1,58 +1,30 @@
+// src/routes/rest-days.routes.ts
+
 import { t } from "elysia";
-import { deleteRestDay, upsertRestDay } from "../db";
-import { fail, getErrorMessage, ok } from "../lib/api";
+import { routeHandler, routeHandlerCtx } from "../lib/route-handler";
+import { ValidationError } from "../lib/errors";
+import type { AppContext } from "../context";
 
-type RestDayApp = {
-  post: (...args: any[]) => RestDayApp;
-  delete: (...args: any[]) => RestDayApp;
-};
+export function registerRestDayRoutes(app: any, ctx: AppContext): void {
+  const { restDayService } = ctx;
 
-export function registerRestDayRoutes(app: RestDayApp) {
-  return app
-    .post(
-      "/rest-days",
-      async ({
-        body,
-      }: {
-        body: {
-          date: string;
-          walked_10k?: boolean;
-          did_liss?: boolean;
-          did_stretch?: boolean;
-          notes?: string;
-        };
-      }) => {
-        try {
-          const restDay = await upsertRestDay(body);
-          return ok(restDay);
-        } catch (error) {
-          return fail(getErrorMessage(error));
-        }
-      },
-      {
-        body: t.Object({
-          date: t.String(),
-          walked_10k: t.Optional(t.Boolean()),
-          did_liss: t.Optional(t.Boolean()),
-          did_stretch: t.Optional(t.Boolean()),
-          notes: t.Optional(t.String()),
-        }),
-      },
-    )
-    .delete(
-      "/rest-days/:date",
-      async ({ params }: { params: { date: string } }) => {
-        try {
-          const deleted = await deleteRestDay(params.date);
-
-          if (!deleted) {
-            return fail("Rest day not found.");
-          }
-
-          return ok({ deleted: true });
-        } catch (error) {
-          return fail(getErrorMessage(error));
-        }
-      },
-    );
+  app
+    .post("/rest-days", routeHandlerCtx(async ({ body }) => {
+      return await restDayService.upsert(body);
+    }), {
+      body: t.Object({
+        date: t.String(),
+        walked_10k: t.Optional(t.Boolean()),
+        did_liss: t.Optional(t.Boolean()),
+        did_stretch: t.Optional(t.Boolean()),
+        notes: t.Optional(t.String()),
+      }),
+    })
+    .delete("/rest-days/:date", routeHandlerCtx(async ({ params }) => {
+      const deleted = await restDayService.delete(params.date);
+      if (!deleted) {
+        throw new ValidationError("Rest day not found.");
+      }
+      return { deleted: true };
+    }));
 }

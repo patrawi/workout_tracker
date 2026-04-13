@@ -1,27 +1,44 @@
-import {
-  getProfile as getProfileRepository,
-  updateProfile as updateProfileRepository,
-} from "../repositories/profile.repository.ts";
-import { insertBodyweightLog } from "../repositories/bodyweight.repository";
-import { getLocalDateString } from "../lib/date";
-import type { ProfileRow } from "../types";
-import type { ProfileUpdateInput } from "../repositories/profile.repository.ts";
+// src/services/profile.service.ts
 
-export async function getProfile(): Promise<ProfileRow> {
-  return getProfileRepository();
+import type { ProfileRow } from "../types";
+import type { ProfileUpdateInput } from "../repositories/profile.repository";
+import type { BodyweightService } from "./bodyweight.service";
+import { getLocalDateString } from "../lib/date";
+import { createChildLogger } from "../lib/logger";
+
+const logger = createChildLogger("profile-service");
+
+export interface ProfileService {
+  get(): Promise<ProfileRow>;
+  update(data: ProfileUpdateInput, bodyweightDate?: string): Promise<ProfileRow>;
 }
 
-export async function updateProfile(
-  data: ProfileUpdateInput,
-  bodyweightDate?: string,
-): Promise<ProfileRow> {
-  const currentProfile = await getProfileRepository();
-  await updateProfileRepository(data);
+export function createProfileService(
+  profileRepo: ReturnType<typeof import("../repositories/profile.repository").createProfileRepository>,
+  bodyweightService: BodyweightService
+): ProfileService {
+  return {
+    async get(): Promise<ProfileRow> {
+      return profileRepo.get();
+    },
 
-  if (data.weight_kg !== currentProfile.weight_kg) {
-    const date = bodyweightDate && bodyweightDate.trim() ? bodyweightDate : getLocalDateString();
-    await insertBodyweightLog(date, data.weight_kg);
-  }
+    async update(data: ProfileUpdateInput, bodyweightDate?: string): Promise<ProfileRow> {
+      const currentProfile = await profileRepo.get();
+      await profileRepo.update(data);
 
-  return getProfileRepository();
+      // Cross-domain: use BodyweightService, not repository directly
+      if (data.weight_kg !== currentProfile.weight_kg) {
+        const date = bodyweightDate?.trim() ? bodyweightDate : getLocalDateString();
+        try {
+          await bodyweightService.log(date, data.weight_kg);
+          logger.info("Auto-logged bodyweight on profile update", { date, weight: data.weight_kg });
+        } catch (error) {
+          logger.warn("Failed to auto-log bodyweight", { error: String(error) });
+          // Don't fail the profile update if bodyweight logging fails
+        }
+      }
+
+      return profileRepo.get();
+    },
+  };
 }

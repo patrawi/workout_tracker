@@ -1,44 +1,25 @@
-export function getRequiredEnv(name: string): string {
-    const value = process.env[name];
+// Backward compatibility - re-export from ConfigService
+// New code should import ConfigService directly from ./services/config.service
 
-    if (!value || value.trim().length === 0) {
-        throw new Error(`${name} environment variable is not set.`);
-    }
+import { ConfigService } from "./services/config.service";
 
-    return value;
-}
+const configService = ConfigService.fromEnv();
 
-export function getOptionalEnv(name: string, fallback = ""): string {
-    const value = process.env[name];
-
-    if (!value || value.trim().length === 0) {
-        return fallback;
-    }
-
-    return value;
-}
-
-export function getNumberEnv(name: string, fallback: number): number {
-    const value = process.env[name];
-
-    if (!value || value.trim().length === 0) {
-        return fallback;
-    }
-
-    const parsed = Number(value);
-    return Number.isNaN(parsed) ? fallback : parsed;
-}
-
+/** @deprecated Use ConfigService instead */
 export const config = {
-    port: getNumberEnv("PORT", 3000),
-    databaseUrl: getRequiredEnv("DATABASE_URL"),
-    masterPassword: getOptionalEnv("MASTER_PASSWORD"),
-    jwtSecret: getOptionalEnv("JWT_SECRET", "frictionless-tracker-secret-change-me"),
-    geminiApiKey: getOptionalEnv("GEMINI_API_KEY"),
-    VAPID_PUBLIC_KEY: getOptionalEnv("VAPID_PUBLIC_KEY"),
-    VAPID_PRIVATE_KEY: getOptionalEnv("VAPID_PRIVATE_KEY"),
-    VAPID_SUBJECT: getOptionalEnv("VAPID_SUBJECT", "mailto:admin@localhost"),
-    CRON_SECRET: getOptionalEnv("CRON_SECRET"),
+  port: configService.port,
+  databaseUrl: configService.databaseUrl,
+  masterPassword: configService.masterPassword,
+  jwtSecret: configService.jwtSecret,
+  geminiApiKey: configService.geminiApiKey,
+  VAPID_PUBLIC_KEY: configService.VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY: configService.VAPID_PRIVATE_KEY,
+  VAPID_SUBJECT: configService.VAPID_SUBJECT,
+  CRON_SECRET: configService.CRON_SECRET,
 };
 
-export const isAuthEnabled = config.masterPassword.length > 0;
+/** @deprecated Use ConfigService.isAuthEnabled instead */
+export const isAuthEnabled = configService.isAuthEnabled;
+
+export { ConfigService };
+export type { AppConfig } from "./services/config.service";

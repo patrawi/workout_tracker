@@ -1,21 +1,13 @@
-import { ok, fail, getErrorMessage } from "../lib/api";
-import { getHistoryDates, type HistoryDate } from "../repositories/history.repository";
-import type { ApiResponse } from "../types";
+// src/routes/history.routes.ts
 
-type HistoryRouteApp = {
-  get: (...args: any[]) => HistoryRouteApp;
-};
+import { routeHandler } from "../lib/route-handler";
+import type { AppContext } from "../context";
 
-export function registerHistoryRoutes(app: HistoryRouteApp): HistoryRouteApp {
-  return app.get(
-    "/history/dates",
-    async (): Promise<ApiResponse<HistoryDate[]>> => {
-      try {
-        const dates = await getHistoryDates();
-        return ok(dates);
-      } catch (error) {
-        return fail(getErrorMessage(error));
-      }
-    },
-  );
+export function registerHistoryRoutes(app: any, ctx: AppContext): void {
+  const { historyService } = ctx;
+
+  app
+    .get("/history/dates", routeHandler(async () => {
+      return await historyService.getDates();
+    }));
 }

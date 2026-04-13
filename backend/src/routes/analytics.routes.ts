@@ -1,81 +1,38 @@
-import {
-  getDistinctExercises,
-  getWorkoutsByExercise,
-  getRecentNotes,
-  getWorkoutHeatmap,
-  getVolumeAnalytics,
-} from "../db";
-import type { HeatmapDay, VolumeData } from "../db";
-import type { ApiResponse, WorkoutRow } from "../types";
-import { ok, fail, getErrorMessage } from "../lib/api";
+// src/routes/analytics.routes.ts
+
+import { routeHandler, routeHandlerCtx } from "../lib/route-handler";
+import { ValidationError } from "../lib/errors";
 import { isNonEmptyString, parseDaysBack } from "../lib/validation";
+import { ANALYTICS_DEFAULT_DAYS_BACK, ANALYTICS_DEFAULT_DAYS_BACK_FOR_EXERCISE } from "../constants";
+import type { AppContext } from "../context";
 
-type AnalyticsApp = {
-  get: (...args: any[]) => AnalyticsApp;
-};
+export function registerAnalyticsRoutes(app: any, ctx: AppContext): void {
+  const { analyticsService } = ctx;
 
-type QueryContext = {
-  query: Record<string, string | undefined>;
-};
-
-export function registerAnalyticsRoutes(app: AnalyticsApp): AnalyticsApp {
-  return app
-    .get("/exercises", async (): Promise<ApiResponse<string[]>> => {
-      try {
-        return ok(await getDistinctExercises());
-      } catch (error) {
-        return fail(getErrorMessage(error));
+  app
+    .get("/exercises", routeHandler(async () => {
+      return await analyticsService.getExercises();
+    }))
+    .get("/analytics", routeHandlerCtx(async ({ query }) => {
+      const exercise = query.exercise;
+      if (!isNonEmptyString(exercise)) {
+        throw new ValidationError("exercise query parameter is required.");
       }
-    })
-    .get(
-      "/analytics",
-      async ({ query }: QueryContext): Promise<ApiResponse<WorkoutRow[]>> => {
-        try {
-          const exercise = query.exercise;
-
-          if (!isNonEmptyString(exercise)) {
-            return fail("exercise query parameter is required.");
-          }
-
-          const days = parseDaysBack(query.days, 0);
-          return ok(await getWorkoutsByExercise(exercise, days));
-        } catch (error) {
-          return fail(getErrorMessage(error));
-        }
-      },
-    )
-    .get(
-      "/analytics/volume",
-      async ({ query }: QueryContext): Promise<ApiResponse<VolumeData[]>> => {
-        try {
-          const days = parseDaysBack(query.days, 7);
-          return ok(await getVolumeAnalytics(days));
-        } catch (error) {
-          return fail(getErrorMessage(error));
-        }
-      },
-    )
-    .get(
-      "/notes",
-      async ({ query }: QueryContext): Promise<ApiResponse<WorkoutRow[]>> => {
-        try {
-          const exercise = query.exercise;
-
-          if (!isNonEmptyString(exercise)) {
-            return fail("exercise query parameter is required.");
-          }
-
-          return ok(await getRecentNotes(exercise, 5));
-        } catch (error) {
-          return fail(getErrorMessage(error));
-        }
-      },
-    )
-    .get("/heatmap", async (): Promise<ApiResponse<HeatmapDay[]>> => {
-      try {
-        return ok(await getWorkoutHeatmap());
-      } catch (error) {
-        return fail(getErrorMessage(error));
+      const days = parseDaysBack(query.days, ANALYTICS_DEFAULT_DAYS_BACK_FOR_EXERCISE);
+      return await analyticsService.getAnalytics(exercise, days);
+    }))
+    .get("/analytics/volume", routeHandlerCtx(async ({ query }) => {
+      const days = parseDaysBack(query.days, ANALYTICS_DEFAULT_DAYS_BACK);
+      return await analyticsService.getVolume(days);
+    }))
+    .get("/notes", routeHandlerCtx(async ({ query }) => {
+      const exercise = query.exercise;
+      if (!isNonEmptyString(exercise)) {
+        throw new ValidationError("exercise query parameter is required.");
       }
-    });
+      return await analyticsService.getNotes(exercise);
+    }))
+    .get("/heatmap", routeHandler(async () => {
+      return await analyticsService.getHeatmap();
+    }));
 }

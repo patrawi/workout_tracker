@@ -1,5 +1,11 @@
 import { workouts, profile, restDays, bodyweightLogs, nutritionLogs } from "../schema";
 import type { WorkoutRow, ProfileRow, NutritionRow } from "../types";
+import {
+  defaultNumber,
+  defaultString,
+  defaultBoolean,
+  defaultArray,
+} from "../lib/defaults";
 
 export interface RestDayRow {
   id: number;
@@ -23,31 +29,31 @@ export function mapWorkoutRow(row: typeof workouts.$inferSelect): WorkoutRow {
     id: row.id,
     session_id: row.session_id,
     exercise_name: row.exercise_name,
-    weight: row.weight ?? 0,
-    reps: row.reps ?? 0,
-    rpe: row.rpe ?? 0,
-    is_bodyweight: row.is_bodyweight ?? false,
-    is_assisted: row.is_assisted ?? false,
-    variant_details: row.variant_details ?? "",
-    notes_thai: row.notes_thai ?? "",
-    notes_english: row.notes_english ?? "",
-    tags: (row.tags as string[]) ?? [],
+    weight: defaultNumber(row.weight),
+    reps: defaultNumber(row.reps),
+    rpe: defaultNumber(row.rpe),
+    is_bodyweight: defaultBoolean(row.is_bodyweight),
+    is_assisted: defaultBoolean(row.is_assisted),
+    variant_details: defaultString(row.variant_details),
+    notes_thai: defaultString(row.notes_thai),
+    notes_english: defaultString(row.notes_english),
+    tags: defaultArray<string>(row.tags),
     muscle_group: row.muscle_group ?? "Other",
-    created_at: row.created_at ?? "",
+    created_at: defaultString(row.created_at),
   };
 }
 
 export function mapProfileRow(row: typeof profile.$inferSelect): ProfileRow {
   return {
     id: row.id,
-    weight_kg: row.weight_kg ?? 0,
-    height_cm: row.height_cm ?? 0,
-    tdee: row.tdee ?? 0,
-    calories_intake: row.calories_intake ?? 0,
-    protein_target: row.protein_target ?? 0,
-    carbs_target: row.carbs_target ?? 0,
-    fat_target: row.fat_target ?? 0,
-    updated_at: row.updated_at ?? "",
+    weight_kg: defaultNumber(row.weight_kg),
+    height_cm: defaultNumber(row.height_cm),
+    tdee: defaultNumber(row.tdee),
+    calories_intake: defaultNumber(row.calories_intake),
+    protein_target: defaultNumber(row.protein_target),
+    carbs_target: defaultNumber(row.carbs_target),
+    fat_target: defaultNumber(row.fat_target),
+    updated_at: defaultString(row.updated_at),
   };
 }
 
@@ -55,11 +61,11 @@ export function mapRestDayRow(row: typeof restDays.$inferSelect): RestDayRow {
   return {
     id: row.id,
     date: row.date,
-    walked_10k: row.walked_10k ?? false,
-    did_liss: row.did_liss ?? false,
-    did_stretch: row.did_stretch ?? false,
-    notes: row.notes ?? "",
-    created_at: row.created_at ?? "",
+    walked_10k: defaultBoolean(row.walked_10k),
+    did_liss: defaultBoolean(row.did_liss),
+    did_stretch: defaultBoolean(row.did_stretch),
+    notes: defaultString(row.notes),
+    created_at: defaultString(row.created_at),
   };
 }
 
@@ -70,7 +76,7 @@ export function mapBodyweightLogRow(
     id: row.id,
     date: row.date,
     weight_kg: row.weight_kg,
-    created_at: row.created_at ?? "",
+    created_at: defaultString(row.created_at),
   };
 }
 
@@ -82,10 +88,10 @@ export function mapNutritionLogRow(
     date: row.date,
     meal: row.meal,
     food_name: row.food_name,
-    protein: row.protein ?? 0,
-    carbs: row.carbs ?? 0,
-    fat: row.fat ?? 0,
-    calories: row.calories ?? 0,
-    created_at: row.created_at ?? "",
+    protein: defaultNumber(row.protein),
+    carbs: defaultNumber(row.carbs),
+    fat: defaultNumber(row.fat),
+    calories: defaultNumber(row.calories),
+    created_at: defaultString(row.created_at),
   };
 }

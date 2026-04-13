@@ -1,61 +1,26 @@
+// src/routes/bodyweight.routes.ts
+
 import { t } from "elysia";
-import { getBodyweightLogs, insertBodyweightLog } from "../db";
-import { ok, fail, getErrorMessage } from "../lib/api";
+import { routeHandlerCtx } from "../lib/route-handler";
 import { parseDaysBack } from "../lib/validation";
+import { BODYWEIGHT_DEFAULT_DAYS_BACK } from "../constants";
+import type { AppContext } from "../context";
 
-type BodyweightRouteApp = {
-  get(
-    path: string,
-    handler: (context: BodyweightQueryContext) => Promise<unknown>,
-  ): BodyweightRouteApp;
-  post(
-    path: string,
-    handler: (context: CreateBodyweightContext) => Promise<unknown>,
-    options: { body: ReturnType<typeof t.Object> },
-  ): BodyweightRouteApp;
-};
+export function registerBodyweightRoutes(app: any, ctx: AppContext): void {
+  const { bodyweightService } = ctx;
 
-type BodyweightQueryContext = {
-  query: {
-    days?: string;
-  };
-};
-
-type CreateBodyweightContext = {
-  body: {
-    date: string;
-    weight_kg: number;
-  };
-};
-
-export function registerBodyweightRoutes(
-  app: BodyweightRouteApp,
-): BodyweightRouteApp {
-  return app
-    .get("/bodyweight", async ({ query }: BodyweightQueryContext) => {
-      try {
-        const days = parseDaysBack(query.days, 0);
-        const logs = await getBodyweightLogs(days);
-        return ok(logs);
-      } catch (error) {
-        return fail(getErrorMessage(error));
-      }
-    })
-    .post(
-      "/bodyweight",
-      async ({ body }: CreateBodyweightContext) => {
-        try {
-          await insertBodyweightLog(body.date, body.weight_kg);
-          return ok({ success: true });
-        } catch (error) {
-          return fail(getErrorMessage(error));
-        }
-      },
-      {
-        body: t.Object({
-          date: t.String(),
-          weight_kg: t.Number(),
-        }),
-      },
-    );
+  app
+    .get("/bodyweight", routeHandlerCtx(async ({ query }) => {
+      const days = parseDaysBack(query.days, BODYWEIGHT_DEFAULT_DAYS_BACK);
+      return await bodyweightService.getLogs(days);
+    }))
+    .post("/bodyweight", routeHandlerCtx(async ({ body }) => {
+      await bodyweightService.log(body.date, body.weight_kg);
+      return { success: true };
+    }), {
+      body: t.Object({
+        date: t.String(),
+        weight_kg: t.Number(),
+      }),
+    });
 }

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db } from "../db/client";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { restDays } from "../schema";
 
 export interface RestDayInput {
@@ -32,39 +32,43 @@ function mapRestDayRow(row: typeof restDays.$inferSelect): RestDayRow {
   };
 }
 
-export async function upsertRestDay(data: RestDayInput): Promise<RestDayRow> {
-  const [row] = await db
-    .insert(restDays)
-    .values({
-      date: data.date,
-      walked_10k: data.walked_10k ?? false,
-      did_liss: data.did_liss ?? false,
-      did_stretch: data.did_stretch ?? false,
-      notes: data.notes ?? "",
-    })
-    .onConflictDoUpdate({
-      target: restDays.date,
-      set: {
-        walked_10k: data.walked_10k ?? false,
-        did_liss: data.did_liss ?? false,
-        did_stretch: data.did_stretch ?? false,
-        notes: data.notes ?? "",
-      },
-    })
-    .returning();
+export function createRestDayRepository(dbInstance: PostgresJsDatabase) {
+  return {
+    async upsert(data: RestDayInput): Promise<RestDayRow> {
+      const [row] = await dbInstance
+        .insert(restDays)
+        .values({
+          date: data.date,
+          walked_10k: data.walked_10k ?? false,
+          did_liss: data.did_liss ?? false,
+          did_stretch: data.did_stretch ?? false,
+          notes: data.notes ?? "",
+        })
+        .onConflictDoUpdate({
+          target: restDays.date,
+          set: {
+            walked_10k: data.walked_10k ?? false,
+            did_liss: data.did_liss ?? false,
+            did_stretch: data.did_stretch ?? false,
+            notes: data.notes ?? "",
+          },
+        })
+        .returning();
 
-  if (!row) {
-    throw new Error("Failed to upsert rest day");
-  }
+      if (!row) {
+        throw new Error("Failed to upsert rest day");
+      }
 
-  return mapRestDayRow(row);
-}
+      return mapRestDayRow(row);
+    },
 
-export async function deleteRestDay(date: string): Promise<boolean> {
-  const deleted = await db
-    .delete(restDays)
-    .where(eq(restDays.date, date))
-    .returning({ id: restDays.id });
+    async delete(date: string): Promise<boolean> {
+      const deleted = await dbInstance
+        .delete(restDays)
+        .where(eq(restDays.date, date))
+        .returning({ id: restDays.id });
 
-  return deleted.length > 0;
+      return deleted.length > 0;
+    },
+  };
 }
