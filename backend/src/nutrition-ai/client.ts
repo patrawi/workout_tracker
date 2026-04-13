@@ -27,7 +27,6 @@ export function createNutritionAIClient(
           temperature: GEMINI_TEMPERATURE,
         },
       });
-      console.log(response);
       const textContent = response.text ?? "";
 
       // Clean potential markdown code fences
