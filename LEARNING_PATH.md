@@ -264,6 +264,75 @@ CRON_SECRET=<strong-random-string>
 - https://vite-pwa-org.netlify.app/guide/push-notifications.html
 
 
+### 11a. Service Worker Precache Failures on Railway (Two-Part Bug)
+
+**Problem**: Service worker failed to install on Railway with two alternating errors:
+
+1. `bad-precaching-response: index.html status 500` — Railway returns 500 when `/index.html` is fetched directly (it only serves it as an SPA fallback for navigation requests)
+2. `TypeError: Failed to execute 'put' on 'Cache': Vary header contains *` — Railway's proxy adds `Vary: *` to responses, which causes the browser's native `cache.put()` to throw
+
+**Root cause analysis**:
+- Railway's reverse proxy serves static files from the `dist` directory, but `/index.html` returns 500 because Railway's backend (Elysia) intercepts the request first. The SPA fallback only works for navigation requests (Accept: text/html headers), not direct file fetches.
+- Railway's proxy layer adds `Vary: *` to responses (likely for CDN cache-busting). The browser's Cache API specification explicitly forbids storing responses with `Vary: *` because they're uncacheable by definition. This is a **hard browser error**, not a warning.
+- Workbox's `cacheWillUpdate` plugin hooks run **during** the strategy's `handle()` method, but the precache strategy (`_handleInstall`) calls `cache.put()` on the raw fetch response before the plugin pipeline can modify it. This is a known limitation in workbox-precaching.
+
+**Failed approaches** (what NOT to do):
+- `cacheWillUpdate` plugin on precache — runs too late, `cache.put()` already called
+- Monkey-patching `Cache.prototype.put` — workbox uses internal caching paths that bypass the prototype
+- Filtering `index.html` in the service worker at runtime with `.filter()` on `self.__WB_MANIFEST` — the manifest is already baked in at build time, runtime filtering doesn't prevent the fetch
+- Using `workbox.manifestTransforms` in VitePWA config — that property only works with `generateSW` strategy, not `injectManifest`
+
+**Fix — Part 1: Exclude index.html from precache at build time**
+```typescript
+// vite.config.ts — inside VitePWA config
+injectManifest: {
+  manifestTransforms: [
+    (manifest: any[]) => ({
+      manifest: manifest.filter((e) => !e.url.endsWith('index.html')),
+      warnings: [],
+    }),
+  ],
+},
+```
+This removes `index.html` from the precache manifest **before** it reaches the service worker. The `NavigationRoute` with `NetworkFirst` strategy handles it at runtime instead.
+
+**Fix — Part 2: Wrap `self.fetch` to strip `Vary: *`**
+```typescript
+// service-worker.ts — at the top, before any workbox imports are used
+const _originalFetch = self.fetch
+self.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return _originalFetch.call(self, input, init).then(async (response) => {
+    if (response.headers.get('Vary') === '*') {
+      const headers = new Headers(response.headers)
+      headers.delete('Vary')
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      })
+    }
+    return response
+  })
+}
+```
+This intercepts **every** `fetch()` call in the service worker (including workbox's internal ones) and strips `Vary: *` from responses before they reach `cache.put()`. This is the only approach that works because:
+- It runs before workbox sees the response
+- It runs before `cache.put()` is called
+- It's global — covers precache, runtime caching, and any future fetch calls
+
+**Key lessons**:
+- `injectManifest.manifestTransforms` is the correct config path for `injectManifest` strategy (not `workbox.manifestTransforms`)
+- `cacheWillUpdate` is useless for `Vary: *` on precache — the error happens at the native Cache API level before the plugin runs
+- `self.fetch` wrapping is the nuclear option but the only one that works for this Railway-specific issue
+- Always test PWA on the actual deployment platform, not just `npm run preview` — Railway's proxy behavior is unique
+
+**Resources**:
+- https://developer.mozilla.org/en-US/docs/Web/API/Cache/put (Vary: * restriction)
+- https://github.com/GoogleChrome/workbox/issues/2685 (Vary: * issue in workbox)
+- https://vite-pwa-org.netlify.app/guide/inject-manifest.html
+- Search: "Railway Vary header service worker cache"
+
+
 ## 12. Auth Security for Single-User Apps (CIA Assessment)
 
 **Context**: Backend uses a single master password + JWT cookie for authentication. No user registration, no multi-tenancy, no role-based access.
@@ -462,3 +531,148 @@ Result: 5 independently cacheable vendor chunks (largest: recharts at 112 KiB gz
 - https://tanstack.com/query/latest/docs/react/guides/mutations (stable mutation callbacks)
 - https://tkdodo.eu/blog/status-and-errors-in-react-query (pure select pattern)
 - https://developers.google.com/web/tools/workbox/modules/workbox-build (cacheWillUpdate lifecycle)
+
+
+## 14. Backend SOLID Principles Refactoring (6-Phase Clean Architecture)
+
+**Context**: Backend code was analyzed for SOLID principle alignment and found to score 6/10. Six major improvement areas were identified: magic values extraction, duplication removal, coupling reduction, testability improvement, error handling enhancement, and comprehensive testing.
+
+**Design approach**: Option A (design first) with phase-by-phase implementation using task-executor for each subtask. Total: 60 tasks across 6 phases, 74 unit tests created.
+
+### 14a. Phase 1 - Foundation (8 tasks, 34 tests)
+
+**What was done**:
+- Created `src/constants.ts` — centralized magic values (DEFAULT_WORKOUT_LIMIT=20, ANALYTICS_DEFAULT_DAYS_BACK=7, AUTH_COOKIE_MAX_AGE_SECONDS, etc.)
+- Created `src/lib/defaults.ts` — `withWorkoutDefaults()` utility eliminates duplicated `?? 0`, `?? ""`, `?? []`, `?? false` patterns
+- Created `src/lib/errors.ts` — type-safe error hierarchy (ValidationError, NotFoundError, UnauthorizedError, ConflictError, ExternalServiceError) with `getErrorMessage()` and `getErrorStatusCode()`
+- Created `src/lib/logger.ts` — structured JSON logging with LogLevel enum and `createChildLogger(source)` for contextual logging
+- Created `src/lib/route-handler.ts` — `routeHandler` and `routeHandlerCtx` wrappers eliminate repetitive try/catch/ok/fail boilerplate
+- Created `src/services/config.service.ts` — injectable config with `ConfigService.fromEnv()` and `ConfigService.forTest()` for testability
+- Refactored `src/db/client.ts` — replaced singleton with `createDatabaseClient(databaseUrl)` factory
+
+**Key pattern**: Factory Pattern throughout — no singletons, all dependencies injectable.
+
+**Research topics**:
+- Factory pattern vs Singleton for testability
+- Dependency Injection without a framework (manual composition root)
+- Structured logging vs console.log (JSON output, log levels, context propagation)
+- Error type hierarchies in TypeScript (discriminated unions vs class inheritance)
+
+### 14b. Phase 2 - Repository Layer (10 tasks, 12 new tests, total 46)
+
+**What was done**:
+- Refactored all 8 repositories to factory pattern: `createXxxRepository(dbInstance)`
+  - workout.repository.ts (11 methods: getRecent, getByDate, getDates, create, update, delete, createBatch, getDistinctExercises, getByExercise, getRecentNotes)
+  - analytics.repository.ts (2 methods: getHeatmap, getVolume)
+  - bodyweight.repository.ts (2 methods: insert, getAll)
+  - rest-day.repository.ts (2 methods: upsert, delete)
+  - profile.repository.ts (3 methods: ensure, get, update)
+  - nutrition.repository.ts (6 methods: insertBatch, update, getByDate, getDates, deleteItem, deleteByDate)
+  - history.repository.ts (1 method: getDates)
+  - push-subscription.repository.ts (3 methods: save, getAll, delete)
+- Updated `src/db/mappers.ts` to use `defaultNumber()`, `defaultString()`, `defaultBoolean()`, `defaultArray()` from defaults.ts
+- Added backward-compatible deprecated exports with JSDoc `@deprecated` tags
+
+**Key pattern**: Repositories accept `PostgresJsDatabase` instance, return typed methods. No direct `db` import inside repository files.
+
+### 14c. Phase 3 - AI Layer (8 tasks, 15 new tests, total 59)
+
+**What was done**:
+- Split `src/ai.ts` (4.5 KB monolith) into modular files:
+  - `src/ai/prompts.ts` — `WORKOUT_SYSTEM_PROMPT` extracted as constant
+  - `src/ai/normalizers.ts` — `normalizeWorkoutItem()` using `withWorkoutDefaults()`
+  - `src/ai/client.ts` — `createWorkoutAIClient()` factory with `AIClient` interface
+- Split `src/nutrition-ai.ts` (4.3 KB monolith) into modular files:
+  - `src/nutrition-ai/prompts.ts` — `NUTRITION_SYSTEM_PROMPT` extracted
+  - `src/nutrition-ai/normalizers.ts` — `normalizeNutritionItem()`, `normalizeMeal()`, `roundTo1()`
+  - `src/nutrition-ai/client.ts` — `createNutritionAIClient()` factory
+- Created `src/services/ai.service.ts` — `AIService` facade that wraps GoogleGenAI with `ExternalServiceError` handling and API key validation
+
+**Key pattern**: AI clients are pure factories. Service facade handles error translation and logging.
+
+**Files deleted**: `src/ai.ts`, `src/nutrition-ai.ts` (replaced by modular directories)
+
+### 14d. Phase 4 - Service Layer (9 tasks, 15 new tests, total 74)
+
+**What was done**:
+- Created 7 domain services, each with factory pattern:
+  - `src/services/workout.service.ts` — 11 methods: create, createBatch, parse, confirmSession, update, delete, getRecent, getByDate, getDates, getByExercise, getRecentNotes. Includes validation and AI integration.
+  - `src/services/analytics.service.ts` — getHeatmap, getVolume. Uses constants for defaults (DEFAULT_WORKOUT_LIMIT, ANALYTICS_DEFAULT_DAYS_BACK).
+  - `src/services/bodyweight.service.ts` — log, getAll. Structured logging via `createChildLogger("bodyweight-service")`.
+  - `src/services/rest-day.service.ts` — upsert, delete. Logging included.
+  - `src/services/nutrition.service.ts` — parse, log, getByDate, getDates, update, deleteItem, deleteByDate.
+  - `src/services/history.service.ts` — getDates query.
+  - `src/services/profile.service.ts` — get, update, auto-log bodyweight on weight change.
+- **Critical fix**: `ProfileService` accepts `BodyweightService` as dependency instead of importing bodyweight repository directly — eliminates cross-domain coupling.
+- Refactored `src/services/auth.service.ts` to use `ConfigService` instead of direct config import. Added `authLoginBodySchema` to interface.
+
+**Key pattern**: Services accept their repositories + cross-service dependencies as constructor/factory parameters. Single Responsibility per service.
+
+### 14e. Phase 5 - Route Layer (9 tasks)
+
+**What was done**:
+- Refactored all 9 route files to use `routeHandler`/`routeHandlerCtx` wrappers:
+  - `src/routes/workouts.routes.ts` — 315→114 lines (64% reduction)
+  - `src/routes/analytics.routes.ts` — uses `ctx.analyticsService`
+  - `src/routes/bodyweight.routes.ts` — uses `ctx.bodyweightService`
+  - `src/routes/rest-days.routes.ts` — uses `ctx.restDayService`
+  - `src/routes/profile.routes.ts` — uses `ctx.profileService` from context
+  - `src/routes/nutrition.routes.ts` — uses `ctx.nutritionService`, includes update endpoint
+  - `src/routes/history.routes.ts` — uses `ctx.historyService`
+  - `src/routes/notifications.ts` — structured logging, factory pattern
+  - `src/routes/cron.ts` — structured logging, factory pattern
+- Replaced all direct repo imports with service calls from `AppContext`
+- Replaced scattered `console.log` with structured JSON logging
+- Used constants instead of magic values throughout
+- Created `src/context.ts` with `AppContext` interface
+
+**Key pattern**: Routes receive `AppContext` with all services. No direct repo access from routes. Route handlers are pure functions wrapped by `routeHandlerCtx`.
+
+### 14f. Phase 6 - Wiring, Bootstrap & Cleanup (8 tasks)
+
+**What was done**:
+- Created `createAppContext(db, config)` factory in `src/context.ts` — builds entire dependency graph (repos → AI service → domain services → AppContext)
+- Simplified `src/app.ts` to accept `AppContext` parameter — removed inline service creation (120+ lines eliminated)
+- Updated `src/index.ts` with new bootstrap pattern:
+  ```typescript
+  const config = ConfigService.fromEnv();
+  const db = createDatabaseClient(config.databaseUrl);
+  await createProfileRepository(db).ensure();
+  const ctx = createAppContext(db, config);
+  const app = createApp(ctx).listen(config.port);
+  ```
+- Updated `src/config.ts` to re-export from ConfigService (backward compatibility with `@deprecated` tags)
+- **Removed deprecated `src/db.ts` barrel file** (67 lines of re-exports)
+- **Cleaned up 28 deprecated functions** across 8 repository files (getRecentWorkouts, insertWorkouts, ensureProfileRow, etc.)
+- **Deleted legacy files**: `src/ai.ts`, `src/nutrition-ai.ts`
+- Removed unused `db` imports from all repository files
+- Fixed `seed_bodyweight.ts` to use factory pattern
+- Added `authLoginBodySchema` to AuthService interface
+
+**Final state**:
+- **74 unit tests pass** across 18 test files
+- **TypeScript compiles cleanly** (no errors)
+- **App boots successfully** — health endpoint responds, auth protects API routes
+- **Zero deprecated exports remaining** — all backward compat code removed
+- **Factory pattern throughout** — no singletons, all dependencies injectable
+
+### 14g. Architecture Improvements Summary
+
+| Principle | Before | After |
+|---|---|---|
+| **Single Responsibility** | ai.ts handled prompts, parsing, normalization | Split into prompts.ts, normalizers.ts, client.ts |
+| **Open/Closed** | Hardcoded magic values, required editing functions | Constants.ts + defaults, extendable via config |
+| **Liskov Substitution** | No interfaces, concrete types only | Service interfaces (AuthService, etc.) for mocking |
+| **Interface Segregation** | Monolithic route handlers | routeHandler/routeHandlerCtx wrappers |
+| **Dependency Inversion** | Direct `db` imports, global state | Factory injection via AppContext |
+| **Testability** | Singletons, global state, console.log | Factory pattern, structured logging, 74 tests |
+| **Error Handling** | `as ApiError` type assertions | Type-safe error hierarchy with getErrorMessage() |
+| **Magic Values** | Scattered literals (50, 7, "", 0, []) | Centralized in constants.ts |
+| **Code Duplication** | `?? 0`, `?? ""`, `?? []` in 20+ places | withWorkoutDefaults() utility |
+| **Cross-Domain Coupling** | ProfileService imported bodyweight repo | ProfileService uses BodyweightService |
+
+**Files created**: 25+ new files (constants, defaults, errors, logger, route-handler, 7 services, 6 AI modules, context, config.service)
+**Files refactored**: 17 files (8 repos, 9 routes, app.ts, index.ts, config.ts, db/client.ts, mappers.ts, auth.service.ts)
+**Files deleted**: 3 files (db.ts barrel, ai.ts, nutrition-ai.ts)
+**Lines reduced**: workouts.routes.ts 315→114, app.ts reduced by 120+ lines, 28 deprecated functions removed
+**Tests added**: 74 unit tests across 18 files (0 → 74)

@@ -13,7 +13,7 @@ export interface NutritionAIClient {
  */
 export function createNutritionAIClient(
   apiKey: string,
-  model: string = GEMINI_MODEL_NUTRITION
+  model: string = GEMINI_MODEL_NUTRITION,
 ): NutritionAIClient {
   const ai = new GoogleGenAI({ apiKey });
 
@@ -27,7 +27,7 @@ export function createNutritionAIClient(
           temperature: GEMINI_TEMPERATURE,
         },
       });
-
+      console.log(response);
       const textContent = response.text ?? "";
 
       // Clean potential markdown code fences
@@ -45,7 +45,7 @@ export function createNutritionAIClient(
         return items.map(normalizeNutritionItem);
       } catch {
         throw new Error(
-          `Failed to parse nutrition LLM response as JSON. Raw response: ${cleaned.slice(0, 500)}`
+          `Failed to parse nutrition LLM response as JSON. Raw response: ${cleaned.slice(0, 500)}`,
         );
       }
     },
