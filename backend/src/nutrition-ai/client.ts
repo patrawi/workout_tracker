@@ -28,7 +28,7 @@ export function createNutritionAIClient(
         },
       });
       const textContent = response.text ?? "";
-
+      console.log("test");
       // Clean potential markdown code fences
       const cleaned = textContent
         .replace(/```json\s*/gi, "")
