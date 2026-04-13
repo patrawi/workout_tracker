@@ -1,0 +1,17 @@
+name: Daily Workout Reminder
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC (07:00 Thailand time)
+    - cron: "0 18 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  send-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send push notification
+        run: |
+          curl -sf \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://workout.patrawi.com/cron/check-notifications
