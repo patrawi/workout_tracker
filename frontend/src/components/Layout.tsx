@@ -22,11 +22,23 @@ export default function Layout() {
         };
     }, []);
 
-    // Show a loading spinner while checking auth
+    // Show a loading skeleton while checking auth - maintain page structure to avoid CLS
     if (isCheckingAuth) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="animate-spin h-8 w-8 border-2 border-white/20 border-t-white rounded-full" />
+            <div className="min-h-screen flex flex-col">
+                <div
+                    className="fixed inset-0 pointer-events-none -z-10"
+                    aria-hidden="true"
+                    style={{
+                        background:
+                            "radial-gradient(ellipse 60% 40% at 50% 0%, oklch(0.3 0.15 160 / 0.15), transparent), radial-gradient(ellipse 40% 50% at 80% 20%, oklch(0.25 0.15 290 / 0.1), transparent)",
+                    }}
+                />
+                <Header onLogout={logout} />
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="animate-spin h-8 w-8 border-2 border-white/20 border-t-white rounded-full" />
+                </div>
+                <PWAInstallPrompt />
             </div>
         );
     }

@@ -44,7 +44,10 @@ export const workouts = pgTable("workouts", {
     tags: jsonb("tags").$type<string[]>().default([]),
     muscle_group: text("muscle_group").default("Other").notNull(),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
-});
+}, (table) => [
+    index("workouts_created_at_idx").on(table.created_at),
+    index("workouts_exercise_name_idx").on(table.exercise_name),
+]);
 
 // ——— Profile Table (single row, id always = 1) ———
 export const profile = pgTable("profile", {
@@ -68,7 +71,9 @@ export const restDays = pgTable("rest_days", {
     did_stretch: boolean("did_stretch").default(false),
     notes: text("notes").default(""),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
-});
+}, (table) => [
+    index("rest_days_created_at_idx").on(table.created_at),
+]);
 
 // ——— Bodyweight Logs Table ———
 export const bodyweightLogs = pgTable("bodyweight_logs", {

@@ -32,11 +32,25 @@ export function createApp(ctx: AppContext) {
   const { configService, authService } = ctx;
 
   const app = new Elysia()
+    // Serve hashed assets (JS/CSS/images) with 1-year cache - filenames change when content changes
+    .use(
+      staticPlugin({
+        assets: "./public/assets",
+        prefix: "/assets",
+        maxAge: 60 * 60 * 24 * 365, // 1 year
+        directive: "immutable",
+        etag: true,
+        alwaysStatic: true,
+      }),
+    )
+    // Serve root files (index.html, manifest, icons) with no cache
     .use(
       staticPlugin({
         assets: "./public",
         prefix: "/",
-        maxAge: 0, // No caching so service worker updates are always detected
+        maxAge: 0,
+        etag: true,
+        ignorePatterns: ["assets/**"],
       }),
     )
     .use(
@@ -45,14 +59,35 @@ export function createApp(ctx: AppContext) {
         origin: true,
       }),
     )
-    // SPA fallback - serve index.html for client-side routes
-    .get("/", () => Bun.file("./public/index.html"))
-    .get("/login", () => Bun.file("./public/index.html"))
-    .get("/analytics", () => Bun.file("./public/index.html"))
-    .get("/profile", () => Bun.file("./public/index.html"))
-    .get("/history", () => Bun.file("./public/index.html"))
-    .get("/history/*", () => Bun.file("./public/index.html"))
-    .get("/nutrition", () => Bun.file("./public/index.html"))
+    // SPA fallback - serve index.html for client-side routes (no caching)
+    .get("/", ({ set }) => {
+      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+      return Bun.file("./public/index.html")
+    })
+    .get("/login", ({ set }) => {
+      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+      return Bun.file("./public/index.html")
+    })
+    .get("/analytics", ({ set }) => {
+      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+      return Bun.file("./public/index.html")
+    })
+    .get("/profile", ({ set }) => {
+      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+      return Bun.file("./public/index.html")
+    })
+    .get("/history", ({ set }) => {
+      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+      return Bun.file("./public/index.html")
+    })
+    .get("/history/*", ({ set }) => {
+      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+      return Bun.file("./public/index.html")
+    })
+    .get("/nutrition", ({ set }) => {
+      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+      return Bun.file("./public/index.html")
+    })
     .get("/health", () => ({ status: "ok", timestamp: new Date().toISOString() }))
     // Public routes (no auth required)
     .use(notificationsRoutes)

@@ -139,10 +139,29 @@ export default function CalendarHeatmap() {
 
     if (isLoading) {
         return (
-            <section className="glass-card p-6 mb-8 animate-fade-in" aria-label="Activity heatmap loading">
-                <div className="flex items-center gap-2 mb-4">
-                    <div className="skeleton h-5 w-40" />
+            <section className="glass-card p-5 sm:p-6 mb-8 animate-fade-in" aria-label="Activity heatmap loading">
+                {/* Header skeleton - matches real header height */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+                    <div className="skeleton h-5 w-24" />
+                    {/* Stats row skeleton - matches 3 stats with dividers */}
+                    <div className="flex items-center gap-4 sm:gap-6">
+                        <div className="text-center">
+                            <div className="skeleton h-5 w-8 mb-1" />
+                            <div className="skeleton h-3 w-20" />
+                        </div>
+                        <div className="w-px h-8 bg-[var(--border)]" />
+                        <div className="text-center">
+                            <div className="skeleton h-5 w-8 mb-1" />
+                            <div className="skeleton h-3 w-20" />
+                        </div>
+                        <div className="w-px h-8 bg-[var(--border)]" />
+                        <div className="text-center">
+                            <div className="skeleton h-5 w-8 mb-1" />
+                            <div className="skeleton h-3 w-16" />
+                        </div>
+                    </div>
                 </div>
+                {/* Heatmap grid skeleton - fixed height to match real grid */}
                 <div className="skeleton h-[120px] w-full rounded-lg" />
             </section>
         );
