@@ -62,14 +62,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      output: {
-        manualChunks: {
-          // Split heavy vendor libs into separate chunks for better caching
-          recharts: ['recharts'],
-          'radix-select': ['radix-ui'],
-          'react-query': ['@tanstack/react-query'],
-        },
-      },
+      // Let Vite handle code splitting automatically for lazy-loaded pages
     },
   },
   server: {
