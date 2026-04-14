@@ -23,9 +23,8 @@ const HistoryPage = lazy(() => import('./pages/HistoryPage.tsx'))
 const DailyWorkoutPage = lazy(() => import('./pages/DailyWorkoutPage.tsx'))
 const NutritionPage = lazy(() => import('./pages/NutritionPage.tsx'))
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
+const app = (
+  <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <AuthProvider>
         <Routes>
@@ -87,6 +86,13 @@ createRoot(document.getElementById('root')!).render(
       </Routes>
       </AuthProvider>
     </BrowserRouter>
-    </QueryClientProvider>
-  </StrictMode>,
+  </QueryClientProvider>
 )
+
+if (import.meta.env.DEV) {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>{app}</StrictMode>
+  )
+} else {
+  createRoot(document.getElementById('root')!).render(app)
+}
