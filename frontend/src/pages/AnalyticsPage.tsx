@@ -116,6 +116,7 @@ export default function AnalyticsPage() {
                 {/* Global Controls */}
                 <section className="flex flex-wrap gap-3 mb-8 animate-slide-up">
                     <Select
+                        key={selectedExercise}
                         value={selectedExercise}
                         onValueChange={setSelectedExercise}
                     >
