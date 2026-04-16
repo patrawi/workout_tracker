@@ -676,3 +676,200 @@ Result: 5 independently cacheable vendor chunks (largest: recharts at 112 KiB gz
 **Files deleted**: 3 files (db.ts barrel, ai.ts, nutrition-ai.ts)
 **Lines reduced**: workouts.routes.ts 315→114, app.ts reduced by 120+ lines, 28 deprecated functions removed
 **Tests added**: 74 unit tests across 18 files (0 → 74)
+
+
+## 15. React Query `initialData` Preventing Refetches on Query Key Change
+
+**Problem found**: In `useAnalyticsData.ts`, changing `selectedExercise` via the dropdown did not trigger a React Query refetch. The query key changed correctly (confirmed via `queryKeys.analytics.exerciseData(exercise, range)`), but no network request was made.
+
+**Root cause**: `initialData: []` on both `exerciseData` and `notes` queries. When a new query key is created (new exercise selection), `initialData` immediately provides `[]` as cached data. React Query sees "I already have data for this query" and doesn't fetch from the server (within the `staleTime: 30_000` window).
+
+**Key insight**: `enabled: !!effectiveExercise` was working correctly — the query was enabled. The bug was that `initialData` tricked React Query into thinking it already had fresh data. The `useMemo` on `analyticsData` was for computation optimization, not for triggering fetches — React Query handles everything through the query key alone (no `useEffect` or `useMemo` on `selectedExercise` needed).
+
+**Fix applied**:
+```typescript
+// Before: initialData prevented fetches
+const { data: analyticsData } = useQuery({
+    queryKey: queryKeys.analytics.exerciseData(effectiveExercise, selectedRange),
+    enabled: !!effectiveExercise,
+    initialData: [],  // ← BUG: provides cached [] immediately
+});
+
+// After: always fetch on mount
+const { data: analyticsData } = useQuery({
+    queryKey: queryKeys.analytics.exerciseData(effectiveExercise, selectedRange),
+    enabled: !!effectiveExercise,
+    refetchOnMount: "always",  // ← ensures fetch every time component mounts
+});
+const workouts = analyticsData ?? [];  // null coalescing for type safety
+```
+
+Also added `key={selectedExercise}` to the exercise `<Select>` component in `AnalyticsPage.tsx` to force React to re-mount the controlled component on exercise change.
+
+**Files involved**:
+- `frontend/src/features/analytics/hooks/useAnalyticsData.ts` — removed initialData, added refetchOnMount
+- `frontend/src/pages/AnalyticsPage.tsx` — added key prop to Select
+
+**Resources**:
+- https://tanstack.com/query/latest/docs/framework/react/guides/initial-query-data
+- https://tkdodo.eu/blog/react-query-and-type-script (initialData typing)
+- Search: "React Query initialData prevents fetch on new query key"
+
+
+## 16. React StrictMode Double-Rendering in Production
+
+**Problem found**: Editing `HistoryPage.tsx` caused duplicate API requests (visible in Network tab as both `service-worker` and `index-BrVGB` requests). This was React StrictMode's intentional double-mount behavior.
+
+**Root cause**: `main.tsx` wrapped the entire app in `<StrictMode>` unconditionally — it was rendered in both development and production. In development, StrictMode mounts→unmounts→remounts to catch side effects. In production, React strips the double-rendering side effects, so StrictMode becomes a no-op. However, keeping StrictMode in production is unnecessary overhead.
+
+**Fix applied**: Conditional wrapping based on environment:
+```typescript
+const app = (<QueryClientProvider>...</QueryClientProvider>)
+
+if (import.meta.env.DEV) {
+  createRoot(document.getElementById('root')!).render(<StrictMode>{app}</StrictMode>)
+} else {
+  createRoot(document.getElementById('root')!).render(app)
+}
+```
+
+Railway automatically sets `NODE_ENV=production`, which Vite translates to `import.meta.env.DEV = false`.
+
+**Files involved**:
+- `frontend/src/main.tsx` — conditional StrictMode
+
+**Resources**:
+- https://react.dev/reference/react/StrictMode
+- Search: "React StrictMode production overhead"
+
+
+## 17. Vite `manualChunks` Causing Unnecessary Module Preloading
+
+**Problem found**: First Contentful Paint was 5.6s. Build output showed `recharts` (420 KB), `react-query` (44 KB), and `radix-select` (72 KB) as separate chunks via `manualChunks`. The generated `index.html` included `<link rel="modulepreload">` for ALL of them in the `<head>`, forcing the browser to download ~536 KB before rendering anything.
+
+**Root cause**: When you define `manualChunks`, Vite creates separate chunks AND adds `modulepreload` links for them in the HTML `<head>` on every page load, even if the chunks are only used by lazy-loaded pages. This defeats the purpose of code splitting.
+
+**Fix applied**: Removed `manualChunks` entirely. Let Vite handle code splitting automatically. Vite's default behavior only loads chunks when the lazy-loaded page is actually visited — no `modulepreload` in the HTML.
+
+**Before** (with manualChunks):
+```html
+<script src="/assets/index.js"></script>
+<link rel="modulepreload" href="/assets/recharts.js">     ← 420 KB, downloaded immediately
+<link rel="modulepreload" href="/assets/react-query.js">   ← 44 KB, downloaded immediately
+<link rel="modulepreload" href="/assets/radix-select.js">  ← 72 KB, downloaded immediately
+```
+
+**After** (without manualChunks):
+```html
+<script src="/assets/index.js"></script>
+<!-- recharts/react-query loaded only when Analytics/Profile page is visited -->
+```
+
+~139 KB saved on initial load.
+
+**Files involved**:
+- `frontend/vite.config.ts` — removed manualChunks
+
+**Resources**:
+- https://vitejs.dev/guide/build#chunking-strategy
+- Search: "Vite manualChunks modulepreload LCP impact"
+
+
+## 18. Static File Cache Headers for FCP/LCP Optimization
+
+**Problem found**: Lighthouse reported 389 KiB of wasted cache potential — JS/CSS files had no `Cache-Control` headers, causing browsers to re-download them on every visit.
+
+**Root cause**: Elysia's `@elysiajs/static` plugin was configured with `maxAge: 0` (no caching), justified as "so service worker updates are always detected."
+
+**Important caveat**: The static plugin's `maxAge` and `headers` options are **global** — they apply to ALL files, including `index.html`. Caching `index.html` for 1 year would be disastrous (users would never see new JS/CSS references). The solution requires per-file-type cache control.
+
+**@elysiajs/static v1.4.7 limitations**: No `cacheControl` callback exists in this version. Available options: `maxAge` (global seconds), `directive` (global Cache-Control directive), `headers` (static record).
+
+**Fix applied — two static plugin instances**:
+```typescript
+// Hashed assets (JS/CSS) — 1-year cache, filenames change when content changes
+.use(staticPlugin({
+  assets: "./public/assets",
+  prefix: "/assets",
+  maxAge: 60 * 60 * 24 * 365,
+  directive: "immutable",
+  etag: true,
+  alwaysStatic: true,
+}))
+// Root files (index.html, manifest, icons) — no cache
+.use(staticPlugin({
+  assets: "./public",
+  prefix: "/",
+  maxAge: 0,
+  etag: true,
+  ignorePatterns: ["assets/**"],
+}))
+```
+
+SPA fallback routes (`/analytics`, `/profile`, etc.) serve `index.html` via `Bun.file()` with explicit `Cache-Control: public, max-age=0, must-revalidate` headers.
+
+**On repeat visits**: Browser uses cached JS/CSS → 750ms CSS blocking becomes 0ms.
+
+**Files involved**:
+- `backend/src/app.ts` — two static plugin instances + SPA fallback cache headers
+
+**Resources**:
+- https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
+- https://elysiajs.com/plugins/static
+
+
+## 19. Cumulative Layout Shift (CLS) from Auth Loading State
+
+**Problem found**: CLS score of 0.577 (good is < 0.1). The main culprit (0.481) was the auth check loading spinner — `Layout.tsx` rendered just a centered spinner during `isCheckingAuth`, then replaced it with the full page (Header + content + PWAInstallPrompt) when auth completed.
+
+**Root cause**: The page structure changed dramatically between the loading state (tiny spinner, most of screen empty) and the authenticated state (full layout). This caused a massive layout shift.
+
+**Fix applied**: Render the full page skeleton during auth check — same structure (Header, content area, PWAInstallPrompt, background glow) with just the spinner centered in the content area. The page layout is already in place before auth completes, so there's no shift.
+
+**Secondary fix**: `CalendarHeatmap.tsx` loading skeleton only had a title placeholder, while the real version has header + stats row (current streak, longest streak, total days). Updated the skeleton to include stat placeholders matching the real header's height.
+
+**Files involved**:
+- `frontend/src/components/Layout.tsx` — full skeleton during auth check
+- `frontend/src/components/CalendarHeatmap.tsx` — enhanced loading skeleton with stats placeholders
+
+**Resources**:
+- https://web.dev/articles/cls
+- Search: "React loading skeleton CLS layout shift"
+
+
+## 20. Database Indexes Missing for Time-Range Queries
+
+**Problem found**: API response times were 2-3 seconds: `/api/heatmap` at 2,778ms, `/api/workouts` at 2,425ms. Lighthouse showed these as the longest critical path latency.
+
+**Root cause**: Missing database indexes on `workouts.created_at` and `rest_days.created_at`. Both queries performed full table scans:
+- `/api/heatmap`: `WHERE created_at >= now() - interval '365 days'` + `GROUP BY DATE(created_at)` — no index, scans entire workouts table
+- `/api/workouts`: `ORDER BY created_at DESC` — no index, requires filesort
+
+**Fix applied**: Added 3 B-tree (unclustered) indexes via Drizzle schema:
+```typescript
+// schema.ts
+export const workouts = pgTable("workouts", { ... }, (table) => [
+    index("workouts_created_at_idx").on(table.created_at),       // speeds up heatmap + list
+    index("workouts_exercise_name_idx").on(table.exercise_name), // speeds up analytics
+]);
+export const restDays = pgTable("rest_days", { ... }, (table) => [
+    index("rest_days_created_at_idx").on(table.created_at),     // speeds up heatmap
+]);
+```
+
+Generated migration: `drizzle/0005_sweet_whirlwind.sql`
+
+**Expected impact**: 2,778ms → ~50-100ms for heatmap and workouts queries.
+
+**Why unclustered (regular) indexes**: PostgreSQL only allows ONE clustered index (the primary key). Regular B-tree indexes are separate structures that point to rows — perfect for time-range queries without reordering the table. Drizzle's `index()` creates unclustered B-tree indexes by default.
+
+**To apply on Railway**: Run `bun run src/migrate.ts` in the deployed environment.
+
+**Files involved**:
+- `backend/src/schema.ts` — added index definitions
+- `backend/drizzle/0005_sweet_whirlwind.sql` — generated migration
+
+**Resources**:
+- https://orm.drizzle.team/docs/indexes
+- https://www.postgresql.org/docs/current/indexes.html
+- Search: "PostgreSQL index created_at timestamp range query performance"

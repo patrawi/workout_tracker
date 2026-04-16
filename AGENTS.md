@@ -111,3 +111,35 @@ Bun auto-loads `.env` files, but the project also uses `dotenv/config` imports.
 - Backend uses Elysia's type-safe route definitions with `t.Object()` schemas
 - Frontend uses `@` path alias for imports from `src/`
 - The app handles bilingual content (Thai/English) in workout notes
+
+## Performance & Architecture Notes
+
+### React Query patterns
+- **No `useMemo`/`useEffect` needed on query dependencies** — React Query automatically refetches when the `queryKey` changes. The query key **is** the dependency array.
+- **Avoid `initialData: []`** — it provides cached data immediately and prevents fetches on new query keys. Use `refetchOnMount: "always"` + `?? []` null coalescing instead.
+- **`useMemo` on query results** is only for expensive derived computations, not for triggering fetches.
+
+### Vite code splitting
+- **Don't use `manualChunks`** for lazy-loaded page dependencies. Vite's default chunking works better — `manualChunks` causes Vite to add `modulepreload` links for ALL chunks in the HTML `<head>`, defeating code splitting.
+- Let Vite handle chunking automatically. Only use `manualChunks` if you have a specific CDN caching requirement.
+
+### Static file caching (Elysia + @elysiajs/static)
+- The plugin's `maxAge` and `headers` options are **global** — apply to ALL files including `index.html`.
+- For per-file cache control, use **two plugin instances**: one for `/assets/` (hashed files, 1-year cache) and one for root files (index.html, no cache).
+- `alwaysStatic: true` pre-registers all routes for faster matching.
+- SPA fallback routes serving `index.html` via `Bun.file()` need explicit `Cache-Control` headers set via `set.headers`.
+
+### React StrictMode
+- StrictMode is conditionally wrapped in `main.tsx` — only active in development (`import.meta.env.DEV`).
+- In production, StrictMode is skipped. No double-rendering.
+
+### CLS (Cumulative Layout Shift) prevention
+- Loading states should render the **same page skeleton** as the loaded state — same Header, same content area structure, same footer.
+- Never render just a centered spinner that gets replaced by a full page layout.
+- Skeleton cards should match the height and structure of the real content they replace.
+
+### Database indexes
+- Drizzle migrations are applied via `bun run src/migrate.ts` on Railway.
+- Add indexes via the third argument of `pgTable` (the callback form): `(table) => [index("name").on(table.column)]`
+- Always use regular (unclustered) B-tree indexes — PostgreSQL only allows one clustered index (the primary key).
+- Current indexes: `workouts_created_at_idx`, `workouts_exercise_name_idx`, `rest_days_created_at_idx`, `nutrition_logs_date_idx`

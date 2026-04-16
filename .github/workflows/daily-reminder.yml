@@ -2,8 +2,8 @@ name: Daily Workout Reminder
 
 on:
   schedule:
-    # Run daily at 00:00 UTC (07:00 Thailand time)
-    - cron: "41 22 * * *"
+    # Run daily at 17:00 UTC (18:00 BST / 17:00 GMT)
+    - cron: "0 17 * * *"
   workflow_dispatch: # Allow manual trigger
 
 jobs:
