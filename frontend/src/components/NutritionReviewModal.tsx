@@ -67,11 +67,11 @@ export default function NutritionReviewModal({
     const totalFat = items.reduce((s, i) => s + i.fat, 0);
     const totalCalories = items.reduce((s, i) => s + i.calories, 0);
 
-    const mealEmoji: Record<string, string> = {
-        Breakfast: "🌅",
-        Lunch: "☀️",
-        Dinner: "🌙",
-        Snack: "🍿",
+    const mealIcon: Record<string, string> = {
+        Breakfast: "B",
+        Lunch: "L",
+        Dinner: "D",
+        Snack: "S",
     };
 
     return (
@@ -139,7 +139,9 @@ export default function NutritionReviewModal({
                         <div key={meal}>
                             {/* Meal header */}
                             <div className="flex items-center gap-2 mb-3">
-                                <span className="text-lg">{mealEmoji[meal]}</span>
+                                <span className="text-xs font-bold text-[var(--muted-foreground)] bg-white/5 rounded-md w-5 h-5 flex items-center justify-center">
+                                    {mealIcon[meal]}
+                                </span>
                                 <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
                                     {meal}
                                 </h3>

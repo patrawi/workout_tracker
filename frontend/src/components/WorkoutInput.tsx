@@ -1,8 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
+import { Moon } from "lucide-react";
+
 interface WorkoutInputProps {
     onSubmit: (text: string, workoutDate: string) => Promise<void>;
     isLoading: boolean;
+    onRestDay?: () => void;
+    showRestDay?: boolean;
 }
 
 function getLocalDateTimeNow() {
@@ -12,7 +16,7 @@ function getLocalDateTimeNow() {
     return local.toISOString().slice(0, 16);
 }
 
-export default function WorkoutInput({ onSubmit, isLoading }: WorkoutInputProps) {
+export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestDay }: WorkoutInputProps) {
     const [text, setText] = useState("");
     const [workoutDate, setWorkoutDate] = useState(getLocalDateTimeNow);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -63,7 +67,7 @@ export default function WorkoutInput({ onSubmit, isLoading }: WorkoutInputProps)
                     style={{ minHeight: "24px" }}
                 />
 
-                <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
+                            <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
                     {/* Compact Date Picker */}
                     <div className="relative group">
                         <input
@@ -75,27 +79,46 @@ export default function WorkoutInput({ onSubmit, isLoading }: WorkoutInputProps)
                         />
                     </div>
 
-                    {/* Submit Button */}
-                    <button
-                        type="button"
-                        onClick={handleSubmit}
-                        disabled={!text.trim() || isLoading}
-                        className="flex items-center justify-center bg-[var(--chart-1)] hover:bg-[var(--chart-1)]/90 text-white p-2 w-8 h-8 rounded-lg outline-none transition-all disabled:opacity-50 disabled:hover:bg-[var(--chart-1)] shadow-[0_0_15px_rgba(var(--chart-1),0.4)] disabled:shadow-none"
-                        aria-label="Log Workout"
-                        title="Press Enter to submit"
-                    >
-                        {isLoading ? (
-                            <span
-                                className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
-                                style={{ animation: "spin 0.6s linear infinite" }}
-                                aria-hidden="true"
-                            />
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 translate-x-[1px]">
-                                <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
-                            </svg>
+                    <div className="flex items-center gap-2">
+                        {/* Rest Day Toggle */}
+                        {onRestDay && (
+                            <button
+                                type="button"
+                                onClick={onRestDay}
+                                className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
+                                    showRestDay
+                                        ? "bg-purple-500/20 text-purple-300"
+                                        : "text-[var(--muted-foreground)] hover:text-white hover:bg-white/10"
+                                }`}
+                                title="Log Rest Day"
+                            >
+                                <Moon className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Rest Day</span>
+                            </button>
                         )}
-                    </button>
+
+                        {/* Submit Button */}
+                        <button
+                            type="button"
+                            onClick={handleSubmit}
+                            disabled={!text.trim() || isLoading}
+                            className="flex items-center justify-center bg-[var(--chart-1)] hover:bg-[var(--chart-1)]/90 text-white p-2 w-8 h-8 rounded-lg outline-none transition-all disabled:opacity-50 disabled:hover:bg-[var(--chart-1)] shadow-[0_0_15px_rgba(var(--chart-1),0.4)] disabled:shadow-none"
+                            aria-label="Log Workout"
+                            title="Press Enter to submit"
+                        >
+                            {isLoading ? (
+                                <span
+                                    className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                                    style={{ animation: "spin 0.6s linear infinite" }}
+                                    aria-hidden="true"
+                                />
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 translate-x-[1px]">
+                                    <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
+                                </svg>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
             <p className="text-[11px] text-[var(--muted-foreground)] text-center mt-3">

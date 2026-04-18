@@ -76,7 +76,7 @@ export default function App() {
   }, []);
 
   return (
-    <main className="max-w-6xl mx-auto px-4 pb-16">
+    <main className="max-w-4xl mx-auto px-4 pb-16">
       {/* Error banner */}
       {error ? (
         <div
@@ -101,35 +101,29 @@ export default function App() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start pt-4">
         <div className="lg:col-span-12 lg:sticky lg:top-28">
-          <WorkoutInput onSubmit={handleParse} isLoading={isParsing} />
+          <WorkoutInput
+            onSubmit={handleParse}
+            isLoading={isParsing}
+            onRestDay={() => setShowRestDayForm(!showRestDayForm)}
+            showRestDay={showRestDayForm}
+          />
 
-          <div className="mt-4 flex flex-col items-center">
-            {!showRestDayForm && (
+          {showRestDayForm && (
+            <div className="w-full relative mt-4">
               <button
                 type="button"
-                onClick={() => setShowRestDayForm(true)}
-                className="text-[11px] font-medium text-[var(--muted-foreground)] hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full"
+                onClick={() => setShowRestDayForm(false)}
+                className="absolute -top-2 right-2 text-[10px] text-[var(--muted-foreground)] hover:text-white p-1 z-10"
+                aria-label="Close rest day form"
               >
-                🧘 Log Rest Day
+                ✕ Close
               </button>
-            )}
-            {showRestDayForm && (
-              <div className="w-full relative">
-                <button
-                  type="button"
-                  onClick={() => setShowRestDayForm(false)}
-                  className="absolute -top-2 right-2 text-[10px] text-[var(--muted-foreground)] hover:text-white p-1 z-10"
-                  aria-label="Close rest day form"
-                >
-                  ✕ Close
-                </button>
-                <RestDayForm
-                  onSubmit={handleRestDaySubmit}
-                  isLoading={isRestDaySubmitting}
-                />
-              </div>
-            )}
-          </div>
+              <RestDayForm
+                onSubmit={handleRestDaySubmit}
+                isLoading={isRestDaySubmitting}
+              />
+            </div>
+          )}
         </div>
       </div>
 

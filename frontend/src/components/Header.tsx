@@ -21,7 +21,7 @@ export default function Header({ onLogout }: HeaderProps) {
 
     return (
         <header className="sticky top-0 z-50 py-4 px-4 sm:px-6 mb-8 backdrop-blur-xl bg-[var(--background)]/80 border-b border-[var(--border)] shadow-sm">
-            <div className="max-w-6xl mx-auto flex items-center justify-between">
+            <div className="max-w-4xl mx-auto flex items-center justify-between">
                 <Link to="/" className="flex items-center gap-3 group" onClick={() => setIsMobileMenuOpen(false)}>
                     <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--card)] border border-[var(--border)] group-hover:border-[var(--chart-2)]/30 transition-colors">
                         <span className="text-xl leading-none relative z-10" role="img" aria-label="Dumbbell">
@@ -46,7 +46,7 @@ export default function Header({ onLogout }: HeaderProps) {
                 </Link>
 
                 {/* Desktop Navigation */}
-                <nav className="hidden sm:flex items-center gap-1.5 bg-white/5 border border-white/5 rounded-2xl p-1 backdrop-blur-sm">
+                <nav className="hidden sm:flex items-center gap-1.5 bg-white/5 rounded-2xl p-1 backdrop-blur-sm">
                     {navLinks.map((link) => (
                         <Link
                             key={link.path}
@@ -89,7 +89,7 @@ export default function Header({ onLogout }: HeaderProps) {
             {/* Mobile Navigation Dropdown */}
             {isMobileMenuOpen && (
                 <div className="sm:hidden absolute top-full left-0 right-0 py-4 px-4 bg-[var(--background)]/95 backdrop-blur-xl border-b border-[var(--border)] shadow-2xl animate-fade-in origin-top">
-                    <nav className="flex flex-col gap-2 max-w-6xl mx-auto">
+                    <nav className="flex flex-col gap-2 mx-auto">
                         {navLinks.map((link) => (
                             <Link
                                 key={link.path}

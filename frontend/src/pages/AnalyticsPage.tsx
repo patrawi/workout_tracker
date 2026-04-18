@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { TrendingUp, BarChart3 as BarChartIcon, Brain, FileText } from "lucide-react";
 import {
     LineChart,
     Line,
@@ -103,7 +104,7 @@ export default function AnalyticsPage() {
                 }}
             />
 
-            <main className="max-w-5xl mx-auto px-4 pb-16">
+            <main className="max-w-4xl mx-auto px-4 pb-16">
                 {/* Header */}
                 <header className="pt-4 pb-6 flex items-center justify-between flex-wrap gap-4">
                     <div>
@@ -157,7 +158,7 @@ export default function AnalyticsPage() {
                 {/* No exercises state */}
                 {exercises.length === 0 && !isLoading ? (
                     <div className="glass-card p-12 text-center animate-fade-in">
-                        <div className="text-5xl mb-4">📊</div>
+                        <div className="text-5xl mb-4 text-[var(--muted-foreground)]">📊</div>
                         <h3 className="text-lg font-semibold text-white mb-2">
                             No data yet
                         </h3>
@@ -260,8 +261,9 @@ export default function AnalyticsPage() {
                                 {/* Chart 1: Absolute Strength (Line) */}
                                 <Card className="bg-[var(--card)] border-[var(--border)] animate-slide-up">
                                     <CardHeader>
-                                        <CardTitle className="text-white text-lg">
-                                            💪 Absolute Strength
+                                        <CardTitle className="text-white text-lg flex items-center gap-2">
+                                            <TrendingUp className="w-4 h-4" />
+                                            Absolute Strength
                                         </CardTitle>
                                         <CardDescription>
                                             Max weight lifted per session over time
@@ -316,8 +318,9 @@ export default function AnalyticsPage() {
                                     style={{ animationDelay: "60ms" }}
                                 >
                                     <CardHeader>
-                                        <CardTitle className="text-white text-lg">
-                                            📦 Hypertrophy & Workload
+                                        <CardTitle className="text-white text-lg flex items-center gap-2">
+                                            <BarChartIcon className="w-4 h-4" />
+                                            Hypertrophy & Workload
                                         </CardTitle>
                                         <CardDescription>
                                             Total volume (weight × reps) per session
@@ -365,8 +368,9 @@ export default function AnalyticsPage() {
                                     style={{ animationDelay: "120ms" }}
                                 >
                                     <CardHeader>
-                                        <CardTitle className="text-white text-lg">
-                                            🧠 Effort vs. Weight
+                                        <CardTitle className="text-white text-lg flex items-center gap-2">
+                                            <Brain className="w-4 h-4" />
+                                            Effort vs. Weight
                                         </CardTitle>
                                         <CardDescription>
                                             RPE (shaded area) overlaid on weight (line) — getting
@@ -444,8 +448,9 @@ export default function AnalyticsPage() {
                                         style={{ animationDelay: "180ms" }}
                                     >
                                         <CardHeader>
-                                            <CardTitle className="text-white text-lg">
-                                                📝 Recent Notes
+                                            <CardTitle className="text-white text-lg flex items-center gap-2">
+                                                <FileText className="w-4 h-4" />
+                                                Recent Notes
                                             </CardTitle>
                                             <CardDescription>
                                                 Your Thai & English comments from recent sessions

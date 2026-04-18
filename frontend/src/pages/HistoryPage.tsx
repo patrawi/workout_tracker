@@ -101,17 +101,17 @@ export default function HistoryPage() {
                                     <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                         {entry.hasWorkout && (
                                             <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--chart-2)]/10 text-[var(--chart-2)] border border-[var(--chart-2)]/20">
-                                                🏋️ Workout
+                                                Workout
                                             </span>
                                         )}
                                         {entry.hasRestDay && (
                                             <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                                                😴 Rest Day
+                                                Rest Day
                                             </span>
                                         )}
                                         {entry.hasNutrition && (
                                             <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                                🍽️ Nutrition
+                                                Nutrition
                                             </span>
                                         )}
                                     </div>

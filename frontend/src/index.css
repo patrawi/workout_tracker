@@ -240,12 +240,7 @@
 
 @layer utilities {
   .text-gradient {
-    background: linear-gradient(135deg, var(--color-accent-400), var(--color-glow-cyan), var(--color-glow-purple));
-    background-size: 200% 200%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shift 6s ease infinite;
+    color: oklch(0.95 0.01 260);
   }
 
   .animate-slide-up {
@@ -264,18 +259,6 @@
 
   100% {
     background-position: -200% 0;
-  }
-}
-
-@keyframes gradient-shift {
-
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-
-  50% {
-    background-position: 100% 50%;
   }
 }
 
@@ -311,10 +294,6 @@
 
   .animate-slide-up,
   .animate-fade-in {
-    animation: none !important;
-  }
-
-  .text-gradient {
     animation: none !important;
   }
 

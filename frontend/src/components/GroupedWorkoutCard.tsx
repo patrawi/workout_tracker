@@ -35,6 +35,14 @@ function formatDate(dateStr: string) {
     }).format(d);
 }
 
+function getRpeColor(rpe: number): string {
+    if (rpe <= 3) return "text-emerald-400";
+    if (rpe <= 5) return "text-yellow-400";
+    if (rpe <= 7) return "text-amber-400";
+    if (rpe <= 9) return "text-orange-400";
+    return "text-red-400";
+}
+
 export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEdit, onDelete, onAdd }: GroupedWorkoutCardProps) {
     const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
 
@@ -108,7 +116,10 @@ export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEd
                     <div className="col-span-1 text-center">Set</div>
                     <div className="col-span-3 text-right">Weight</div>
                     <div className="col-span-2 text-center">Reps</div>
-                    <div className="col-span-1 text-center">RPE</div>
+                    <div className="col-span-1 text-center">
+                        RPE
+                        <span className="block text-[9px] font-normal text-[var(--muted-foreground)]/50 -mt-0.5">1–10</span>
+                    </div>
                     <div className="col-span-3 pl-2">Notes</div>
                     <div className="col-span-2"></div>
                 </div>
@@ -137,7 +148,7 @@ export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEd
                                 <div className="col-span-2 text-center font-bold text-white tabular-nums text-[15px] tracking-tight">
                                     {set.reps}
                                 </div>
-                                <div className="col-span-1 text-center text-sm font-semibold tabular-nums text-[var(--chart-1)]">
+                                <div className={`col-span-1 text-center text-sm font-semibold tabular-nums ${set.rpe > 0 ? getRpeColor(set.rpe) : "text-[var(--muted-foreground)]"}`}>
                                     {set.rpe > 0 ? set.rpe : "-"}
                                 </div>
 

@@ -1,16 +1,44 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { CalendarDays, Trash2, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useNutrition } from "@/features/nutrition/hooks/useNutrition";
 import NutritionReviewModal from "@/components/NutritionReviewModal";
+import { queryKeys } from "@/lib/query-keys";
+import { nutritionApi } from "@/lib/api";
 import type { NutritionRow, MealType } from "@/types";
 
 const MEAL_ORDER: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
-const MEAL_EMOJI: Record<MealType, string> = {
-    Breakfast: "🌅",
-    Lunch: "☀️",
-    Dinner: "🌙",
-    Snack: "🍿",
+const MEAL_ICON: Record<MealType, string> = {
+    Breakfast: "B",
+    Lunch: "L",
+    Dinner: "D",
+    Snack: "S",
 };
+
+function DeltaBadge({ current, previous, unit }: { current: number; previous: number; unit: string }) {
+    if (previous === 0) return null;
+    const delta = current - previous;
+    const pct = ((delta / previous) * 100).toFixed(0);
+    const isUp = delta > 0;
+    const isNeutral = Math.abs(delta) < 0.5;
+
+    if (isNeutral) {
+        return (
+            <span className="text-[10px] text-[var(--muted-foreground)] tabular-nums inline-flex items-center gap-0.5">
+                <Minus className="w-3 h-3" />
+                0%
+            </span>
+        );
+    }
+
+    return (
+        <span className={`text-[10px] tabular-nums inline-flex items-center gap-0.5 ${isUp ? "text-emerald-400" : "text-red-400"}`}>
+            {isUp ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+            {Math.abs(delta).toFixed(1)}{unit} ({pct}%)
+        </span>
+    );
+}
 
 function MacroProgressBar({
     label,
@@ -18,12 +46,14 @@ function MacroProgressBar({
     target,
     color,
     bgColor,
+    delta,
 }: {
     label: string;
     current: number;
     target: number;
     color: string;
     bgColor: string;
+    delta?: React.ReactNode;
 }) {
     const percentage = target > 0 ? (current / target) * 100 : 0;
     const clampedWidth = Math.min(percentage, 100);
@@ -41,14 +71,17 @@ function MacroProgressBar({
                 <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
                     {label}
                 </span>
-                <span className={`text-sm font-semibold tabular-nums ${target > 0 ? statusColor : "text-surface-400"}`}>
-                    {current.toFixed(1)}
-                    {target > 0 && (
-                        <span className="text-surface-400 font-normal">
-                            {" "}/ {target}g
-                        </span>
-                    )}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span className={`text-sm font-semibold tabular-nums ${target > 0 ? statusColor : "text-surface-400"}`}>
+                        {current.toFixed(1)}
+                        {target > 0 && (
+                            <span className="text-surface-400 font-normal">
+                                {" "}/ {target}g
+                            </span>
+                        )}
+                    </span>
+                    {delta}
+                </div>
             </div>
             <div
                 className="h-2 rounded-full overflow-hidden"
@@ -99,6 +132,30 @@ export default function NutritionPage() {
 
     const [text, setText] = useState("");
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Fetch yesterday's data for delta comparison
+    const yesterdayString = useMemo(() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().slice(0, 10);
+    }, []);
+
+    const { data: yesterdayItems = [] } = useQuery({
+        queryKey: queryKeys.nutrition.byDate(yesterdayString),
+        queryFn: async () => {
+            const res = await nutritionApi.getByDate(yesterdayString);
+            if (res.success && res.data) return res.data;
+            return [];
+        },
+        staleTime: 1000 * 60 * 5,
+    });
+
+    const yesterdaySummary = useMemo(() => ({
+        totalProtein: yesterdayItems.reduce((sum, item) => sum + item.protein, 0),
+        totalCarbs: yesterdayItems.reduce((sum, item) => sum + item.carbs, 0),
+        totalFat: yesterdayItems.reduce((sum, item) => sum + item.fat, 0),
+        totalCalories: yesterdayItems.reduce((sum, item) => sum + item.calories, 0),
+    }), [yesterdayItems]);
 
     // Auto-resize textarea
     useEffect(() => {
@@ -238,13 +295,15 @@ export default function NutritionPage() {
                             <div className="glass-card p-6 space-y-5">
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                        📊 Daily Summary
+                                        <CalendarDays className="w-4 h-4" />
+                                        Daily Summary
                                     </h2>
                                     <div className="flex items-center gap-2">
                                         <span className="text-2xl font-bold text-white tabular-nums">
                                             {summary.totalCalories.toFixed(0)}
                                         </span>
                                         <span className="text-xs text-surface-400">kcal</span>
+                                        <DeltaBadge current={summary.totalCalories} previous={yesterdaySummary.totalCalories} unit="" />
                                     </div>
                                 </div>
 
@@ -255,6 +314,7 @@ export default function NutritionPage() {
                                         target={targets.protein_target}
                                         color="oklch(0.72 0.19 160)"
                                         bgColor="oklch(0.72 0.19 160 / 0.1)"
+                                        delta={<DeltaBadge current={summary.totalProtein} previous={yesterdaySummary.totalProtein} unit="g" />}
                                     />
                                     <MacroProgressBar
                                         label="Carbohydrates"
@@ -262,6 +322,7 @@ export default function NutritionPage() {
                                         target={targets.carbs_target}
                                         color="oklch(0.65 0.22 55)"
                                         bgColor="oklch(0.65 0.22 55 / 0.1)"
+                                        delta={<DeltaBadge current={summary.totalCarbs} previous={yesterdaySummary.totalCarbs} unit="g" />}
                                     />
                                     <MacroProgressBar
                                         label="Fat"
@@ -269,6 +330,7 @@ export default function NutritionPage() {
                                         target={targets.fat_target}
                                         color="oklch(0.65 0.2 330)"
                                         bgColor="oklch(0.65 0.2 330 / 0.1)"
+                                        delta={<DeltaBadge current={summary.totalFat} previous={yesterdaySummary.totalFat} unit="g" />}
                                     />
                                 </div>
 
@@ -298,7 +360,7 @@ export default function NutritionPage() {
                         <section aria-label="Food items breakdown" className="animate-slide-up space-y-4">
                             <div className="flex items-center justify-between px-1">
                                 <h2 className="text-lg font-bold text-white">
-                                    🍽️ Food Log
+                                    Food Log
                                 </h2>
                                 <button
                                     type="button"
@@ -307,8 +369,9 @@ export default function NutritionPage() {
                                             deleteDay();
                                         }
                                     }}
-                                    className="text-xs text-red-400/60 hover:text-red-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-500/10"
+                                    className="text-xs text-red-400/60 hover:text-red-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-500/10 flex items-center gap-1"
                                 >
+                                    <Trash2 className="w-3 h-3" />
                                     Clear Day
                                 </button>
                             </div>
@@ -325,7 +388,7 @@ export default function NutritionPage() {
                         </section>
                     ) : (
                         <div className="glass-card p-12 text-center animate-slide-up">
-                            <p className="text-4xl mb-3">🥗</p>
+                            <p className="text-4xl mb-3 text-[var(--muted-foreground)]">🥗</p>
                             <p className="text-surface-400">
                                 No food logged for this date.
                             </p>
@@ -423,15 +486,17 @@ function MealGroup({
             {/* Meal header */}
             <div className="px-5 py-3 border-b border-surface-300/20 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-lg">{MEAL_EMOJI[meal as MealType]}</span>
+                    <span className="text-xs font-bold text-[var(--muted-foreground)] bg-white/5 rounded-md w-5 h-5 flex items-center justify-center">
+                        {MEAL_ICON[meal as MealType]}
+                    </span>
                     <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
                         {meal}
                     </h3>
                 </div>
                 <div className="flex items-center gap-3 text-[11px] text-surface-400 tabular-nums">
-                    <span className="text-emerald-400/80">P: {subtotalP.toFixed(1)}</span>
-                    <span className="text-amber-400/80">C: {subtotalC.toFixed(1)}</span>
-                    <span className="text-rose-400/80">F: {subtotalF.toFixed(1)}</span>
+                    <span>P: {subtotalP.toFixed(1)}</span>
+                    <span>C: {subtotalC.toFixed(1)}</span>
+                    <span>F: {subtotalF.toFixed(1)}</span>
                     <span className="text-surface-300">|</span>
                     <span className="text-white/80">{subtotalCal.toFixed(0)} kcal</span>
                 </div>
@@ -520,10 +585,10 @@ function MealGroup({
 
                             <div className="flex items-center gap-4 flex-shrink-0">
                                 <div className="grid grid-cols-4 gap-3 text-xs tabular-nums text-right">
-                                    <span className="text-emerald-400/70 w-12">{item.protein.toFixed(1)}</span>
-                                    <span className="text-amber-400/70 w-12">{item.carbs.toFixed(1)}</span>
-                                    <span className="text-rose-400/70 w-12">{item.fat.toFixed(1)}</span>
-                                    <span className="text-surface-300 w-14">{item.calories.toFixed(0)} kcal</span>
+                                    <span className="w-12 text-[var(--muted-foreground)]">{item.protein.toFixed(1)}</span>
+                                    <span className="w-12 text-[var(--muted-foreground)]">{item.carbs.toFixed(1)}</span>
+                                    <span className="w-12 text-[var(--muted-foreground)]">{item.fat.toFixed(1)}</span>
+                                    <span className="w-14 text-[var(--muted-foreground)]">{item.calories.toFixed(0)} kcal</span>
                                 </div>
                                 <button
                                     type="button"
