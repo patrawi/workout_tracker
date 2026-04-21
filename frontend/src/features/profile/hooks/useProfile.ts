@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { profileApi, bodyweightApi, type BodyweightRecord } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
@@ -102,18 +102,14 @@ export function useProfile(): UseProfileReturn {
         },
     });
 
-    // Use ref for stable save callback
-    const saveRef = useRef(saveMutation.mutateAsync);
-    saveRef.current = saveMutation.mutateAsync;
-
     const saveProfile = useCallback(async (): Promise<boolean> => {
         try {
-            await saveRef.current();
+            await saveMutation.mutateAsync();
             return true;
         } catch {
             return false;
         }
-    }, []);
+    }, [saveMutation]);
 
     const updateField = useCallback((field: keyof ProfileData, value: number) => {
         setProfile((prev) => ({ ...prev, [field]: value }));
