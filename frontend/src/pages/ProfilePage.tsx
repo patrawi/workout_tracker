@@ -55,6 +55,7 @@ export default function ProfilePage() {
         setSelectedRange,
         isLoading,
         isSaving,
+        isDirty,
         saved,
         updateField,
         saveProfile,
@@ -325,8 +326,8 @@ export default function ProfilePage() {
                             <button
                                 type="button"
                                 onClick={saveProfile}
-                                disabled={isSaving}
-                                className="btn-primary w-full md:w-auto md:min-w-[200px] text-base px-8 py-3 flex items-center justify-center gap-2 mx-auto shadow-xl shadow-accent-500/20"
+                                disabled={isSaving || !isDirty}
+                                className="btn-primary w-full md:w-auto md:min-w-[200px] text-base px-8 py-3 flex items-center justify-center gap-2 mx-auto shadow-xl shadow-accent-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isSaving ? (
                                     <>
@@ -339,6 +340,8 @@ export default function ProfilePage() {
                                     </>
                                 ) : saved ? (
                                     "✓ Saved History!"
+                                ) : !isDirty ? (
+                                    "No Changes to Save"
                                 ) : (
                                     "Save Profile Data"
                                 )}
