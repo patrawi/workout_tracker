@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { nutritionApi, profileApi } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
@@ -95,13 +95,19 @@ export function useNutrition(initialDate?: string): UseNutritionReturn {
         }
         : { protein_target: 0, carbs_target: 0, fat_target: 0 };
 
-    // Compute daily summary from items
-    const summary: DailySummary = {
-        totalProtein: items.reduce((sum, item) => sum + item.protein, 0),
-        totalCarbs: items.reduce((sum, item) => sum + item.carbs, 0),
-        totalFat: items.reduce((sum, item) => sum + item.fat, 0),
-        totalCalories: items.reduce((sum, item) => sum + item.calories, 0),
-    };
+    const summary: DailySummary = useMemo((): DailySummary => {
+        let totalProtein = 0;
+        let totalCarbs = 0;
+        let totalFat = 0;
+        let totalCalories = 0;
+        for (const item of items) {
+            totalProtein += item.protein;
+            totalCarbs += item.carbs;
+            totalFat += item.fat;
+            totalCalories += item.calories;
+        }
+        return { totalProtein, totalCarbs, totalFat, totalCalories };
+    }, [items]);
 
     const parseMutation = useMutation({
         mutationFn: async (rawText: string) => {
@@ -171,12 +177,14 @@ export function useNutrition(initialDate?: string): UseNutritionReturn {
     const updateItemRef = useRef(updateItemMutation.mutateAsync);
     const deleteDayRef = useRef(deleteDayMutation.mutateAsync);
 
-    // Keep refs updated
-    parseRef.current = parseMutation.mutateAsync;
-    confirmRef.current = confirmMutation.mutateAsync;
-    deleteItemRef.current = deleteItemMutation.mutateAsync;
-    updateItemRef.current = updateItemMutation.mutateAsync;
-    deleteDayRef.current = deleteDayMutation.mutateAsync;
+    // Keep refs updated via effects (not during render)
+    useEffect(() => {
+        parseRef.current = parseMutation.mutateAsync;
+        confirmRef.current = confirmMutation.mutateAsync;
+        deleteItemRef.current = deleteItemMutation.mutateAsync;
+        updateItemRef.current = updateItemMutation.mutateAsync;
+        deleteDayRef.current = deleteDayMutation.mutateAsync;
+    }, [parseMutation.mutateAsync, confirmMutation.mutateAsync, deleteItemMutation.mutateAsync, updateItemMutation.mutateAsync, deleteDayMutation.mutateAsync]);
 
     const parseText = useCallback(async (rawText: string) => {
         setError(null);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, BarChart3, BookOpen, UtensilsCrossed, User as UserIcon, LogOut } from "lucide-react";
 
@@ -6,18 +6,28 @@ interface HeaderProps {
     onLogout?: () => void;
 }
 
+const NAV_LINKS = [
+    { name: "Analytics", path: "/analytics", icon: BarChart3 },
+    { name: "History", path: "/history", icon: BookOpen },
+    { name: "Nutrition", path: "/nutrition", icon: UtensilsCrossed },
+    { name: "Profile", path: "/profile", icon: UserIcon },
+] as const;
+
 export default function Header({ onLogout }: HeaderProps) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const location = useLocation();
 
     const isActive = (path: string) => location.pathname === path;
 
-    const navLinks = [
-        { name: "Analytics", path: "/analytics", icon: <BarChart3 className="w-4 h-4" /> },
-        { name: "History", path: "/history", icon: <BookOpen className="w-4 h-4" /> },
-        { name: "Nutrition", path: "/nutrition", icon: <UtensilsCrossed className="w-4 h-4" /> },
-        { name: "Profile", path: "/profile", icon: <UserIcon className="w-4 h-4" /> },
-    ];
+    const navLinks = useMemo(
+        () =>
+            NAV_LINKS.map((link) => ({
+                name: link.name,
+                path: link.path,
+                Icon: link.icon,
+            })),
+        [],
+    );
 
     return (
         <header className="sticky top-0 z-50 py-4 px-4 sm:px-6 mb-8 backdrop-blur-xl bg-[var(--background)]/80 border-b border-[var(--border)] shadow-sm">
@@ -56,7 +66,7 @@ export default function Header({ onLogout }: HeaderProps) {
                                     : "text-[var(--muted-foreground)] hover:text-white hover:bg-white/5"
                                 }`}
                         >
-                            {link.icon}
+                            <link.Icon className="w-4 h-4" />
                             {link.name}
                         </Link>
                     ))}
@@ -101,7 +111,7 @@ export default function Header({ onLogout }: HeaderProps) {
                                     }`}
                             >
                                 <div className={`p-1.5 rounded-lg ${isActive(link.path) ? 'bg-[var(--chart-2)]/20 text-[var(--chart-2)]' : 'bg-white/5 text-[var(--muted-foreground)]'}`}>
-                                    {link.icon}
+                                    <link.Icon className="w-4 h-4" />
                                 </div>
                                 {link.name}
                             </Link>

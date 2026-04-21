@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { NutritionItem } from "../types";
 
 interface NutritionReviewModalProps {
@@ -53,19 +53,33 @@ export default function NutritionReviewModal({
         onConfirm(items);
     }, [items, isSubmitting, onConfirm]);
 
-    // Group items by meal
-    const grouped = MEAL_ORDER.map((meal) => ({
-        meal,
-        items: items
-            .map((item, originalIndex) => ({ item, originalIndex }))
-            .filter(({ item }) => item.meal === meal),
-    })).filter((g) => g.items.length > 0);
+    // Group items by meal — memoized
+    const grouped = useMemo(
+        () =>
+            MEAL_ORDER.map((meal) => ({
+                meal,
+                items: items
+                    .map((item, originalIndex) => ({ item, originalIndex }))
+                    .filter(({ item }) => item.meal === meal),
+            })).filter((g) => g.items.length > 0),
+        [items],
+    );
 
-    // Totals
-    const totalProtein = items.reduce((s, i) => s + i.protein, 0);
-    const totalCarbs = items.reduce((s, i) => s + i.carbs, 0);
-    const totalFat = items.reduce((s, i) => s + i.fat, 0);
-    const totalCalories = items.reduce((s, i) => s + i.calories, 0);
+    // Totals — single pass, memoized
+    const totals = useMemo(() => {
+        let totalProtein = 0;
+        let totalCarbs = 0;
+        let totalFat = 0;
+        let totalCalories = 0;
+        for (const i of items) {
+            totalProtein += i.protein;
+            totalCarbs += i.carbs;
+            totalFat += i.fat;
+            totalCalories += i.calories;
+        }
+        return { totalProtein, totalCarbs, totalFat, totalCalories };
+    }, [items]);
+    const { totalProtein, totalCarbs, totalFat, totalCalories } = totals;
 
     const mealIcon: Record<string, string> = {
         Breakfast: "B",

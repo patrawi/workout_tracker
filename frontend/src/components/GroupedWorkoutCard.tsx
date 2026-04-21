@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { WorkoutRow } from "../types";
 
 interface GroupedWorkoutCardProps {
@@ -46,9 +46,16 @@ function getRpeColor(rpe: number): string {
 export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEdit, onDelete, onAdd }: GroupedWorkoutCardProps) {
     const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
 
-    // Sort sets by creation time (ascending) to show the progression of the session
-    const sortedSets = [...sets].sort((a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    // Sort sets by creation time (ascending) — ISO strings sort lexicographically
+    const sortedSets = useMemo(
+        () => [...sets].sort((a, b) => a.created_at.localeCompare(b.created_at)),
+        [sets],
+    );
+
+    // Unique tags for this session — memoized
+    const uniqueTags = useMemo(
+        () => Array.from(new Set(sets.flatMap((s) => s.tags || []))).slice(0, 3),
+        [sets],
     );
 
     const handleDeleteClick = (id: number) => {
@@ -102,7 +109,7 @@ export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEd
 
                 {/* Aggregate Tags (show unique tags for this session's exercise) */}
                 <div className="flex flex-wrap gap-1.5 justify-end items-center">
-                    {Array.from(new Set(sets.flatMap(s => s.tags || []))).slice(0, 3).map(tag => (
+                    {uniqueTags.map((tag) => (
                         <span key={tag} className="tag-pill bg-[var(--chart-2)]/10 border border-[var(--chart-2)]/20 text-[var(--chart-2)] text-[10px] px-2 py-0.5 rounded-full font-medium tracking-wide">
                             {tag}
                         </span>

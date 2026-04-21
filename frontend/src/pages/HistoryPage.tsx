@@ -80,22 +80,34 @@ export default function HistoryPage() {
                             <div className="flex items-center gap-4 sm:gap-6 relative z-10 w-full">
                                 {/* Date Bubble */}
                                 <div className="hidden sm:flex flex-col items-center justify-center min-w-[4rem] h-[4rem] rounded-xl bg-white/5 border border-white/10 group-hover:border-[var(--chart-2)]/30 group-hover:bg-[var(--chart-2)]/10 transition-colors duration-300">
-                                    <span className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider group-hover:text-[var(--chart-2)] transition-colors">
-                                        {formatHistoryDate(entry.date).split(',')[0]}
-                                    </span>
-                                    <span className="text-xl font-bold text-white group-hover:text-[var(--chart-2)] transition-colors">
-                                        {entry.date.split('-')[2]}
-                                    </span>
+                                    {(() => {
+                                        const parts = formatHistoryDate(entry.date).split(",");
+                                        return (
+                                            <>
+                                                <span className="text-sm font-semibold text-[var(--muted-foreground)] uppercase tracking-wider group-hover:text-[var(--chart-2)] transition-colors">
+                                                    {parts[0]}
+                                                </span>
+                                                <span className="text-xl font-bold text-white group-hover:text-[var(--chart-2)] transition-colors">
+                                                    {entry.date.split("-")[2]}
+                                                </span>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
 
                                 {/* Main Content */}
                                 <div className="flex-1 min-w-0">
-                                    <h3 className="text-lg sm:text-xl font-bold text-zinc-100 group-hover:text-white transition-colors duration-300 flex items-center gap-2">
-                                        <span className="sm:hidden text-[var(--chart-2)] opacity-80 shrink-0">
-                                            {formatHistoryDate(entry.date).split(',')[0]}
-                                        </span>
-                                        {formatHistoryDate(entry.date).split(',').slice(1).join(',')}
-                                    </h3>
+                                    {(() => {
+                                        const parts = formatHistoryDate(entry.date).split(",");
+                                        return (
+                                            <h3 className="text-lg sm:text-xl font-bold text-zinc-100 group-hover:text-white transition-colors duration-300 flex items-center gap-2">
+                                                <span className="sm:hidden text-[var(--chart-2)] opacity-80 shrink-0">
+                                                    {parts[0]}
+                                                </span>
+                                                {parts.slice(1).join(",")}
+                                            </h3>
+                                        );
+                                    })()}
 
                                     {/* Activity tags */}
                                     <div className="flex flex-wrap items-center gap-2 mt-1.5">

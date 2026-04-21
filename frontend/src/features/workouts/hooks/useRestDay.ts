@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { restDaysApi, type RestDayData } from "@/lib/api/rest-days";
 import { queryKeys } from "@/lib/query-keys";
@@ -37,17 +37,22 @@ export function useRestDay(onSuccess?: () => void): UseRestDayReturn {
     const closeForm = useCallback(() => setShowForm(false), []);
     const clearError = useCallback(() => setError(null), []);
 
+    const mutationRef = useRef(mutation.mutateAsync);
+    useEffect(() => {
+        mutationRef.current = mutation.mutateAsync;
+    }, [mutation.mutateAsync]);
+
     const submitRestDay = useCallback(
         async (data: RestDayData): Promise<boolean> => {
             setError(null);
             try {
-                await mutation.mutateAsync(data);
+                await mutationRef.current(data);
                 return true;
             } catch {
                 return false;
             }
         },
-        [mutation]
+        []
     );
 
     return {

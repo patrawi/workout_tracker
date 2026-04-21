@@ -27,7 +27,7 @@ export default function CalendarHeatmap() {
     const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
     // Build the grid: 53 weeks × 7 days, ending on today
-    const { grid, monthLabels, stats } = useMemo(() => {
+    const { grid, monthLabelMap, stats } = useMemo(() => {
         const dayMap = new Map<string, HeatmapDay>();
         for (const d of heatmapData) {
             dayMap.set(d.date, d);
@@ -134,7 +134,12 @@ export default function CalendarHeatmap() {
             }
         }
 
-        return { grid: weeks, monthLabels: months, stats: { currentStreak, longestStreak, totalDaysActive } };
+        const monthLabelMap: Record<number, string> = {};
+        for (const m of months) {
+            monthLabelMap[m.col] = m.label;
+        }
+
+        return { grid: weeks, monthLabelMap, stats: { currentStreak, longestStreak, totalDaysActive } };
     }, [heatmapData]);
 
     if (isLoading) {
@@ -223,14 +228,11 @@ export default function CalendarHeatmap() {
                         <div key={weekIdx} className="flex flex-col gap-[3px]">
                             {/* Month label */}
                             <div className="h-[14px] flex items-end">
-                                {(() => {
-                                    const monthLabel = monthLabels.find((m) => m.col === weekIdx);
-                                    return monthLabel && (
-                                        <span className="text-[9px] text-[var(--muted-foreground)] font-medium leading-none">
-                                            {monthLabel.label}
-                                        </span>
-                                    );
-                                })()}
+                                {monthLabelMap[weekIdx] && (
+                                    <span className="text-[9px] text-[var(--muted-foreground)] font-medium leading-none">
+                                        {monthLabelMap[weekIdx]}
+                                    </span>
+                                )}
                             </div>
 
                             {/* Day cells */}

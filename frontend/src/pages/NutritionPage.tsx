@@ -134,11 +134,7 @@ export default function NutritionPage() {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Fetch yesterday's data for delta comparison
-    const yesterdayString = useMemo(() => {
-        const d = new Date();
-        d.setDate(d.getDate() - 1);
-        return d.toISOString().slice(0, 10);
-    }, []);
+    const yesterdayString = new Date(new Date().getTime() - 86400000).toISOString().slice(0, 10);
 
     const { data: yesterdayItems = [] } = useQuery({
         queryKey: queryKeys.nutrition.byDate(yesterdayString),
@@ -150,12 +146,19 @@ export default function NutritionPage() {
         staleTime: 1000 * 60 * 5,
     });
 
-    const yesterdaySummary = useMemo(() => ({
-        totalProtein: yesterdayItems.reduce((sum, item) => sum + item.protein, 0),
-        totalCarbs: yesterdayItems.reduce((sum, item) => sum + item.carbs, 0),
-        totalFat: yesterdayItems.reduce((sum, item) => sum + item.fat, 0),
-        totalCalories: yesterdayItems.reduce((sum, item) => sum + item.calories, 0),
-    }), [yesterdayItems]);
+    const yesterdaySummary = useMemo(() => {
+        let totalProtein = 0;
+        let totalCarbs = 0;
+        let totalFat = 0;
+        let totalCalories = 0;
+        for (const item of yesterdayItems) {
+            totalProtein += item.protein;
+            totalCarbs += item.carbs;
+            totalFat += item.fat;
+            totalCalories += item.calories;
+        }
+        return { totalProtein, totalCarbs, totalFat, totalCalories };
+    }, [yesterdayItems]);
 
     // Auto-resize textarea
     useEffect(() => {
@@ -188,11 +191,15 @@ export default function NutritionPage() {
         [confirmItems],
     );
 
-    // Group saved items by meal
-    const groupedItems = MEAL_ORDER.map((meal) => ({
-        meal,
-        items: items.filter((i) => i.meal === meal),
-    })).filter((g) => g.items.length > 0);
+    // Group saved items by meal — memoized
+    const groupedItems = useMemo(
+        () =>
+            MEAL_ORDER.map((meal) => ({
+                meal,
+                items: items.filter((i) => i.meal === meal),
+            })).filter((g) => g.items.length > 0),
+        [items],
+    );
 
     return (
         <div className="min-h-screen">
@@ -435,10 +442,21 @@ function MealGroup({
         calories: string;
     }>({ food_name: "", protein: "", carbs: "", fat: "", calories: "" });
 
-    const subtotalP = items.reduce((s, i) => s + i.protein, 0);
-    const subtotalC = items.reduce((s, i) => s + i.carbs, 0);
-    const subtotalF = items.reduce((s, i) => s + i.fat, 0);
-    const subtotalCal = items.reduce((s, i) => s + i.calories, 0);
+    const subtotals = useMemo(() => {
+        let subtotalP = 0;
+        let subtotalC = 0;
+        let subtotalF = 0;
+        let subtotalCal = 0;
+        for (const i of items) {
+            subtotalP += i.protein;
+            subtotalC += i.carbs;
+            subtotalF += i.fat;
+            subtotalCal += i.calories;
+        }
+        return { subtotalP, subtotalC, subtotalF, subtotalCal };
+    }, [items]);
+
+    const { subtotalP, subtotalC, subtotalF, subtotalCal } = subtotals;
 
     const startEdit = (item: NutritionRow) => {
         setEditingId(item.id);

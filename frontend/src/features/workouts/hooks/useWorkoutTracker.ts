@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { workoutsApi } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
@@ -115,11 +115,13 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
     const deleteRef = useRef(deleteMutation.mutateAsync);
     const addRef = useRef(addMutation.mutateAsync);
 
-    // Keep refs updated
-    parseRef.current = parseMutation.mutateAsync;
-    confirmRef.current = confirmMutation.mutateAsync;
-    deleteRef.current = deleteMutation.mutateAsync;
-    addRef.current = addMutation.mutateAsync;
+    // Keep refs updated via effects (not during render)
+    useEffect(() => {
+        parseRef.current = parseMutation.mutateAsync;
+        confirmRef.current = confirmMutation.mutateAsync;
+        deleteRef.current = deleteMutation.mutateAsync;
+        addRef.current = addMutation.mutateAsync;
+    }, [parseMutation.mutateAsync, confirmMutation.mutateAsync, deleteMutation.mutateAsync, addMutation.mutateAsync]);
 
     const parseWorkout = useCallback(async (rawText: string): Promise<WorkoutData[] | null> => {
         setError(null);

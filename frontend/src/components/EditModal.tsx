@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { workoutsApi } from "@/lib/api";
 import { formatEditModalDate } from "@/lib/date-utils";
 import type { WorkoutRow } from "../types";
@@ -23,30 +24,38 @@ export default function EditModal({ workout, onSave, onCancel }: EditModalProps)
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const updateMutation = useMutation({
+        mutationFn: async () => {
+            const res = await workoutsApi.update(workout.id, {
+                exercise_name: exerciseName,
+                weight,
+                reps,
+                rpe,
+                is_bodyweight: isBodyweight,
+                is_assisted: isAssisted,
+                variant_details: variantDetails,
+                notes_thai: notesThai,
+                notes_english: notesEnglish,
+            });
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Failed to update workout.");
+        },
+        onSuccess: (data) => {
+            onSave(data);
+        },
+    });
+
     const handleSave = useCallback(async () => {
         if (isSaving) return;
         setIsSaving(true);
         setError(null);
 
-        const res = await workoutsApi.update(workout.id, {
-            exercise_name: exerciseName,
-            weight,
-            reps,
-            rpe,
-            is_bodyweight: isBodyweight,
-            is_assisted: isAssisted,
-            variant_details: variantDetails,
-            notes_thai: notesThai,
-            notes_english: notesEnglish,
-        });
-
-        if (res.success && res.data) {
-            onSave(res.data);
-        } else {
-            setError(res.error ?? "Failed to update workout.");
+        try {
+            await updateMutation.mutateAsync();
+        } catch {
+            setIsSaving(false);
         }
-        setIsSaving(false);
-    }, [workout.id, exerciseName, weight, reps, rpe, isBodyweight, isAssisted, variantDetails, notesThai, notesEnglish, isSaving, onSave]);
+    }, [isSaving, updateMutation, onSave]);
 
     return (
         <div

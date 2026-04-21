@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { WorkoutData } from "../types";
 
 interface ReviewModalProps {
@@ -42,14 +42,18 @@ export default function ReviewModal({
         onConfirm(rawText, items, utcDate);
     }, [items, rawText, workoutDate, isSubmitting, onConfirm]);
 
-    // Format the selected date for display
-    const displayDate = new Intl.DateTimeFormat("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    }).format(new Date(workoutDate));
+    // Format the selected date for display — memoized
+    const displayDate = useMemo(
+        () =>
+            new Intl.DateTimeFormat("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+            }).format(new Date(workoutDate)),
+        [workoutDate],
+    );
 
     return (
         <div

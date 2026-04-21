@@ -1,14 +1,13 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, CalendarDays } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import RecentLogs from "@/components/RecentLogs";
 import EditModal from "@/components/EditModal";
 import { workoutsApi, nutritionApi, profileApi } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { formatFullDate } from "@/lib/date-utils";
 import type { WorkoutRow } from "../types";
-import { useState } from "react";
 
 interface MacroTargets {
     protein_target: number;
@@ -45,6 +44,12 @@ export default function DailyWorkoutPage() {
             if (!workoutsRes.success) {
                 throw new Error(workoutsRes.error || "Failed to fetch workouts for this date");
             }
+            if (!nutritionRes.success) {
+                console.warn("Failed to fetch nutrition for this date:", nutritionRes.error);
+            }
+            if (!profileRes.success) {
+                console.warn("Failed to fetch profile for this date:", profileRes.error);
+            }
 
             return { workouts, nutritionItems, targets };
         },
@@ -52,30 +57,53 @@ export default function DailyWorkoutPage() {
     });
 
     const workouts = data?.workouts ?? [];
-    const nutritionItems = data?.nutritionItems ?? [];
+    const nutritionItems = useMemo(() => data?.nutritionItems ?? [], [data?.nutritionItems]);
     const targets = data?.targets ?? { protein_target: 0, carbs_target: 0, fat_target: 0 };
 
     const displayDate = date ? formatFullDate(date) : "Unknown Date";
 
-    const handleEditSave = useCallback((_updated: WorkoutRow) => {
+    const handleEditSave = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: queryKeys.workouts.byDate(date ?? "") });
         setEditingWorkout(null);
     }, [queryClient, date]);
 
-    const handleDelete = useCallback(async (workoutId: number) => {
-        const res = await workoutsApi.delete(workoutId);
-        if (res.success) {
+    const deleteMutation = useMutation({
+        mutationFn: async (workoutId: number) => {
+            const res = await workoutsApi.delete(workoutId);
+            if (res.success) return true;
+            throw new Error(res.error || "Failed to delete workout");
+        },
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.workouts.byDate(date ?? "") });
-        }
-    }, [queryClient, date]);
+        },
+    });
 
-    // Nutrition summary calculations
-    const nutritionSummary = {
-        protein: nutritionItems.reduce((s, i) => s + i.protein, 0),
-        carbs: nutritionItems.reduce((s, i) => s + i.carbs, 0),
-        fat: nutritionItems.reduce((s, i) => s + i.fat, 0),
-        calories: nutritionItems.reduce((s, i) => s + i.calories, 0),
-    };
+    const handleDelete = useCallback(
+        async (workoutId: number) => {
+            try {
+                await deleteMutation.mutateAsync(workoutId);
+            } catch {
+                // Error already handled by mutation onError or silently swallowed
+            }
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [deleteMutation.isPending],
+    );
+
+    // Nutrition summary — single pass, memoized
+    const nutritionSummary = useMemo(() => {
+        let protein = 0;
+        let carbs = 0;
+        let fat = 0;
+        let calories = 0;
+        for (const i of nutritionItems) {
+            protein += i.protein;
+            carbs += i.carbs;
+            fat += i.fat;
+            calories += i.calories;
+        }
+        return { protein, carbs, fat, calories };
+    }, [nutritionItems]);
 
     if (isLoading) {
         return (

@@ -68,10 +68,9 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
             return [] as WorkoutRow[];
         },
         enabled: !!effectiveExercise,
-        refetchOnMount: "always",
     });
 
-    const workouts = analyticsData ?? [];
+    const workouts = useMemo(() => analyticsData ?? [], [analyticsData]);
 
     // Fetch notes for selected exercise
     const { data: notesData } = useQuery({
@@ -82,10 +81,9 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
             return [] as WorkoutRow[];
         },
         enabled: !!effectiveExercise,
-        refetchOnMount: "always",
     });
 
-    const notes = notesData ?? [];
+    const notes = useMemo(() => notesData ?? [], [notesData]);
 
     // Computed chart data
     const kpis = useMemo(
