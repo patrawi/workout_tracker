@@ -55,7 +55,8 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
       return await workoutService.confirmSession(
         body.raw_text,
         body.items,
-        body.created_at
+        body.created_at,
+        body.activity
       );
     }), {
       body: t.Object({
@@ -73,6 +74,12 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
           notes_english: t.String(),
           tags: t.Array(t.String()),
           muscle_group: t.String(),
+        })),
+        activity: t.Optional(t.Object({
+          walked_10k: t.Boolean(),
+          did_liss: t.Boolean(),
+          did_stretch: t.Boolean(),
+          notes: t.String(),
         })),
       }),
     })

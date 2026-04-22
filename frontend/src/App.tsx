@@ -5,7 +5,7 @@ import CalendarHeatmap from "./components/CalendarHeatmap";
 import RestDayForm from "./components/RestDayForm";
 import { useWorkoutTracker } from "@/features/workouts/hooks/useWorkoutTracker";
 import { useRestDay } from "@/features/workouts/hooks/useRestDay";
-import type { WorkoutData } from "./types";
+import type { WorkoutData, SessionActivityData } from "./types";
 
 export default function App() {
   const {
@@ -45,8 +45,8 @@ export default function App() {
 
   // Step 2: User confirmed → save to database
   const handleConfirm = useCallback(
-    async (rawText: string, items: WorkoutData[], createdAt: string) => {
-      const success = await confirmWorkout(rawText, items, createdAt);
+    async (rawText: string, items: WorkoutData[], createdAt: string, activity: SessionActivityData) => {
+      const success = await confirmWorkout(rawText, items, createdAt, activity);
       if (success) {
         setReviewItems(null);
         setReviewRawText("");

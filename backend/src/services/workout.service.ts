@@ -1,6 +1,6 @@
 // src/services/workout.service.ts
 
-import type { WorkoutData, WorkoutRow } from "../types";
+import type { WorkoutData, WorkoutRow, SessionActivityData } from "../types";
 import type { WorkoutUpdateData } from "../repositories/workout.repository";
 import type { AIService } from "./ai.service";
 import { DEFAULT_WORKOUT_LIMIT, DEFAULT_RECENT_NOTES_LIMIT } from "../constants";
@@ -17,7 +17,7 @@ export interface WorkoutService {
   update(id: number, data: WorkoutUpdateData): Promise<WorkoutRow | null>;
   delete(id: number): Promise<boolean>;
   parseWorkoutText(rawText: string): Promise<WorkoutData[]>;
-  confirmSession(rawText: string, items: WorkoutData[], createdAt: string): Promise<WorkoutRow[]>;
+  confirmSession(rawText: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData): Promise<WorkoutRow[]>;
   getDistinctExercises(): Promise<string[]>;
   getByExercise(exercise: string, daysBack?: number): Promise<WorkoutRow[]>;
   getRecentNotes(exercise: string): Promise<WorkoutRow[]>;
@@ -64,11 +64,11 @@ export function createWorkoutService(
       return aiService.parseWorkoutText(rawText);
     },
 
-    async confirmSession(rawText: string, items: WorkoutData[], createdAt: string): Promise<WorkoutRow[]> {
+    async confirmSession(rawText: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData): Promise<WorkoutRow[]> {
       if (!items || items.length === 0) {
         throw new ValidationError("No workout items to save");
       }
-      return repo.createBatch(rawText, items, createdAt);
+      return repo.createBatch(rawText, items, createdAt, activity);
     },
 
     async getDistinctExercises(): Promise<string[]> {

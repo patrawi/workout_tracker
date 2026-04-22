@@ -1,5 +1,5 @@
 import { api } from "../api-client";
-import type { WorkoutRow, WorkoutData } from "@/types";
+import type { WorkoutRow, WorkoutData, SessionActivityData } from "@/types";
 
 export interface AddWorkoutInput {
   exercise_name: string;
@@ -24,11 +24,12 @@ export const workoutsApi = {
 
   getByDate: (date: string) => api.get<WorkoutRow[]>(`/workouts/date/${date}`),
 
-  create: (rawText: string, items: WorkoutData[], createdAt: string) =>
+  create: (rawText: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData) =>
     api.post<WorkoutRow[]>("/confirm", {
       raw_text: rawText,
       items,
       created_at: createdAt,
+      activity,
     }),
 
   add: (workout: AddWorkoutInput) => api.post<WorkoutRow>("/workouts", workout),

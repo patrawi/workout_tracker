@@ -21,6 +21,10 @@ export interface WorkoutRow extends WorkoutData {
 export interface SessionRow {
   id: number;
   raw_input: string;
+  walked_10k: boolean;
+  did_liss: boolean;
+  did_stretch: boolean;
+  notes: string;
   created_at: string;
 }
 
@@ -65,6 +69,13 @@ export interface NutritionRow {
 
 export interface LogRequest {
   raw_text: string;
+}
+
+export interface SessionActivityData {
+  walked_10k: boolean;
+  did_liss: boolean;
+  did_stretch: boolean;
+  notes: string;
 }
 
 export interface ApiResponse<T> {

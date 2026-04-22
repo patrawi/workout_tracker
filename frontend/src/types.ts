@@ -11,6 +11,13 @@ export interface WorkoutData {
     tags: string[];
 }
 
+export interface SessionActivityData {
+    walked_10k: boolean;
+    did_liss: boolean;
+    did_stretch: boolean;
+    notes: string;
+}
+
 export interface WorkoutRow {
     id: number;
     session_id: number;

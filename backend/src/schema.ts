@@ -23,6 +23,10 @@ export const mealTypeEnum = pgEnum("meal_type", [
 export const sessions = pgTable("sessions", {
     id: serial("id").primaryKey(),
     raw_input: text("raw_input").notNull(),
+    walked_10k: boolean("walked_10k").default(false),
+    did_liss: boolean("did_liss").default(false),
+    did_stretch: boolean("did_stretch").default(false),
+    notes: text("notes").default(""),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
 });
 

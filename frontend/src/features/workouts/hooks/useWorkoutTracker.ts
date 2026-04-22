@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { workoutsApi } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
-import type { WorkoutRow, WorkoutData } from "@/types";
+import type { WorkoutRow, WorkoutData, SessionActivityData } from "@/types";
 
 interface UseWorkoutTrackerReturn {
     workouts: WorkoutRow[];
@@ -14,7 +14,8 @@ interface UseWorkoutTrackerReturn {
     confirmWorkout: (
         rawText: string,
         items: WorkoutData[],
-        createdAt: string
+        createdAt: string,
+        activity?: SessionActivityData,
     ) => Promise<boolean>;
     deleteWorkout: (id: number) => Promise<boolean>;
     addWorkout: (workout: {
@@ -55,8 +56,8 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
     });
 
     const confirmMutation = useMutation({
-        mutationFn: async ({ rawText, items, createdAt }: { rawText: string; items: WorkoutData[]; createdAt: string }) => {
-            const res = await workoutsApi.create(rawText, items, createdAt);
+        mutationFn: async ({ rawText, items, createdAt, activity }: { rawText: string; items: WorkoutData[]; createdAt: string; activity?: SessionActivityData }) => {
+            const res = await workoutsApi.create(rawText, items, createdAt, activity);
             if (res.success && res.data) return res.data;
             throw new Error(res.error ?? "Failed to save workouts.");
         },
@@ -132,10 +133,10 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
         }
     }, []);
 
-    const confirmWorkout = useCallback(async (rawText: string, items: WorkoutData[], createdAt: string): Promise<boolean> => {
+    const confirmWorkout = useCallback(async (rawText: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData): Promise<boolean> => {
         setError(null);
         try {
-            await confirmRef.current({ rawText, items, createdAt });
+            await confirmRef.current({ rawText, items, createdAt, activity });
             return true;
         } catch {
             return false;

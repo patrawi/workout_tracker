@@ -3,7 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { withWorkoutDefaults } from "../lib/defaults";
 import { mapWorkoutRow } from "../db/mappers";
 import { sessions, workouts } from "../schema";
-import type { WorkoutData, WorkoutRow } from "../types";
+import type { WorkoutData, WorkoutRow, SessionActivityData } from "../types";
 
 export interface WorkoutUpdateData {
   exercise_name?: string;
@@ -154,11 +154,18 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       return deleted.length > 0;
     },
 
-    async createBatch(rawInput: string, items: WorkoutData[], createdAt: string): Promise<WorkoutRow[]> {
+    async createBatch(rawInput: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData): Promise<WorkoutRow[]> {
       return dbInstance.transaction(async (tx) => {
         const [session] = await tx
           .insert(sessions)
-          .values({ raw_input: rawInput, created_at: createdAt })
+          .values({
+            raw_input: rawInput,
+            created_at: createdAt,
+            walked_10k: activity?.walked_10k ?? false,
+            did_liss: activity?.did_liss ?? false,
+            did_stretch: activity?.did_stretch ?? false,
+            notes: activity?.notes ?? "",
+          })
           .returning({ id: sessions.id });
 
         if (!session) {

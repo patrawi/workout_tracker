@@ -43,6 +43,13 @@
       "when": 1776196138197,
       "tag": "0005_sweet_whirlwind",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776889537255,
+      "tag": "0006_busy_outlaw_kid",
+      "breakpoints": true
     }
   ]
 }

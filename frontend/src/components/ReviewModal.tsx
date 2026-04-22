@@ -1,11 +1,11 @@
 import { useState, useCallback, useMemo } from "react";
-import type { WorkoutData } from "../types";
+import type { WorkoutData, SessionActivityData } from "../types";
 
 interface ReviewModalProps {
     items: WorkoutData[];
     rawText: string;
     workoutDate: string;
-    onConfirm: (rawText: string, items: WorkoutData[], createdAt: string) => Promise<void>;
+    onConfirm: (rawText: string, items: WorkoutData[], createdAt: string, activity: SessionActivityData) => Promise<void>;
     onCancel: () => void;
     isSubmitting: boolean;
 }
@@ -19,6 +19,10 @@ export default function ReviewModal({
     isSubmitting,
 }: ReviewModalProps) {
     const [items, setItems] = useState<WorkoutData[]>(initialItems);
+    const [walked10k, setWalked10k] = useState(false);
+    const [didLiss, setDidLiss] = useState(false);
+    const [didStretch, setDidStretch] = useState(false);
+    const [notes, setNotes] = useState("");
 
     const updateItem = useCallback(
         (index: number, field: keyof WorkoutData, value: string | number | boolean) => {
@@ -39,8 +43,13 @@ export default function ReviewModal({
         if (items.length === 0 || isSubmitting) return;
         // Convert local datetime-local value to UTC ISO string for storage
         const utcDate = new Date(workoutDate).toISOString().replace("T", " ").slice(0, 19);
-        onConfirm(rawText, items, utcDate);
-    }, [items, rawText, workoutDate, isSubmitting, onConfirm]);
+        onConfirm(rawText, items, utcDate, {
+            walked_10k: walked10k,
+            did_liss: didLiss,
+            did_stretch: didStretch,
+            notes,
+        });
+    }, [items, rawText, workoutDate, isSubmitting, onConfirm, walked10k, didLiss, didStretch, notes]);
 
     // Format the selected date for display — memoized
     const displayDate = useMemo(
@@ -243,6 +252,49 @@ export default function ReviewModal({
                             All sets removed. Click Cancel to go back.
                         </div>
                     ) : null}
+                </div>
+
+                {/* Activity checkboxes */}
+                <div className="px-6 pb-4 border-t border-surface-300/30 pt-4">
+                    <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-3">
+                        Additional Activities
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-white transition-colors cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={walked10k}
+                                onChange={(e) => setWalked10k(e.target.checked)}
+                                className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                            />
+                            10K Steps
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-white transition-colors cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={didLiss}
+                                onChange={(e) => setDidLiss(e.target.checked)}
+                                className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                            />
+                            LISS Cardio
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-white transition-colors cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={didStretch}
+                                onChange={(e) => setDidStretch(e.target.checked)}
+                                className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                            />
+                            Stretching
+                        </label>
+                    </div>
+                    <input
+                        type="text"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Optional notes (e.g. massage, sauna)..."
+                        className="glass-input w-full px-3 py-1.5 text-sm text-white mt-3"
+                    />
                 </div>
 
                 {/* Footer */}
