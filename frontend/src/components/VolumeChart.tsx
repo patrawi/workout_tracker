@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
     BarChart,
@@ -17,16 +16,8 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import { analyticsApi } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
-import { TIME_RANGES } from "@/lib/constants";
 
 function CustomTooltip({
     active,
@@ -59,7 +50,7 @@ function CustomTooltip({
 }
 
 export function VolumeChart() {
-    const [days, setDays] = useState("7");
+    const days = "7";
 
     const { data = [], isLoading } = useQuery({
         queryKey: queryKeys.analytics.volume(days),
@@ -78,25 +69,9 @@ export function VolumeChart() {
                         💪 Muscle Group Volume
                     </CardTitle>
                     <CardDescription>
-                        Total working sets per muscle group. Optimal hypertrophy is typically 10-20 sets per week.
+                        Working sets per muscle group in the last 7 days. Optimal hypertrophy is typically 10-20 sets per week.
                     </CardDescription>
                 </div>
-                <Select value={days} onValueChange={setDays}>
-                    <SelectTrigger className="w-[140px] bg-black/20 border-white/5 font-medium shadow-none h-9">
-                        <SelectValue placeholder="Select Range" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#0f1115]/95 backdrop-blur-xl border-white/10 text-white">
-                        {TIME_RANGES.filter((r) => ["7", "14", "30"].includes(r.value)).map((r) => (
-                            <SelectItem
-                                key={r.value}
-                                value={r.value}
-                                className="focus:bg-white/10 focus:text-white cursor-pointer"
-                            >
-                                {r.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
             </CardHeader>
             <CardContent>
                 {isLoading ? (
@@ -140,13 +115,8 @@ export function VolumeChart() {
                                     content={<CustomTooltip />}
                                     cursor={{ fill: "var(--border)", opacity: 0.2 }}
                                 />
-                                {/* Target Lines for Optimal Volume (10-20 Sets) */}
-                                {days === "7" && (
-                                    <>
-                                        <ReferenceLine y={10} stroke="#22c55e" strokeDasharray="3 3" opacity={0.5} label={{ value: "Min", fill: "#22c55e", position: "insideBottomLeft", fontSize: 10 }} />
-                                        <ReferenceLine y={20} stroke="#eab308" strokeDasharray="3 3" opacity={0.5} label={{ value: "Max", fill: "#eab308", position: "insideTopLeft", fontSize: 10 }} />
-                                    </>
-                                )}
+                                <ReferenceLine y={10} stroke="#22c55e" strokeDasharray="3 3" opacity={0.5} label={{ value: "Min", fill: "#22c55e", position: "insideBottomLeft", fontSize: 10 }} />
+                                <ReferenceLine y={20} stroke="#eab308" strokeDasharray="3 3" opacity={0.5} label={{ value: "Max", fill: "#eab308", position: "insideTopLeft", fontSize: 10 }} />
                                 <Bar
                                     dataKey="sets"
                                     fill="var(--chart-1)"
