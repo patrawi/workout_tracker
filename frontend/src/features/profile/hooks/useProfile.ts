@@ -100,10 +100,12 @@ export function useProfile(): UseProfileReturn {
     queryFn: async () => {
       const res = await bodyweightApi.list(selectedRange);
       if (res.success && res.data) {
-        return res.data.map((r: BodyweightRecord) => ({
-          date: formatDate(r.date),
-          weight: r.weight_kg,
-        }));
+        return res.data.map((r: BodyweightRecord) => {
+          return {
+            date: formatDate(r.date),
+            weight: r.weight_kg,
+          };
+        });
       }
       return [];
     },
@@ -148,14 +150,17 @@ export function useProfile(): UseProfileReturn {
 
   // Dirty detection: check if current state differs from last synced
   const isDirty = useMemo(
-    () => !profileEquals(profile, syncedProfile) || bodyweightDate !== syncedBwDate,
+    () =>
+      !profileEquals(profile, syncedProfile) || bodyweightDate !== syncedBwDate,
     [profile, syncedProfile, bodyweightDate, syncedBwDate],
   );
 
   const bmi = useMemo(
     () =>
       profile.height_cm > 0 && profile.weight_kg > 0
-        ? Math.round((profile.weight_kg / (profile.height_cm / 100) ** 2) * 10) / 10
+        ? Math.round(
+            (profile.weight_kg / (profile.height_cm / 100) ** 2) * 10,
+          ) / 10
         : 0,
     [profile.height_cm, profile.weight_kg],
   );

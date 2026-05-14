@@ -3,7 +3,7 @@
  */
 export function formatDate(dateStr: string): string {
     if (!dateStr) return "Unknown date";
-    const d = new Date(dateStr + "Z");
+    const d = new Date(dateStr + "T00:00:00");
     if (isNaN(d.getTime())) return "Unknown date";
     return new Intl.DateTimeFormat("en-US", {
         month: "short",
@@ -16,7 +16,7 @@ export function formatDate(dateStr: string): string {
  */
 export function formatDateTime(dateStr: string): string {
     if (!dateStr) return "Unknown date";
-    const d = new Date(dateStr + "Z");
+    const d = new Date(dateStr);
     if (isNaN(d.getTime())) return "Unknown date";
     return new Intl.DateTimeFormat("en-US", {
         month: "short",
@@ -61,7 +61,7 @@ export function formatFullDate(dateStr: string): string {
  */
 export function formatEditModalDate(dateStr: string): string {
     if (!dateStr) return "Unknown date";
-    const d = new Date(dateStr + "Z");
+    const d = new Date(dateStr);
     if (isNaN(d.getTime())) return "Unknown date";
     return new Intl.DateTimeFormat("en-US", {
         weekday: "short",

@@ -2,3 +2,5 @@ node_modules/
 .env
 *.db
 drizzle/meta/
+nutrition_chroma_blind/
+nutrition_chroma_sandbox/
