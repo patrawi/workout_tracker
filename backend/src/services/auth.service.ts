@@ -62,7 +62,7 @@ const authCookieOptions = {
   maxAge: AUTH_COOKIE_MAX_AGE_SECONDS,
   sameSite: "lax" as const,
   path: "/",
-  secure: true,
+  secure: process.env.NODE_ENV === "production",
 };
 
 export interface AuthService {
