@@ -176,28 +176,28 @@ export default function CalendarHeatmap() {
         <section className="glass-card p-5 sm:p-6 mb-8 animate-fade-in" aria-label="Workout activity heatmap">
             {/* Header with stats */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-                <h2 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                <h2 className="text-lg font-bold tracking-tight text-[var(--foreground)] flex items-center gap-2">
                     <span className="text-[var(--chart-1)]">🔥</span>
                     Activity
                 </h2>
 
                 <div className="flex items-center gap-4 sm:gap-6">
                     <div className="text-center">
-                        <div className="text-lg font-bold text-white tabular-nums">{stats.currentStreak}</div>
+                        <div className="stat-value text-lg">{stats.currentStreak}</div>
                         <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider font-medium">
                             Current streak
                         </div>
                     </div>
                     <div className="w-px h-8 bg-[var(--border)]" />
                     <div className="text-center">
-                        <div className="text-lg font-bold text-white tabular-nums">{stats.longestStreak}</div>
+                        <div className="stat-value text-lg">{stats.longestStreak}</div>
                         <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider font-medium">
                             Longest streak
                         </div>
                     </div>
                     <div className="w-px h-8 bg-[var(--border)]" />
                     <div className="text-center">
-                        <div className="text-lg font-bold text-white tabular-nums">{stats.totalDaysActive}</div>
+                        <div className="stat-value text-lg">{stats.totalDaysActive}</div>
                         <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider font-medium">
                             Total days
                         </div>

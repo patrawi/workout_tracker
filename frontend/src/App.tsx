@@ -81,7 +81,12 @@ export default function App() {
       {error ? (
         <div
           role="alert"
-          className="mb-8 px-5 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm animate-fade-in flex items-center justify-between mt-4"
+          className="mb-8 px-5 py-3 rounded-xl animate-fade-in flex items-center justify-between mt-4 text-sm"
+          style={{
+            background: "oklch(0.55 0.2 25 / 0.1)",
+            border: "1px solid oklch(0.55 0.2 25 / 0.3)",
+            color: "oklch(0.75 0.15 25)",
+          }}
         >
           <div>
             <span className="font-medium">Error:</span> {error}
@@ -89,7 +94,8 @@ export default function App() {
           <button
             type="button"
             onClick={clearError}
-            className="text-red-400 hover:text-red-200 p-1"
+            className="flex items-center justify-center w-11 h-11 rounded-lg transition-colors hover:bg-[oklch(0.55_0.2_25_/_0.15)]"
+            style={{ color: "oklch(0.75 0.15 25)" }}
             aria-label="Dismiss error"
           >
             ✕
@@ -99,32 +105,30 @@ export default function App() {
 
       <CalendarHeatmap />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start pt-4">
-        <div className="lg:col-span-12 lg:sticky lg:top-28">
-          <WorkoutInput
-            onSubmit={handleParse}
-            isLoading={isParsing}
-            onRestDay={() => setShowRestDayForm(!showRestDayForm)}
-            showRestDay={showRestDayForm}
-          />
+      <div className="pt-4">
+        <WorkoutInput
+          onSubmit={handleParse}
+          isLoading={isParsing}
+          onRestDay={() => setShowRestDayForm(!showRestDayForm)}
+          showRestDay={showRestDayForm}
+        />
 
-          {showRestDayForm && (
-            <div className="w-full relative mt-4">
-              <button
-                type="button"
-                onClick={() => setShowRestDayForm(false)}
-                className="absolute -top-2 right-2 text-[10px] text-[var(--muted-foreground)] hover:text-white p-1 z-10"
-                aria-label="Close rest day form"
-              >
-                ✕ Close
-              </button>
-              <RestDayForm
-                onSubmit={handleRestDaySubmit}
-                isLoading={isRestDaySubmitting}
-              />
-            </div>
-          )}
-        </div>
+        {showRestDayForm && (
+          <div className="w-full relative mt-4">
+            <button
+              type="button"
+              onClick={() => setShowRestDayForm(false)}
+              className="absolute -top-2 right-2 text-[10px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] flex items-center justify-center w-11 h-11 z-10 transition-colors"
+              aria-label="Close rest day form"
+            >
+              ✕ Close
+            </button>
+            <RestDayForm
+              onSubmit={handleRestDaySubmit}
+              isLoading={isRestDaySubmitting}
+            />
+          </div>
+        )}
       </div>
 
       {/* Human-in-the-loop review modal */}

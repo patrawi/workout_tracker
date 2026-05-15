@@ -108,40 +108,45 @@ export default function DailyWorkoutPage() {
     if (isLoading) {
         return (
             <div className="pt-8 animate-pulse space-y-8 max-w-4xl mx-auto px-4 sm:px-6">
-                <div className="h-8 w-48 bg-white/10 rounded" />
+                <div className="h-8 w-48 rounded" style={{ background: "oklch(0.22 0.015 260 / 0.5)" }} />
                 <div className="space-y-4">
-                    <div className="h-32 bg-white/5 rounded-2xl border border-white/10" />
-                    <div className="h-48 bg-white/5 rounded-2xl border border-white/10" />
+                    <div className="h-32 rounded-2xl" style={{ background: "oklch(0.18 0.012 260 / 0.4)", border: "1px solid oklch(0.28 0.015 260 / 0.4)" }} />
+                    <div className="h-48 rounded-2xl" style={{ background: "oklch(0.18 0.012 260 / 0.4)", border: "1px solid oklch(0.28 0.015 260 / 0.4)" }} />
                 </div>
             </div>
         );
     }
 
     if (error) {
-        return <div className="pt-8 text-center text-red-400">{error.message}</div>;
+        return (
+            <div className="pt-8 text-center" style={{ color: "oklch(0.75 0.15 25)" }}>
+                {error.message}
+            </div>
+        );
     }
 
     return (
         <div className="pt-6 pb-24 animate-fade-in max-w-4xl mx-auto px-4 sm:px-6">
             <Link
                 to="/history"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-medium text-[var(--muted-foreground)] hover:text-white hover:bg-white/10 hover:border-white/20 transition-all duration-300 mb-10 group backdrop-blur-md shadow-sm"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all duration-300 mb-10 group"
+                style={{ background: "oklch(0.22 0.015 260)", border: "1px solid oklch(0.28 0.015 260)" }}
             >
                 <ArrowLeft className="w-4 h-4 transform group-hover:-translate-x-1 transition-transform duration-300" />
                 Return to History
             </Link>
 
             <div className="mb-10 flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-6">
-                {/* Glowing Icon */}
-                <div className="relative inline-flex group shrink-0">
-                    <div className="absolute inset-0 bg-[var(--chart-2)] blur-xl opacity-20 transition-opacity duration-500 rounded-full" />
-                    <div className="relative p-3.5 rounded-2xl bg-gradient-to-br from-white/10 to-transparent border border-white/10 shadow-lg backdrop-blur-md">
+                {/* Icon */}
+                <div className="relative inline-flex shrink-0">
+                    <div className="absolute inset-0 blur-xl opacity-20 transition-opacity duration-500 rounded-full" style={{ background: "var(--chart-2)" }} />
+                    <div className="relative p-3.5 rounded-2xl backdrop-blur-md" style={{ background: "oklch(0.22 0.015 260 / 0.6)", border: "1px solid oklch(0.28 0.015 260)" }}>
                         <CalendarDays className="w-8 h-8 text-[var(--chart-2)]" />
                     </div>
                 </div>
 
                 <div>
-                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight mb-2 text-gradient">
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight mb-2 text-[var(--foreground)]">
                         {displayDate}
                     </h1>
                     <p className="text-lg text-[var(--muted-foreground)] flex items-center gap-2">
@@ -167,7 +172,7 @@ export default function DailyWorkoutPage() {
                 <div className="mt-8">
                     <div className="glass-card p-6 space-y-5">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                            <h2 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
                                 🍽️ Nutrition Summary
                             </h2>
                             <Link
@@ -204,21 +209,21 @@ export default function DailyWorkoutPage() {
                         </div>
 
                         {/* Total Calories */}
-                        <div className="rounded-lg bg-surface-100/30 border border-surface-300/10 px-4 py-3 flex items-center justify-between">
-                            <span className="text-xs text-surface-400 font-medium tracking-wide uppercase">Total Calories</span>
-                            <span className="text-lg font-bold text-white tabular-nums">
-                                {nutritionSummary.calories.toFixed(0)} <span className="text-xs text-surface-400 font-normal">kcal</span>
+                        <div className="rounded-lg px-4 py-3 flex items-center justify-between" style={{ background: "oklch(0.22 0.015 260 / 0.4)", border: "1px solid oklch(0.28 0.015 260 / 0.3)" }}>
+                            <span className="text-xs text-[var(--muted-foreground)] font-medium tracking-wide uppercase">Total Calories</span>
+                            <span className="text-lg font-bold text-[var(--foreground)] tabular-nums">
+                                {nutritionSummary.calories.toFixed(0)} <span className="text-xs text-[var(--muted-foreground)] font-normal">kcal</span>
                             </span>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Empty states */}
+            {/* Empty state */}
             {workouts.length === 0 && nutritionItems.length === 0 && (
                 <div className="glass-card p-12 text-center">
                     <p className="text-4xl mb-3">📭</p>
-                    <p className="text-surface-400">No activity logged for this date.</p>
+                    <p className="text-[var(--muted-foreground)]">No activity logged for this date.</p>
                 </div>
             )}
 
@@ -251,23 +256,25 @@ function MacroBar({
     const percentage = target > 0 ? (current / target) * 100 : 0;
     const clampedWidth = Math.min(percentage, 100);
     const ratio = target > 0 ? current / target : 0;
+
+    // Status color using system OKLCH tokens instead of Tailwind color classes
     const statusColor =
         ratio >= 0.9 && ratio <= 1.1
-            ? "text-emerald-400"
+            ? "oklch(0.72 0.19 160)"     // on-target: system emerald
             : ratio >= 0.75 && ratio <= 1.25
-              ? "text-amber-400"
-              : "text-red-400";
+              ? "oklch(0.65 0.22 55)"    // close: system amber
+              : "oklch(0.65 0.2 25)";   // off: system destructive-adjacent
 
     return (
         <div>
             <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
+                <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">
                     {label}
                 </span>
-                <span className={`text-sm font-semibold tabular-nums ${target > 0 ? statusColor : "text-surface-400"}`}>
+                <span className="text-sm font-semibold tabular-nums" style={{ color: target > 0 ? statusColor : "var(--muted-foreground)" }}>
                     {current.toFixed(1)}
                     {target > 0 && (
-                        <span className="text-surface-400 font-normal">
+                        <span className="text-[var(--muted-foreground)] font-normal">
                             {" "}/ {target}g
                         </span>
                     )}
@@ -288,7 +295,7 @@ function MacroBar({
             </div>
             {target > 0 && (
                 <div className="text-right mt-0.5">
-                    <span className="text-[10px] text-surface-400 tabular-nums">
+                    <span className="text-[10px] text-[var(--muted-foreground)] tabular-nums">
                         {percentage.toFixed(0)}%
                     </span>
                 </div>

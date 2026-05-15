@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-15T00:00:00.000Z",
+  "title": "Design System: Frictionless",
+  "extensions": {
+    "colorMeta": {
+      "emerald-primary":   { "role": "primary",    "displayName": "Calibrated Emerald",  "canonical": "oklch(0.72 0.19 160)",  "tonalRamp": ["oklch(0.15 0.04 160)", "oklch(0.25 0.08 160)", "oklch(0.35 0.12 160)", "oklch(0.48 0.16 160)", "oklch(0.55 0.20 160)", "oklch(0.65 0.22 160)", "oklch(0.72 0.19 160)", "oklch(0.82 0.13 160)"] },
+      "emerald-mid":       { "role": "primary",    "displayName": "Emerald Mid",          "canonical": "oklch(0.65 0.22 160)",  "tonalRamp": ["oklch(0.15 0.04 160)", "oklch(0.25 0.08 160)", "oklch(0.35 0.12 160)", "oklch(0.48 0.16 160)", "oklch(0.55 0.20 160)", "oklch(0.65 0.22 160)", "oklch(0.72 0.19 160)", "oklch(0.82 0.13 160)"] },
+      "emerald-deep":      { "role": "primary",    "displayName": "Emerald Deep",         "canonical": "oklch(0.55 0.2 160)",   "tonalRamp": ["oklch(0.15 0.04 160)", "oklch(0.25 0.08 160)", "oklch(0.35 0.12 160)", "oklch(0.48 0.16 160)", "oklch(0.55 0.20 160)", "oklch(0.65 0.22 160)", "oklch(0.72 0.19 160)", "oklch(0.82 0.13 160)"] },
+      "cyan-secondary":    { "role": "secondary",  "displayName": "Instrument Cyan",      "canonical": "oklch(0.7 0.18 195)",   "tonalRamp": ["oklch(0.15 0.04 195)", "oklch(0.25 0.08 195)", "oklch(0.35 0.12 195)", "oklch(0.48 0.15 195)", "oklch(0.56 0.17 195)", "oklch(0.70 0.18 195)", "oklch(0.78 0.14 195)", "oklch(0.87 0.08 195)"] },
+      "purple-tertiary":   { "role": "tertiary",   "displayName": "Spectral Purple",      "canonical": "oklch(0.6 0.25 290)",   "tonalRamp": ["oklch(0.15 0.06 290)", "oklch(0.25 0.10 290)", "oklch(0.35 0.15 290)", "oklch(0.45 0.18 290)", "oklch(0.55 0.22 290)", "oklch(0.60 0.25 290)", "oklch(0.70 0.18 290)", "oklch(0.82 0.10 290)"] },
+      "amber-chart":       { "role": "tertiary",   "displayName": "Amber Signal",         "canonical": "oklch(0.65 0.22 55)",   "tonalRamp": ["oklch(0.15 0.05 55)", "oklch(0.25 0.09 55)", "oklch(0.38 0.14 55)", "oklch(0.50 0.18 55)", "oklch(0.60 0.21 55)", "oklch(0.65 0.22 55)", "oklch(0.74 0.17 55)", "oklch(0.86 0.10 55)"] },
+      "rose-chart":        { "role": "tertiary",   "displayName": "Rose Trace",           "canonical": "oklch(0.65 0.2 330)",   "tonalRamp": ["oklch(0.15 0.05 330)", "oklch(0.25 0.09 330)", "oklch(0.38 0.13 330)", "oklch(0.50 0.17 330)", "oklch(0.58 0.19 330)", "oklch(0.65 0.20 330)", "oklch(0.75 0.14 330)", "oklch(0.86 0.08 330)"] },
+      "destructive":       { "role": "semantic",   "displayName": "Destructive Red",      "canonical": "oklch(0.55 0.2 25)",    "tonalRamp": ["oklch(0.15 0.05 25)", "oklch(0.25 0.09 25)", "oklch(0.35 0.14 25)", "oklch(0.45 0.17 25)", "oklch(0.55 0.20 25)", "oklch(0.65 0.17 25)", "oklch(0.75 0.12 25)", "oklch(0.87 0.06 25)"] },
+      "surface-50":        { "role": "neutral",    "displayName": "Surface Base",         "canonical": "oklch(0.15 0.01 260)",  "tonalRamp": ["oklch(0.12 0.008 260)", "oklch(0.15 0.010 260)", "oklch(0.18 0.012 260)", "oklch(0.22 0.015 260)", "oklch(0.28 0.015 260)", "oklch(0.38 0.015 260)", "oklch(0.55 0.010 260)", "oklch(0.75 0.008 260)"] },
+      "surface-100":       { "role": "neutral",    "displayName": "Surface Card",         "canonical": "oklch(0.18 0.012 260)", "tonalRamp": ["oklch(0.12 0.008 260)", "oklch(0.15 0.010 260)", "oklch(0.18 0.012 260)", "oklch(0.22 0.015 260)", "oklch(0.28 0.015 260)", "oklch(0.38 0.015 260)", "oklch(0.55 0.010 260)", "oklch(0.75 0.008 260)"] },
+      "surface-200":       { "role": "neutral",    "displayName": "Surface Raised",       "canonical": "oklch(0.22 0.015 260)", "tonalRamp": ["oklch(0.12 0.008 260)", "oklch(0.15 0.010 260)", "oklch(0.18 0.012 260)", "oklch(0.22 0.015 260)", "oklch(0.28 0.015 260)", "oklch(0.38 0.015 260)", "oklch(0.55 0.010 260)", "oklch(0.75 0.008 260)"] },
+      "surface-300":       { "role": "neutral",    "displayName": "Surface Border",       "canonical": "oklch(0.28 0.015 260)", "tonalRamp": ["oklch(0.12 0.008 260)", "oklch(0.15 0.010 260)", "oklch(0.18 0.012 260)", "oklch(0.22 0.015 260)", "oklch(0.28 0.015 260)", "oklch(0.38 0.015 260)", "oklch(0.55 0.010 260)", "oklch(0.75 0.008 260)"] },
+      "surface-400":       { "role": "neutral",    "displayName": "Surface Mid",          "canonical": "oklch(0.38 0.015 260)", "tonalRamp": ["oklch(0.12 0.008 260)", "oklch(0.15 0.010 260)", "oklch(0.18 0.012 260)", "oklch(0.22 0.015 260)", "oklch(0.28 0.015 260)", "oklch(0.38 0.015 260)", "oklch(0.55 0.010 260)", "oklch(0.75 0.008 260)"] },
+      "foreground":        { "role": "neutral",    "displayName": "Foreground",           "canonical": "oklch(0.92 0.01 260)",  "tonalRamp": ["oklch(0.30 0.010 260)", "oklch(0.45 0.010 260)", "oklch(0.55 0.010 260)", "oklch(0.65 0.010 260)", "oklch(0.75 0.010 260)", "oklch(0.82 0.010 260)", "oklch(0.88 0.010 260)", "oklch(0.92 0.010 260)"] },
+      "foreground-muted":  { "role": "neutral",    "displayName": "Foreground Muted",     "canonical": "oklch(0.55 0.01 260)",  "tonalRamp": ["oklch(0.30 0.010 260)", "oklch(0.45 0.010 260)", "oklch(0.55 0.010 260)", "oklch(0.65 0.010 260)", "oklch(0.75 0.010 260)", "oklch(0.82 0.010 260)", "oklch(0.88 0.010 260)", "oklch(0.92 0.010 260)"] },
+      "dark-on-primary":   { "role": "neutral",    "displayName": "Dark on Primary",      "canonical": "oklch(0.13 0.01 260)",  "tonalRamp": ["oklch(0.10 0.006 260)", "oklch(0.13 0.010 260)", "oklch(0.15 0.010 260)", "oklch(0.18 0.012 260)", "oklch(0.22 0.015 260)", "oklch(0.28 0.015 260)", "oklch(0.38 0.015 260)", "oklch(0.55 0.010 260)"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page titles. One per page surface." },
+      "headline": { "displayName": "Headline", "purpose": "Section heads, card titles, exercise group names." },
+      "title": { "displayName": "Title", "purpose": "Sub-section labels, form field heads, modal titles." },
+      "body": { "displayName": "Body", "purpose": "Prose, workout notes, nutrition descriptions. Max 65–75ch line length." },
+      "label": { "displayName": "Label", "purpose": "Tags, axis labels, kbd hints, metadata. Never for body copy." }
+    },
+    "shadows": [
+      { "name": "glass-ambient",  "value": "inset 0 1px 0 0 oklch(1 0 0 / 0.05), 0 8px 32px 0 oklch(0 0 0 / 0.3)", "purpose": "Standard glass card. Top inset simulates light source." },
+      { "name": "input-inset",    "value": "inset 0 2px 4px 0 oklch(0 0 0 / 0.2), inset 0 1px 0 0 oklch(1 0 0 / 0.05)", "purpose": "Recessed input field. Sits below card surface level." },
+      { "name": "button-glow",    "value": "0 8px 30px oklch(0.65 0.22 160 / 0.3)", "purpose": "Primary button hover only. State response, not ambient." },
+      { "name": "heatmap-peak",   "value": "0 0 6px oklch(0.72 0.22 160 / 0.3)", "purpose": "Intensity-4 heatmap cells only. Maximum effort indicator." }
+    ],
+    "motion": [
+      { "name": "ease-enter",     "value": "cubic-bezier(0.16, 1, 0.3, 1)",  "purpose": "Entrances: slide-up, fade-in. Expo-out feel — fast start, soft land." },
+      { "name": "ease-standard",  "value": "ease",                             "purpose": "State transitions: border-color, box-shadow, opacity, transform on hover." },
+      { "name": "duration-fast",  "value": "0.15s",                           "purpose": "Hover lifts and micro-interactions." },
+      { "name": "duration-base",  "value": "0.2s",                            "purpose": "Standard state transitions." },
+      { "name": "duration-enter", "value": "0.3s–0.4s",                       "purpose": "Page-level entrances (slide-up 0.4s, fade-in 0.3s)." }
+    ],
+    "breakpoints": [
+      { "name": "sm",  "value": "640px",  "purpose": "Mobile/desktop split. px-4 below, px-6 above." },
+      { "name": "md",  "value": "768px",  "purpose": "Layout reflow for multi-column analytics." },
+      { "name": "lg",  "value": "1024px", "purpose": "Max container width activates (max-w-4xl = 896px)." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary action. Submit workout, confirm parse, save nutrition log.",
+      "html": "<button class=\"ds-btn-primary\">Log Workout</button>",
+      "css": ".ds-btn-primary { background: linear-gradient(135deg, oklch(0.65 0.22 160), oklch(0.7 0.18 195)); color: oklch(0.13 0.01 260); font-family: Inter, system-ui, sans-serif; font-size: 1rem; font-weight: 600; border: none; border-radius: 12px; padding: 14px 28px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease; touch-action: manipulation; } .ds-btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 30px oklch(0.65 0.22 160 / 0.3); } .ds-btn-primary:active:not(:disabled) { transform: translateY(0); box-shadow: none; } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; } .ds-btn-primary:focus-visible { outline: 2px solid oklch(0.72 0.19 160); outline-offset: 2px; }"
+    },
+    {
+      "name": "Glass Card",
+      "kind": "card",
+      "refersTo": "glass-card",
+      "description": "Primary container for all content sections. The page's main structural element.",
+      "html": "<div class=\"ds-glass-card\"><p style=\"color: oklch(0.92 0.01 260); margin: 0;\">Section content</p></div>",
+      "css": ".ds-glass-card { background: oklch(0.18 0.012 260 / 0.4); backdrop-filter: blur(24px) saturate(1.2); -webkit-backdrop-filter: blur(24px) saturate(1.2); border: 1px solid oklch(0.3 0.015 260 / 0.5); border-top: 1px solid oklch(0.4 0.015 260 / 0.6); box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.05), 0 8px 32px 0 oklch(0 0 0 / 0.3); border-radius: 16px; padding: 24px; }"
+    },
+    {
+      "name": "Glass Input",
+      "kind": "input",
+      "refersTo": "glass-input",
+      "description": "Text input and textarea. Recessed below card surface to visually indicate 'enter data here'.",
+      "html": "<input class=\"ds-glass-input\" type=\"text\" placeholder=\"bench press 100kg 5x5\" />",
+      "css": ".ds-glass-input { display: block; width: 100%; background: oklch(0.14 0.01 260 / 0.5); backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2); border: 1px solid oklch(0.3 0.015 260 / 0.4); border-top: 1px solid oklch(0.4 0.015 260 / 0.5); box-shadow: inset 0 2px 4px 0 oklch(0 0 0 / 0.2), inset 0 1px 0 0 oklch(1 0 0 / 0.05); border-radius: 12px; padding: 14px 16px; font-family: Inter, system-ui, sans-serif; font-size: 0.9375rem; color: oklch(0.92 0.01 260); transition: border-color 0.2s ease, box-shadow 0.2s ease; outline: none; box-sizing: border-box; } .ds-glass-input::placeholder { color: oklch(0.55 0.01 260); } .ds-glass-input:focus { border-color: oklch(0.72 0.19 160); box-shadow: 0 0 0 3px oklch(0.65 0.22 160 / 0.15); }"
+    },
+    {
+      "name": "Tag Pill",
+      "kind": "chip",
+      "refersTo": "tag-pill",
+      "description": "Workout type, exercise category, and activity labels. Compact semantic badges.",
+      "html": "<span class=\"ds-tag-pill\">Workout</span>",
+      "css": ".ds-tag-pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 9999px; font-family: Inter, system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; background: oklch(0.65 0.22 160 / 0.12); color: oklch(0.72 0.19 160); border: 1px solid oklch(0.65 0.22 160 / 0.2); line-height: 1.4; }"
+    },
+    {
+      "name": "Stat Value",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Numeric KPI display inside analytics cards and profile metrics. Always with context label.",
+      "html": "<div class=\"ds-stat\"><span class=\"ds-stat-value\">142.5</span><span class=\"ds-stat-label\">kg max weight</span></div>",
+      "css": ".ds-stat { display: flex; flex-direction: column; gap: 2px; } .ds-stat-value { font-family: Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1.25rem; line-height: 1.2; color: oklch(0.95 0.01 260); } .ds-stat-label { font-family: Inter, system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; color: oklch(0.55 0.01 260); line-height: 1.4; }"
+    },
+    {
+      "name": "Heatmap Cell — Empty",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Base calendar cell. No workout logged. 5 intensity levels plus rest variant.",
+      "html": "<div class=\"ds-heatmap-cell\" data-intensity=\"0\"></div>",
+      "css": ".ds-heatmap-cell { width: 13px; height: 13px; border-radius: 3px; cursor: pointer; transition: outline 0.1s ease; } .ds-heatmap-cell[data-intensity='0'] { background: oklch(0.2 0.012 260); border: 1px solid oklch(0.25 0.012 260); } .ds-heatmap-cell[data-intensity='1'] { background: oklch(0.35 0.12 160); border: 1px solid oklch(0.4 0.14 160 / 0.4); } .ds-heatmap-cell[data-intensity='2'] { background: oklch(0.48 0.16 160); border: 1px solid oklch(0.52 0.18 160 / 0.4); } .ds-heatmap-cell[data-intensity='3'] { background: oklch(0.6 0.2 160); border: 1px solid oklch(0.65 0.22 160 / 0.4); } .ds-heatmap-cell[data-intensity='4'] { background: oklch(0.72 0.22 160); border: 1px solid oklch(0.75 0.22 160 / 0.5); box-shadow: 0 0 6px oklch(0.72 0.22 160 / 0.3); } .ds-heatmap-cell[data-type='rest'] { background: oklch(0.45 0.15 280); border: 1px solid oklch(0.5 0.15 280 / 0.4); } .ds-heatmap-cell:hover { outline: 2px solid oklch(0.7 0.01 260 / 0.6); outline-offset: 1px; }"
+    },
+    {
+      "name": "Navigation Header",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Sticky top header. Transparent at page top, gains border-bottom on scroll.",
+      "html": "<header class=\"ds-nav-header\"><a class=\"ds-nav-logo\" href=\"/\">🏋️ Frictionless</a><nav class=\"ds-nav-links\"><a class=\"ds-nav-link ds-nav-link--active\" href=\"/\">Log</a><a class=\"ds-nav-link\" href=\"/analytics\">Analytics</a><a class=\"ds-nav-link\" href=\"/history\">History</a></nav></header>",
+      "css": ".ds-nav-header { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; backdrop-filter: blur(20px) saturate(1.2); -webkit-backdrop-filter: blur(20px) saturate(1.2); background: oklch(0.15 0.01 260 / 0.8); border-bottom: 1px solid oklch(0.3 0.015 260 / 0.3); } .ds-nav-logo { font-family: Inter, system-ui, sans-serif; font-size: 1rem; font-weight: 600; color: oklch(0.92 0.01 260); text-decoration: none; letter-spacing: -0.01em; transition: filter 0.2s ease; } .ds-nav-logo:hover { filter: drop-shadow(0 0 8px oklch(0.72 0.19 160 / 0.5)); } .ds-nav-links { display: flex; gap: 4px; } .ds-nav-link { font-family: Inter, system-ui, sans-serif; font-size: 0.875rem; font-weight: 400; color: oklch(0.55 0.01 260); text-decoration: none; padding: 6px 12px; border-radius: 8px; transition: color 0.15s ease, background 0.15s ease; } .ds-nav-link:hover { color: oklch(0.92 0.01 260); background: oklch(0.22 0.015 260); } .ds-nav-link--active { color: oklch(0.72 0.19 160); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Instrument",
+    "overview": "Frictionless is built for one person, in one context: standing in a gym, heart still elevated, phone in hand, wanting to log and close. The interface is not meant to be admired. It is meant to be used without friction, without thought, without hesitation. Every surface decision flows from that moment.\n\nThe palette is Deep Void Blue: blue-tinted dark neutrals that recede completely, pulling visual attention toward data. The single accent, Calibrated Emerald, is used precisely where action is required or status is meaningful. It does not appear decoratively. The blur-depth elevation system means depth is felt through glass, not cast through shadow. The whole system reads as dense, contained, calibrated — like the display of an instrument that cost too much to be ugly.\n\nThe system rejects everything that competes with its data: the cluttered calorie-counter energy of MyFitnessPal, the social-validation noise of Strava, the big-number hero clichés of SaaS dashboards, and the neon visual overload of cyberpunk interfaces.",
+    "keyCharacteristics": [
+      "Dark-only. Not a mode, not a preference — a fixed decision for low-ambient, post-exertion use.",
+      "One accent. Emerald appears on primary actions, active states, and meaningful data signals only.",
+      "Glass depth. Blur and semi-transparency replace shadow stacking.",
+      "Tabular data density. Numbers sit in tabular-nums, weighted heavier than surrounding prose.",
+      "Expert-facing. No onboarding patterns, no tooltips on established UI, no confirmation theater."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule",      "body": "Calibrated Emerald is the only interactive accent. Never used decoratively — no emerald dividers, headings, or icons that don't signal actionability or status.",                       "section": "colors" },
+      { "name": "The Blue-Tint Rule",       "body": "Every neutral carries hue 260 at chroma 0.01–0.015. Pure gray (oklch(L 0 0)) is prohibited.",                                                                              "section": "colors" },
+      { "name": "The Tabular Rule",         "body": "Every numeric value that changes or can be compared uses font-variant-numeric: tabular-nums.",                                                                                "section": "typography" },
+      { "name": "The Weight-Contrast Rule", "body": "Adjacent typography steps must differ by at least one weight increment. Never two consecutive steps at the same weight.",                                                      "section": "typography" },
+      { "name": "The Blur-First Rule",      "body": "If you feel the urge to add a drop shadow to an element that isn't a glass panel or active button, add translucency and blur instead.",                                       "section": "elevation" },
+      { "name": "The Flat-at-Rest Rule",    "body": "Interactive elements carry no elevation at rest. Hover states introduce the glow. A lit button is a button the cursor is over — not a cosmetic default.",                    "section": "elevation" },
+      { "name": "The No-Nested-Glass Rule", "body": ".glass-card inside .glass-card is always structural confusion. .glass-card > .glass-input is correct.",                                                                       "section": "components" }
+    ],
+    "dos": [
+      "Do use oklch for all color values. OKLCH is the source of truth.",
+      "Do apply font-variant-numeric: tabular-nums to every numeric value that can change or be compared.",
+      "Do maintain the top-edge border highlight on all glass surfaces. It is the simulated light source.",
+      "Do make tap targets a minimum 44×44px on all interactive elements.",
+      "Do use full-perimeter borders on error states. Red is a perimeter treatment, never a side-stripe.",
+      "Do use reduced-motion guards on all keyframe animations.",
+      "Do use the emerald-to-cyan gradient exclusively on .btn-primary."
+    ],
+    "donts": [
+      "Don't add a light mode. There is no light mode.",
+      "Don't add decorative emerald. Calibrated Emerald is an interactive signal only.",
+      "Don't nest glass cards inside glass cards.",
+      "Don't use gradient text (background-clip: text).",
+      "Don't use border-left or border-right greater than 1px as a colored accent stripe.",
+      "Don't create hero-metric layouts: big number, small label, gradient accent, supporting stats.",
+      "Don't make the interface feel like MyFitnessPal, Strava, or any SaaS dashboard with identical card grids.",
+      "Don't add neon glows to surfaces or decorative elements. The only glows in the system are state-driven.",
+      "Don't use #000 or #fff anywhere.",
+      "Don't animate CSS layout properties. Animate transform and opacity only.",
+      "Don't add confirmation dialogs, tooltips, or onboarding overlays for actions a daily user knows."
+    ]
+  }
+}

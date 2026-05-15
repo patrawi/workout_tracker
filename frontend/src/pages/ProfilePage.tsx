@@ -8,7 +8,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -32,7 +31,7 @@ const CustomTooltip = ({
   if (active && payload && payload.length) {
     return (
       <div className="bg-[var(--popover)] border border-[var(--border)] p-3 rounded-lg shadow-xl shadow-black/50">
-        <p className="font-medium text-white mb-1">{label}</p>
+        <p className="font-medium text-[var(--foreground)] mb-1">{label}</p>
         {payload.map((p, i) => (
           <div
             key={i}
@@ -44,7 +43,7 @@ const CustomTooltip = ({
             />
             <span>
               Bodyweight:{" "}
-              <span className="font-medium text-white">{p.value} kg</span>
+              <span className="font-medium text-[var(--foreground)]">{p.value} kg</span>
             </span>
           </div>
         ))}
@@ -88,14 +87,14 @@ export default function ProfilePage() {
         <header className="pt-10 pb-6">
           <Link
             to="/"
-            className="text-sm text-[var(--muted-foreground)] hover:text-white transition-colors mb-2 inline-flex items-center gap-1"
+            className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-2 inline-flex items-center gap-1"
           >
             ← Back to Tracker
           </Link>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-gradient">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[var(--foreground)]">
             My Profile
           </h1>
-          <p className="text-surface-400 text-sm mt-2">
+          <p className="text-[var(--muted-foreground)] text-sm mt-2">
             Your body stats are used to calculate volume for bodyweight
             exercises.
           </p>
@@ -113,13 +112,13 @@ export default function ProfilePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Card 1: Body Metrics */}
               <div className="glass-card p-6 space-y-6 flex flex-col h-full">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <h3 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
                   📏 Body Metrics
                 </h3>
 
                 <div className="space-y-4 flex-grow">
                   <div>
-                    <label className="text-xs text-surface-400 block mb-1.5">
+                    <label className="text-xs text-[var(--muted-foreground)] block mb-1.5">
                       Current Weight
                     </label>
                     <div className="relative">
@@ -129,29 +128,29 @@ export default function ProfilePage() {
                         onChange={(e) =>
                           updateField("weight_kg", Number(e.target.value))
                         }
-                        className="glass-input w-full px-4 py-3 text-base text-white pr-12 focus:ring-accent-500/50 focus:border-accent-500/50"
+                        className="glass-input w-full px-4 py-3 text-base text-[var(--foreground)] pr-12"
                         step="0.1"
                         min="0"
                         placeholder="75"
                       />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-surface-400">
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-[var(--muted-foreground)]">
                         kg
                       </span>
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-surface-400 block mb-1.5">
+                    <label className="text-xs text-[var(--muted-foreground)] block mb-1.5">
                       Weigh-in Date
                     </label>
                     <input
                       type="date"
                       value={bodyweightDate}
                       onChange={(e) => setBodyweightDate(e.target.value)}
-                      className="glass-input w-full px-4 py-3 text-base text-white focus:ring-accent-500/50 focus:border-accent-500/50"
+                      className="glass-input w-full px-4 py-3 text-base text-[var(--foreground)]"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-surface-400 block mb-1.5">
+                    <label className="text-xs text-[var(--muted-foreground)] block mb-1.5">
                       Height
                     </label>
                     <div className="relative">
@@ -161,12 +160,12 @@ export default function ProfilePage() {
                         onChange={(e) =>
                           updateField("height_cm", Number(e.target.value))
                         }
-                        className="glass-input w-full px-4 py-3 text-base text-white pr-12 focus:ring-accent-500/50 focus:border-accent-500/50"
+                        className="glass-input w-full px-4 py-3 text-base text-[var(--foreground)] pr-12"
                         step="0.5"
                         min="0"
                         placeholder="175"
                       />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-surface-400">
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-[var(--muted-foreground)]">
                         cm
                       </span>
                     </div>
@@ -176,32 +175,38 @@ export default function ProfilePage() {
                 {/* BMI indicator pinned to bottom */}
                 <div className="mt-auto pt-4">
                   {bmi > 0 ? (
-                    <div className="rounded-lg bg-surface-100/30 border border-surface-300/10 px-4 py-3 flex items-center justify-between">
-                      <span className="text-xs text-surface-400 font-medium tracking-wide uppercase">
+                    <div
+                      className="rounded-lg px-4 py-3 flex items-center justify-between"
+                      style={{ background: "oklch(0.22 0.015 260 / 0.4)", border: "1px solid oklch(0.28 0.015 260 / 0.3)" }}
+                    >
+                      <span className="text-xs text-[var(--muted-foreground)] font-medium tracking-wide uppercase">
                         BMI
                       </span>
-                      <span className="text-lg font-bold text-white tabular-nums">
+                      <span className="text-lg font-bold text-[var(--foreground)] tabular-nums">
                         {bmi}{" "}
                         <span
-                          className={`text-xs font-normal ml-1 px-2 py-0.5 rounded-full ${
+                          className="text-xs font-normal ml-1 px-2 py-0.5 rounded-full"
+                          style={
                             bmiLabel === "Normal"
-                              ? "bg-accent-500/10 text-accent-400"
-                              : bmiLabel === "Underweight" ||
-                                  bmiLabel === "Overweight"
-                                ? "bg-yellow-500/10 text-yellow-400"
-                                : "bg-red-500/10 text-red-400"
-                          }`}
+                              ? { background: "oklch(0.65 0.22 160 / 0.12)", color: "oklch(0.72 0.19 160)" }
+                              : bmiLabel === "Underweight" || bmiLabel === "Overweight"
+                                ? { background: "oklch(0.65 0.22 55 / 0.12)", color: "oklch(0.65 0.22 55)" }
+                                : { background: "oklch(0.55 0.2 25 / 0.12)", color: "oklch(0.65 0.2 25)" }
+                          }
                         >
                           {bmiLabel}
                         </span>
                       </span>
                     </div>
                   ) : (
-                    <div className="rounded-lg bg-surface-100/30 border border-surface-300/10 px-4 py-3 flex items-center justify-between opacity-50">
-                      <span className="text-xs text-surface-400 font-medium tracking-wide uppercase">
+                    <div
+                      className="rounded-lg px-4 py-3 flex items-center justify-between opacity-50"
+                      style={{ background: "oklch(0.22 0.015 260 / 0.4)", border: "1px solid oklch(0.28 0.015 260 / 0.3)" }}
+                    >
+                      <span className="text-xs text-[var(--muted-foreground)] font-medium tracking-wide uppercase">
                         BMI
                       </span>
-                      <span className="text-sm text-surface-400">---</span>
+                      <span className="text-sm text-[var(--muted-foreground)]">---</span>
                     </div>
                   )}
                 </div>
@@ -209,13 +214,13 @@ export default function ProfilePage() {
 
               {/* Card 2: Nutrition */}
               <div className="glass-card p-6 space-y-6 flex flex-col h-full">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <h3 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
                   🍽️ Nutrition Targets
                 </h3>
 
                 <div className="space-y-4 flex-grow">
                   <div>
-                    <label className="text-xs text-surface-400 block mb-1.5 flex lg:items-center justify-between">
+                    <label className="text-xs text-[var(--muted-foreground)] block mb-1.5 flex lg:items-center justify-between">
                       <span>TDEE</span>
                       <span className="text-[10px] opacity-60 hidden sm:inline">
                         (Total Daily Energy Exp.)
@@ -228,17 +233,17 @@ export default function ProfilePage() {
                         onChange={(e) =>
                           updateField("tdee", Number(e.target.value))
                         }
-                        className="glass-input w-full px-4 py-3 text-base text-white pr-14 focus:ring-chart-2/50 focus:border-chart-2/50"
+                        className="glass-input w-full px-4 py-3 text-base text-[var(--foreground)] pr-14"
                         min="0"
                         placeholder="2500"
                       />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-surface-400">
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-[var(--muted-foreground)]">
                         kcal
                       </span>
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-surface-400 block mb-1.5">
+                    <label className="text-xs text-[var(--muted-foreground)] block mb-1.5">
                       Daily Intended Calories
                     </label>
                     <div className="relative">
@@ -248,24 +253,24 @@ export default function ProfilePage() {
                         onChange={(e) =>
                           updateField("calories_intake", Number(e.target.value))
                         }
-                        className="glass-input w-full px-4 py-3 text-base text-white pr-14 focus:ring-chart-2/50 focus:border-chart-2/50"
+                        className="glass-input w-full px-4 py-3 text-base text-[var(--foreground)] pr-14"
                         min="0"
                         placeholder="2000"
                       />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-surface-400">
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-[var(--muted-foreground)]">
                         kcal
                       </span>
                     </div>
                   </div>
 
                   {/* Macro Targets */}
-                  <div className="pt-2 border-t border-surface-300/15">
-                    <p className="text-xs text-surface-400 font-medium uppercase tracking-wider mb-3">
+                  <div className="pt-2 border-t border-[var(--border)]/15">
+                    <p className="text-xs text-[var(--muted-foreground)] font-medium uppercase tracking-wider mb-3">
                       Daily Macro Targets
                     </p>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="text-xs text-emerald-400/70 block mb-1">
+                        <label className="text-xs block mb-1" style={{ color: "oklch(0.72 0.19 160 / 0.8)" }}>
                           Protein
                         </label>
                         <div className="relative">
@@ -278,17 +283,17 @@ export default function ProfilePage() {
                                 Number(e.target.value),
                               )
                             }
-                            className="glass-input w-full pl-2.5 py-2.5 text-sm text-white pr-6 focus:ring-chart-2/50 focus:border-chart-2/50"
+                            className="glass-input w-full pl-2.5 py-2.5 text-sm text-[var(--foreground)] pr-6"
                             min="0"
                             placeholder="158"
                           />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-400">
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[var(--muted-foreground)]">
                             g
                           </span>
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-amber-400/70 block mb-1">
+                        <label className="text-xs block mb-1" style={{ color: "oklch(0.65 0.22 55 / 0.8)" }}>
                           Carbs
                         </label>
                         <div className="relative">
@@ -301,17 +306,17 @@ export default function ProfilePage() {
                                 Number(e.target.value),
                               )
                             }
-                            className="glass-input w-full pl-2.5 py-2.5 text-sm text-white pr-6 focus:ring-chart-2/50 focus:border-chart-2/50"
+                            className="glass-input w-full pl-2.5 py-2.5 text-sm text-[var(--foreground)] pr-6"
                             min="0"
                             placeholder="305"
                           />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-400">
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[var(--muted-foreground)]">
                             g
                           </span>
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-rose-400/70 block mb-1">
+                        <label className="text-xs block mb-1" style={{ color: "oklch(0.65 0.2 330 / 0.8)" }}>
                           Fat
                         </label>
                         <div className="relative">
@@ -321,11 +326,11 @@ export default function ProfilePage() {
                             onChange={(e) =>
                               updateField("fat_target", Number(e.target.value))
                             }
-                            className="glass-input w-full pl-2.5 py-2.5 text-sm text-white pr-6 focus:ring-chart-2/50 focus:border-chart-2/50"
+                            className="glass-input w-full pl-2.5 py-2.5 text-sm text-[var(--foreground)] pr-6"
                             min="0"
                             placeholder="60"
                           />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-400">
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[var(--muted-foreground)]">
                             g
                           </span>
                         </div>
@@ -337,29 +342,36 @@ export default function ProfilePage() {
                 {/* Surplus/deficit indicator pinned to bottom */}
                 <div className="mt-auto pt-4">
                   {profile.tdee > 0 && profile.calories_intake > 0 ? (
-                    <div className="rounded-lg bg-surface-100/30 border border-surface-300/10 px-4 py-3 flex items-center justify-between">
-                      <span className="text-xs text-surface-400 font-medium tracking-wide uppercase">
+                    <div
+                      className="rounded-lg px-4 py-3 flex items-center justify-between"
+                      style={{ background: "oklch(0.22 0.015 260 / 0.4)", border: "1px solid oklch(0.28 0.015 260 / 0.3)" }}
+                    >
+                      <span className="text-xs text-[var(--muted-foreground)] font-medium tracking-wide uppercase">
                         {profile.calories_intake >= profile.tdee
                           ? "Surplus"
                           : "Deficit"}
                       </span>
                       <span
-                        className={`text-lg font-bold tabular-nums px-2 py-0.5 rounded ${
+                        className="text-lg font-bold tabular-nums px-2 py-0.5 rounded"
+                        style={
                           profile.calories_intake >= profile.tdee
-                            ? "text-chart-2 bg-chart-2/10"
-                            : "text-chart-4 bg-chart-4/10"
-                        }`}
+                            ? { color: "oklch(0.7 0.18 195)", background: "oklch(0.7 0.18 195 / 0.1)" }
+                            : { color: "oklch(0.65 0.22 55)", background: "oklch(0.65 0.22 55 / 0.1)" }
+                        }
                       >
                         {profile.calories_intake >= profile.tdee ? "+" : ""}
                         {profile.calories_intake - profile.tdee} kcal
                       </span>
                     </div>
                   ) : (
-                    <div className="rounded-lg bg-surface-100/30 border border-surface-300/10 px-4 py-3 flex items-center justify-between opacity-50">
-                      <span className="text-xs text-surface-400 font-medium tracking-wide uppercase">
+                    <div
+                      className="rounded-lg px-4 py-3 flex items-center justify-between opacity-50"
+                      style={{ background: "oklch(0.22 0.015 260 / 0.4)", border: "1px solid oklch(0.28 0.015 260 / 0.3)" }}
+                    >
+                      <span className="text-xs text-[var(--muted-foreground)] font-medium tracking-wide uppercase">
                         Target
                       </span>
-                      <span className="text-sm text-surface-400">---</span>
+                      <span className="text-sm text-[var(--muted-foreground)]">---</span>
                     </div>
                   )}
                 </div>
@@ -372,7 +384,7 @@ export default function ProfilePage() {
                 type="button"
                 onClick={saveProfile}
                 disabled={isSaving || !isDirty}
-                className="btn-primary w-full md:w-auto md:min-w-[200px] text-base px-8 py-3 flex items-center justify-center gap-2 mx-auto shadow-xl shadow-accent-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary w-full md:w-auto md:min-w-[200px] text-base px-8 py-3 flex items-center justify-center gap-2 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? (
                   <>
@@ -395,7 +407,7 @@ export default function ProfilePage() {
 
             {/* Push Notifications Settings */}
             <div className="glass-card p-6 space-y-4">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <h3 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
                 🔔 Settings
               </h3>
               <PushNotificationToggle />
@@ -405,18 +417,22 @@ export default function ProfilePage() {
             <div className="pt-6">
               {/* Chart Header w/ Range Selector */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 px-1">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <h3 className="text-xl font-bold text-[var(--foreground)] flex items-center gap-2">
                   ⚖️ Bodyweight Trend
                 </h3>
                 <Select value={selectedRange} onValueChange={setSelectedRange}>
-                  <SelectTrigger className="w-full sm:w-[160px] glass-input bg-surface-100/50">
+                  <SelectTrigger className="w-full sm:w-[160px] glass-input text-[var(--foreground)]">
                     <SelectValue placeholder="Time Range" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-[var(--card)] border-[var(--border)]">
                     {TIME_RANGES.filter((r) =>
                       ["7", "30", "90", "180", "0"].includes(r.value),
                     ).map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
+                      <SelectItem
+                        key={r.value}
+                        value={r.value}
+                        className="text-[var(--foreground)] hover:bg-[var(--accent)] focus:bg-[var(--accent)]"
+                      >
                         {r.label}
                       </SelectItem>
                     ))}
@@ -431,8 +447,8 @@ export default function ProfilePage() {
                   </p>
                 </div>
               ) : (
-                <Card className="bg-[var(--card)] border-[var(--border)]">
-                  <CardContent className="pt-6">
+                <div className="glass-card">
+                  <div className="px-6 pt-6 pb-6">
                     <div className="h-72">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={bodyweights}>
@@ -478,8 +494,8 @@ export default function ProfilePage() {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               )}
             </div>
           </div>

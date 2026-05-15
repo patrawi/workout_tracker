@@ -20,21 +20,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
 import { VolumeChart } from "@/components/VolumeChart";
 import { useAnalyticsData } from "@/features/analytics/hooks/useAnalyticsData";
 import { TIME_RANGES } from "@/lib/constants";
@@ -108,7 +93,7 @@ export default function AnalyticsPage() {
                 {/* Header */}
                 <header className="pt-4 pb-6 flex items-center justify-between flex-wrap gap-4">
                     <div>
-                        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-gradient">
+                        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[var(--foreground)]">
                             Analytics
                         </h1>
                     </div>
@@ -121,7 +106,7 @@ export default function AnalyticsPage() {
                         value={selectedExercise}
                         onValueChange={setSelectedExercise}
                     >
-                        <SelectTrigger className="w-64 bg-[var(--card)] border-[var(--border)] text-white">
+                        <SelectTrigger className="w-64 bg-[var(--card)] border-[var(--border)] text-[var(--foreground)]">
                             <SelectValue placeholder="Select exercise…" />
                         </SelectTrigger>
                         <SelectContent className="bg-[var(--card)] border-[var(--border)]">
@@ -129,7 +114,7 @@ export default function AnalyticsPage() {
                                 <SelectItem
                                     key={ex}
                                     value={ex}
-                                    className="text-white hover:bg-[var(--accent)] focus:bg-[var(--accent)]"
+                                    className="text-[var(--foreground)] hover:bg-[var(--accent)] focus:bg-[var(--accent)]"
                                 >
                                     {ex}
                                 </SelectItem>
@@ -138,7 +123,7 @@ export default function AnalyticsPage() {
                     </Select>
 
                     <Select value={selectedRange} onValueChange={setSelectedRange}>
-                        <SelectTrigger className="w-44 bg-[var(--card)] border-[var(--border)] text-white">
+                        <SelectTrigger className="w-44 bg-[var(--card)] border-[var(--border)] text-[var(--foreground)]">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="bg-[var(--card)] border-[var(--border)]">
@@ -146,7 +131,7 @@ export default function AnalyticsPage() {
                                 <SelectItem
                                     key={r.value}
                                     value={r.value}
-                                    className="text-white hover:bg-[var(--accent)] focus:bg-[var(--accent)]"
+                                    className="text-[var(--foreground)] hover:bg-[var(--accent)] focus:bg-[var(--accent)]"
                                 >
                                     {r.label}
                                 </SelectItem>
@@ -159,7 +144,7 @@ export default function AnalyticsPage() {
                 {exercises.length === 0 && !isLoading ? (
                     <div className="glass-card p-12 text-center animate-fade-in">
                         <div className="text-5xl mb-4 text-[var(--muted-foreground)]">📊</div>
-                        <h3 className="text-lg font-semibold text-white mb-2">
+                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">
                             No data yet
                         </h3>
                         <p className="text-[var(--muted-foreground)] max-w-sm mx-auto mb-4">
@@ -174,66 +159,36 @@ export default function AnalyticsPage() {
                     <>
                         {/* KPI Quick Stats */}
                         <section className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8 animate-slide-up">
-                            <Card className="bg-[var(--card)] border-[var(--border)]">
-                                <CardHeader className="pb-2 pt-4 px-4">
-                                    <CardDescription className="text-xs">
-                                        Max Weight
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="px-4 pb-4">
-                                    <div className="text-2xl font-bold text-white tabular-nums">
-                                        {kpis.maxWeight}
-                                        <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">
-                                            kg
-                                        </span>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <div className="glass-card px-4 pt-4 pb-4">
+                                <p className="text-xs text-[var(--muted-foreground)] mb-2">Max Weight</p>
+                                <div className="stat-value text-2xl">
+                                    {kpis.maxWeight}
+                                    <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">kg</span>
+                                </div>
+                            </div>
 
-                            <Card className="bg-[var(--card)] border-[var(--border)]">
-                                <CardHeader className="pb-2 pt-4 px-4">
-                                    <CardDescription className="text-xs">
-                                        Est. 1RM
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="px-4 pb-4">
-                                    <div className="text-2xl font-bold text-white tabular-nums">
-                                        {kpis.e1rm}
-                                        <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">
-                                            kg
-                                        </span>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <div className="glass-card px-4 pt-4 pb-4">
+                                <p className="text-xs text-[var(--muted-foreground)] mb-2">Est. 1RM</p>
+                                <div className="stat-value text-2xl">
+                                    {kpis.e1rm}
+                                    <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">kg</span>
+                                </div>
+                            </div>
 
-                            <Card className="bg-[var(--card)] border-[var(--border)]">
-                                <CardHeader className="pb-2 pt-4 px-4">
-                                    <CardDescription className="text-xs">
-                                        Max Volume
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="px-4 pb-4">
-                                    <div className="text-2xl font-bold text-white tabular-nums">
-                                        {kpis.maxVolume.toLocaleString()}
-                                        <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">
-                                            kg
-                                        </span>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <div className="glass-card px-4 pt-4 pb-4">
+                                <p className="text-xs text-[var(--muted-foreground)] mb-2">Max Volume</p>
+                                <div className="stat-value text-2xl">
+                                    {kpis.maxVolume.toLocaleString()}
+                                    <span className="text-sm font-normal text-[var(--muted-foreground)] ml-1">kg</span>
+                                </div>
+                            </div>
 
-                            <Card className="bg-[var(--card)] border-[var(--border)]">
-                                <CardHeader className="pb-2 pt-4 px-4">
-                                    <CardDescription className="text-xs">
-                                        Sessions
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="px-4 pb-4">
-                                    <div className="text-2xl font-bold text-white tabular-nums">
-                                        {kpis.totalSessions}
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <div className="glass-card px-4 pt-4 pb-4">
+                                <p className="text-xs text-[var(--muted-foreground)] mb-2">Sessions</p>
+                                <div className="stat-value text-2xl">
+                                    {kpis.totalSessions}
+                                </div>
+                            </div>
                         </section>
 
                         {/* Muscle Group Volume Chart (Independent of chosen exercise) */}
@@ -250,7 +205,7 @@ export default function AnalyticsPage() {
                             <div className="glass-card p-12 text-center animate-fade-in">
                                 <p className="text-[var(--muted-foreground)]">
                                     No data for{" "}
-                                    <span className="text-white font-medium">
+                                    <span className="text-[var(--foreground)] font-medium">
                                         {selectedExercise}
                                     </span>{" "}
                                     in this time range.
@@ -259,17 +214,17 @@ export default function AnalyticsPage() {
                         ) : (
                             <div className="space-y-6">
                                 {/* Chart 1: Absolute Strength (Line) */}
-                                <Card className="bg-[var(--card)] border-[var(--border)] animate-slide-up">
-                                    <CardHeader>
-                                        <CardTitle className="text-white text-lg flex items-center gap-2">
+                                <div className="glass-card animate-slide-up">
+                                    <div className="px-6 pt-6 pb-2">
+                                        <h2 className="text-lg font-semibold text-[var(--foreground)] flex items-center gap-2">
                                             <TrendingUp className="w-4 h-4" />
                                             Absolute Strength
-                                        </CardTitle>
-                                        <CardDescription>
+                                        </h2>
+                                        <p className="text-sm text-[var(--muted-foreground)] mt-1">
                                             Max weight lifted per session over time
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
+                                        </p>
+                                    </div>
+                                    <div className="px-6 pb-6">
                                         <div className="h-72">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <LineChart data={strengthData}>
@@ -309,24 +264,24 @@ export default function AnalyticsPage() {
                                                 </LineChart>
                                             </ResponsiveContainer>
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
 
                                 {/* Chart 2: Volume (Bar) */}
-                                <Card
-                                    className="bg-[var(--card)] border-[var(--border)] animate-slide-up"
+                                <div
+                                    className="glass-card animate-slide-up"
                                     style={{ animationDelay: "60ms" }}
                                 >
-                                    <CardHeader>
-                                        <CardTitle className="text-white text-lg flex items-center gap-2">
+                                    <div className="px-6 pt-6 pb-2">
+                                        <h2 className="text-lg font-semibold text-[var(--foreground)] flex items-center gap-2">
                                             <BarChartIcon className="w-4 h-4" />
                                             Hypertrophy & Workload
-                                        </CardTitle>
-                                        <CardDescription>
+                                        </h2>
+                                        <p className="text-sm text-[var(--muted-foreground)] mt-1">
                                             Total volume (weight × reps) per session
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
+                                        </p>
+                                    </div>
+                                    <div className="px-6 pb-6">
                                         <div className="h-72">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart data={volumeData}>
@@ -359,25 +314,25 @@ export default function AnalyticsPage() {
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
 
                                 {/* Chart 3: Effort vs Weight (Composed) */}
-                                <Card
-                                    className="bg-[var(--card)] border-[var(--border)] animate-slide-up"
+                                <div
+                                    className="glass-card animate-slide-up"
                                     style={{ animationDelay: "120ms" }}
                                 >
-                                    <CardHeader>
-                                        <CardTitle className="text-white text-lg flex items-center gap-2">
+                                    <div className="px-6 pt-6 pb-2">
+                                        <h2 className="text-lg font-semibold text-[var(--foreground)] flex items-center gap-2">
                                             <Brain className="w-4 h-4" />
                                             Effort vs. Weight
-                                        </CardTitle>
-                                        <CardDescription>
+                                        </h2>
+                                        <p className="text-sm text-[var(--muted-foreground)] mt-1">
                                             RPE (shaded area) overlaid on weight (line) — getting
                                             stronger means same weight, lower RPE
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
+                                        </p>
+                                    </div>
+                                    <div className="px-6 pb-6">
                                         <div className="h-72">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <ComposedChart data={effortData}>
@@ -438,53 +393,47 @@ export default function AnalyticsPage() {
                                                 </ComposedChart>
                                             </ResponsiveContainer>
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
 
                                 {/* Recent Notes Table */}
                                 {notes.length > 0 ? (
-                                    <Card
-                                        className="bg-[var(--card)] border-[var(--border)] animate-slide-up"
+                                    <div
+                                        className="glass-card animate-slide-up"
                                         style={{ animationDelay: "180ms" }}
                                     >
-                                        <CardHeader>
-                                            <CardTitle className="text-white text-lg flex items-center gap-2">
+                                        <div className="px-6 pt-6 pb-2">
+                                            <h2 className="text-lg font-semibold text-[var(--foreground)] flex items-center gap-2">
                                                 <FileText className="w-4 h-4" />
                                                 Recent Notes
-                                            </CardTitle>
-                                            <CardDescription>
+                                            </h2>
+                                            <p className="text-sm text-[var(--muted-foreground)] mt-1">
                                                 Your Thai & English comments from recent sessions
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow className="border-[var(--border)]">
-                                                        <TableHead className="text-[var(--muted-foreground)]">
-                                                            Date
-                                                        </TableHead>
-                                                        <TableHead className="text-[var(--muted-foreground)]">
-                                                            Weight
-                                                        </TableHead>
-                                                        <TableHead className="text-[var(--muted-foreground)]">
-                                                            Notes
-                                                        </TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
+                                            </p>
+                                        </div>
+                                        <div className="px-6 pb-6">
+                                            <table className="w-full">
+                                                <thead>
+                                                    <tr className="border-b border-[var(--border)]">
+                                                        <th className="text-left text-xs font-medium text-[var(--muted-foreground)] pb-3 pr-4">Date</th>
+                                                        <th className="text-left text-xs font-medium text-[var(--muted-foreground)] pb-3 pr-4">Weight</th>
+                                                        <th className="text-left text-xs font-medium text-[var(--muted-foreground)] pb-3">Notes</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
                                                     {notes.map((n) => (
-                                                        <TableRow
+                                                        <tr
                                                             key={n.id}
-                                                            className="border-[var(--border)] hover:bg-[var(--accent)]/50"
+                                                            className="border-b border-[var(--border)]/50 last:border-0 hover:bg-[var(--accent)]/30 transition-colors"
                                                         >
-                                                            <TableCell className="text-sm text-[var(--muted-foreground)] whitespace-nowrap">
+                                                            <td className="text-sm text-[var(--muted-foreground)] whitespace-nowrap py-3 pr-4">
                                                                 {formatDateTime(n.created_at)}
-                                                            </TableCell>
-                                                            <TableCell className="text-sm text-white font-medium tabular-nums whitespace-nowrap">
+                                                            </td>
+                                                            <td className="text-sm text-[var(--foreground)] font-medium tabular-nums whitespace-nowrap py-3 pr-4">
                                                                 {n.weight}kg × {n.reps}
                                                                 {n.rpe > 0 ? ` @${n.rpe}` : ""}
-                                                            </TableCell>
-                                                            <TableCell className="text-sm">
+                                                            </td>
+                                                            <td className="text-sm py-3">
                                                                 {n.notes_thai ? (
                                                                     <span className="text-[var(--chart-4)] block">
                                                                         🇹🇭 {n.notes_thai}
@@ -495,13 +444,13 @@ export default function AnalyticsPage() {
                                                                         🇬🇧 {n.notes_english}
                                                                     </span>
                                                                 ) : null}
-                                                            </TableCell>
-                                                        </TableRow>
+                                                            </td>
+                                                        </tr>
                                                     ))}
-                                                </TableBody>
-                                            </Table>
-                                        </CardContent>
-                                    </Card>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 ) : null}
                             </div>
                         )}

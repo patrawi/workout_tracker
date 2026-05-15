@@ -73,7 +73,8 @@ export default function ReviewModal({
         >
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+                className="absolute inset-0 backdrop-blur-sm animate-fade-in"
+                style={{ background: "oklch(0.05 0.005 260 / 0.7)" }}
                 onClick={onCancel}
                 aria-hidden="true"
             />
@@ -87,7 +88,7 @@ export default function ReviewModal({
                 <div className="p-6 pb-4 border-b border-surface-300/30">
                     <div className="flex items-center justify-between mb-2">
                         <div>
-                            <h2 className="text-xl font-bold text-white">
+                            <h2 className="text-xl font-bold text-[var(--foreground)]">
                                 Review AI Output
                             </h2>
                             <p className="text-sm text-surface-400 mt-1">
@@ -98,7 +99,7 @@ export default function ReviewModal({
                         <button
                             type="button"
                             onClick={onCancel}
-                            className="text-surface-400 hover:text-white transition-colors text-xl px-2 py-1 rounded-lg hover:bg-surface-200/50"
+                            className="text-surface-400 hover:text-[var(--foreground)] transition-colors rounded-lg hover:bg-surface-200/50 w-11 h-11 flex items-center justify-center"
                             aria-label="Close review modal"
                         >
                             ✕
@@ -127,7 +128,7 @@ export default function ReviewModal({
                                     onChange={(e) =>
                                         updateItem(i, "exercise_name", e.target.value)
                                     }
-                                    className="glass-input flex-1 px-3 py-1.5 text-sm text-white font-medium"
+                                    className="glass-input flex-1 px-3 py-1.5 text-sm text-[var(--foreground)] font-medium"
                                     aria-label={`Exercise name for set ${i + 1}`}
                                 />
                                 <button
@@ -152,7 +153,7 @@ export default function ReviewModal({
                                         onChange={(e) =>
                                             updateItem(i, "weight", Number(e.target.value))
                                         }
-                                        className="glass-input w-full px-3 py-1.5 text-sm text-white font-variant-numeric tabular-nums"
+                                        className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)] tabular-nums"
                                         step="0.5"
                                         min="0"
                                         disabled={item.is_bodyweight && item.weight === 0}
@@ -169,7 +170,7 @@ export default function ReviewModal({
                                         onChange={(e) =>
                                             updateItem(i, "reps", Number(e.target.value))
                                         }
-                                        className="glass-input w-full px-3 py-1.5 text-sm text-white"
+                                        className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
                                         min="0"
                                     />
                                 </div>
@@ -183,7 +184,7 @@ export default function ReviewModal({
                                         onChange={(e) =>
                                             updateItem(i, "rpe", Number(e.target.value))
                                         }
-                                        className="glass-input w-full px-3 py-1.5 text-sm text-white"
+                                        className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
                                         min="0"
                                         max="10"
                                     />
@@ -217,7 +218,7 @@ export default function ReviewModal({
                                                 onChange={(e) =>
                                                     updateItem(i, "variant_details", e.target.value)
                                                 }
-                                                className="glass-input flex-1 px-3 py-1 text-xs text-white"
+                                                className="glass-input flex-1 px-3 py-1 text-xs text-[var(--foreground)]"
                                             />
                                         </div>
                                     ) : null}
@@ -260,30 +261,30 @@ export default function ReviewModal({
                         Additional Activities
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-white transition-colors cursor-pointer select-none">
+                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-[var(--foreground)] transition-colors cursor-pointer select-none">
                             <input
                                 type="checkbox"
                                 checked={walked10k}
                                 onChange={(e) => setWalked10k(e.target.checked)}
-                                className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                                className="w-4 h-4 rounded border-white/20 bg-[var(--color-surface-200)] text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
                             />
                             10K Steps
                         </label>
-                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-white transition-colors cursor-pointer select-none">
+                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-[var(--foreground)] transition-colors cursor-pointer select-none">
                             <input
                                 type="checkbox"
                                 checked={didLiss}
                                 onChange={(e) => setDidLiss(e.target.checked)}
-                                className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                                className="w-4 h-4 rounded border-white/20 bg-[var(--color-surface-200)] text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
                             />
                             LISS Cardio
                         </label>
-                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-white transition-colors cursor-pointer select-none">
+                        <label className="flex items-center gap-2 text-sm text-surface-400 hover:text-[var(--foreground)] transition-colors cursor-pointer select-none">
                             <input
                                 type="checkbox"
                                 checked={didStretch}
                                 onChange={(e) => setDidStretch(e.target.checked)}
-                                className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                                className="w-4 h-4 rounded border-white/20 bg-[var(--color-surface-200)] text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
                             />
                             Stretching
                         </label>
@@ -293,7 +294,7 @@ export default function ReviewModal({
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Optional notes (e.g. massage, sauna)..."
-                        className="glass-input w-full px-3 py-1.5 text-sm text-white mt-3"
+                        className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)] mt-3"
                     />
                 </div>
 

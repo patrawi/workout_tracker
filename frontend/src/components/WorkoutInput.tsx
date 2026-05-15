@@ -52,7 +52,7 @@ export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestD
 
     return (
         <section aria-label="Workout input">
-            <div className="glass-card p-3 animate-slide-up flex flex-col gap-3 focus-within:ring-2 focus-within:ring-[var(--accent-400)] transition-shadow">
+            <div className="glass-card p-3 animate-slide-up flex flex-col gap-3 focus-within:ring-2 focus-within:ring-[var(--color-accent-400)] transition-shadow">
                 <textarea
                     ref={textareaRef}
                     id="workout-input"
@@ -63,11 +63,11 @@ export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestD
                     disabled={isLoading}
                     autoComplete="off"
                     spellCheck={false}
-                    className="w-full px-3 py-2 text-base text-white placeholder:text-[var(--muted-foreground)] resize-none bg-transparent outline-none max-h-[200px] overflow-y-auto"
+                    className="w-full px-3 py-2 text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] resize-none bg-transparent outline-none max-h-[200px] overflow-y-auto"
                     style={{ minHeight: "24px" }}
                 />
 
-                            <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
+                <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
                     {/* Compact Date Picker */}
                     <div className="relative group">
                         <input
@@ -75,7 +75,7 @@ export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestD
                             type="datetime-local"
                             value={workoutDate}
                             onChange={(e) => setWorkoutDate(e.target.value)}
-                            className="bg-transparent text-xs text-[var(--muted-foreground)] hover:text-white px-2 py-1 rounded cursor-pointer transition-colors outline-none focus:ring-1 focus:ring-[var(--accent-400)]"
+                            className="bg-transparent text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] px-2 py-1 rounded cursor-pointer transition-colors outline-none focus:ring-1 focus:ring-[var(--color-accent-400)]"
                         />
                     </div>
 
@@ -87,9 +87,13 @@ export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestD
                                 onClick={onRestDay}
                                 className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
                                     showRestDay
-                                        ? "bg-purple-500/20 text-purple-300"
-                                        : "text-[var(--muted-foreground)] hover:text-white hover:bg-white/10"
+                                        ? ""
+                                        : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--color-surface-200)]"
                                 }`}
+                                style={showRestDay ? {
+                                    background: "oklch(0.45 0.15 280 / 0.2)",
+                                    color: "oklch(0.65 0.2 290)",
+                                } : undefined}
                                 title="Log Rest Day"
                             >
                                 <Moon className="w-3.5 h-3.5" />
@@ -97,18 +101,19 @@ export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestD
                             </button>
                         )}
 
-                        {/* Submit Button */}
+                        {/* Submit Button — 44px tap target */}
                         <button
                             type="button"
                             onClick={handleSubmit}
                             disabled={!text.trim() || isLoading}
-                            className="flex items-center justify-center bg-[var(--chart-1)] hover:bg-[var(--chart-1)]/90 text-white p-2 w-8 h-8 rounded-lg outline-none transition-all disabled:opacity-50 disabled:hover:bg-[var(--chart-1)] shadow-[0_0_15px_rgba(var(--chart-1),0.4)] disabled:shadow-none"
+                            className="flex items-center justify-center bg-[var(--color-accent-500)] hover:bg-[var(--color-accent-400)] text-[oklch(0.13_0.01_260)] w-11 h-11 rounded-xl outline-none transition-all disabled:opacity-50 disabled:shadow-none"
+                            style={{ boxShadow: !text.trim() || isLoading ? "none" : "0 0 15px oklch(0.65 0.22 160 / 0.35)" }}
                             aria-label="Log Workout"
                             title="Press Enter to submit"
                         >
                             {isLoading ? (
                                 <span
-                                    className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                                    className="inline-block w-4 h-4 border-2 border-current/30 border-t-current rounded-full"
                                     style={{ animation: "spin 0.6s linear infinite" }}
                                     aria-hidden="true"
                                 />

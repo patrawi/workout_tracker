@@ -40,7 +40,7 @@ export default function RestDayForm({ onSubmit, isLoading }: RestDayFormProps) {
         <form onSubmit={handleSubmit} className="glass-card p-4 lg:p-5 mt-4 animate-slide-up" aria-label="Rest day input">
             <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-2">
                         <span>🧘</span> Active Recovery Day
                     </h3>
                     <input
@@ -49,38 +49,38 @@ export default function RestDayForm({ onSubmit, isLoading }: RestDayFormProps) {
                         onChange={(e) => setDate(e.target.value)}
                         required
                         disabled={isLoading}
-                        className="bg-black/20 text-xs text-white px-2 py-1 rounded outline-none border border-white/10 hover:border-white/20 transition-colors focus:ring-1 focus:ring-[var(--accent-400)]"
+                        className="bg-[var(--color-surface-200)] text-xs text-[var(--foreground)] px-2 py-1 rounded-md outline-none border border-[var(--border)] hover:border-[var(--color-surface-400)] transition-colors focus:ring-1 focus:ring-[var(--color-accent-400)]"
                     />
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-white transition-colors cursor-pointer select-none">
+                    <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer select-none">
                         <input
                             type="checkbox"
                             checked={walked10k}
                             onChange={(e) => setWalked10k(e.target.checked)}
                             disabled={isLoading}
-                            className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                            className="w-4 h-4 rounded border-white/20 bg-[var(--color-surface-200)] text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
                         />
                         10K Steps 🚶
                     </label>
-                    <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-white transition-colors cursor-pointer select-none">
+                    <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer select-none">
                         <input
                             type="checkbox"
                             checked={didLiss}
                             onChange={(e) => setDidLiss(e.target.checked)}
                             disabled={isLoading}
-                            className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                            className="w-4 h-4 rounded border-white/20 bg-[var(--color-surface-200)] text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
                         />
                         LISS Cardio 🏃
                     </label>
-                    <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-white transition-colors cursor-pointer select-none">
+                    <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer select-none">
                         <input
                             type="checkbox"
                             checked={didStretch}
                             onChange={(e) => setDidStretch(e.target.checked)}
                             disabled={isLoading}
-                            className="w-4 h-4 rounded border-white/20 bg-black/20 text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
+                            className="w-4 h-4 rounded border-white/20 bg-[var(--color-surface-200)] text-[var(--chart-1)] focus:ring-[var(--chart-1)]"
                         />
                         Stretching 🧎
                     </label>
@@ -93,12 +93,12 @@ export default function RestDayForm({ onSubmit, isLoading }: RestDayFormProps) {
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Optional notes (e.g. massage, sauna)..."
                         disabled={isLoading}
-                        className="flex-1 bg-transparent text-sm text-white placeholder:text-[var(--muted-foreground)] outline-none border-b border-transparent focus:border-white/20 transition-colors"
+                        className="glass-input flex-1 px-3 py-1.5 text-sm text-[var(--foreground)]"
                     />
                     <button
                         type="submit"
                         disabled={isLoading || !date}
-                        className="bg-[var(--chart-1)] hover:bg-[var(--chart-1)]/90 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                        className="btn-primary text-sm"
                     >
                         {isLoading ? "Saving..." : "Log Rest Day"}
                     </button>

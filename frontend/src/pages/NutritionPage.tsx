@@ -33,7 +33,10 @@ function DeltaBadge({ current, previous, unit }: { current: number; previous: nu
     }
 
     return (
-        <span className={`text-[10px] tabular-nums inline-flex items-center gap-0.5 ${isUp ? "text-emerald-400" : "text-red-400"}`}>
+        <span
+            className="text-[10px] tabular-nums inline-flex items-center gap-0.5"
+            style={{ color: isUp ? "oklch(0.72 0.19 160)" : "oklch(0.65 0.2 25)" }}
+        >
             {isUp ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
             {Math.abs(delta).toFixed(1)}{unit} ({pct}%)
         </span>
@@ -58,24 +61,29 @@ function MacroProgressBar({
     const percentage = target > 0 ? (current / target) * 100 : 0;
     const clampedWidth = Math.min(percentage, 100);
     const ratio = target > 0 ? current / target : 0;
+
+    // System OKLCH status colors
     const statusColor =
         ratio >= 0.9 && ratio <= 1.1
-            ? "text-emerald-400"
+            ? "oklch(0.72 0.19 160)"    // on-target: system emerald
             : ratio >= 0.75 && ratio <= 1.25
-              ? "text-amber-400"
-              : "text-red-400";
+              ? "oklch(0.65 0.22 55)"   // close: system amber
+              : "oklch(0.65 0.2 25)";  // off: system destructive-adjacent
 
     return (
         <div>
             <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
+                <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">
                     {label}
                 </span>
                 <div className="flex items-center gap-2">
-                    <span className={`text-sm font-semibold tabular-nums ${target > 0 ? statusColor : "text-surface-400"}`}>
+                    <span
+                        className="text-sm font-semibold tabular-nums"
+                        style={{ color: target > 0 ? statusColor : "var(--muted-foreground)" }}
+                    >
                         {current.toFixed(1)}
                         {target > 0 && (
-                            <span className="text-surface-400 font-normal">
+                            <span className="text-[var(--muted-foreground)] font-normal">
                                 {" "}/ {target}g
                             </span>
                         )}
@@ -98,7 +106,7 @@ function MacroProgressBar({
             </div>
             {target > 0 && (
                 <div className="text-right mt-0.5">
-                    <span className="text-[10px] text-surface-400 tabular-nums">
+                    <span className="text-[10px] text-[var(--muted-foreground)] tabular-nums">
                         {percentage.toFixed(0)}%
                     </span>
                 </div>
@@ -218,21 +226,28 @@ export default function NutritionPage() {
                 <header className="pt-10 pb-6">
                     <Link
                         to="/"
-                        className="text-sm text-[var(--muted-foreground)] hover:text-white transition-colors mb-2 inline-flex items-center gap-1"
+                        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors mb-2 inline-flex items-center gap-1"
                     >
                         ← Back to Tracker
                     </Link>
-                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-gradient">
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[var(--foreground)]">
                         Nutrition Log
                     </h1>
-                    <p className="text-surface-400 text-sm mt-2">
+                    <p className="text-[var(--muted-foreground)] text-sm mt-2">
                         Paste your food notes — AI parses macros from labels and estimates the rest.
                     </p>
                 </header>
 
                 {/* Error banner */}
                 {error && (
-                    <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm animate-fade-in">
+                    <div
+                        className="mb-4 p-3 rounded-xl text-sm animate-fade-in"
+                        style={{
+                            background: "oklch(0.55 0.2 25 / 0.1)",
+                            border: "1px solid oklch(0.55 0.2 25 / 0.3)",
+                            color: "oklch(0.75 0.15 25)",
+                        }}
+                    >
                         {error}
                     </div>
                 )}
@@ -241,7 +256,7 @@ export default function NutritionPage() {
                 <div className="animate-slide-up space-y-6">
                     {/* Input Section */}
                     <section aria-label="Nutrition input">
-                        <div className="glass-card p-3 flex flex-col gap-3 focus-within:ring-2 focus-within:ring-[var(--accent-400)] transition-shadow">
+                        <div className="glass-card p-3 flex flex-col gap-3 focus-within:ring-2 focus-within:ring-[var(--color-accent-400)] transition-shadow">
                             <textarea
                                 ref={textareaRef}
                                 id="nutrition-input"
@@ -252,7 +267,7 @@ export default function NutritionPage() {
                                 disabled={isParsing}
                                 autoComplete="off"
                                 spellCheck={false}
-                                className="w-full px-3 py-2 text-base text-white placeholder:text-[var(--muted-foreground)] resize-none bg-transparent outline-none max-h-[200px] overflow-y-auto"
+                                className="w-full px-3 py-2 text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] resize-none bg-transparent outline-none max-h-[200px] overflow-y-auto"
                                 style={{ minHeight: "72px" }}
                             />
 
@@ -264,22 +279,23 @@ export default function NutritionPage() {
                                         type="date"
                                         value={selectedDate}
                                         onChange={(e) => setSelectedDate(e.target.value)}
-                                        className="bg-transparent text-xs text-[var(--muted-foreground)] hover:text-white px-2 py-1 rounded cursor-pointer transition-colors outline-none focus:ring-1 focus:ring-[var(--accent-400)]"
+                                        className="bg-transparent text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] px-2 py-1 rounded cursor-pointer transition-colors outline-none focus:ring-1 focus:ring-[var(--color-accent-400)]"
                                     />
                                 </div>
 
-                                {/* Submit button */}
+                                {/* Submit button — 44px tap target */}
                                 <button
                                     type="button"
                                     onClick={handleSubmit}
                                     disabled={!text.trim() || isParsing}
-                                    className="flex items-center justify-center bg-[var(--chart-1)] hover:bg-[var(--chart-1)]/90 text-white p-2 w-8 h-8 rounded-lg outline-none transition-all disabled:opacity-50 disabled:hover:bg-[var(--chart-1)] shadow-[0_0_15px_rgba(var(--chart-1),0.4)] disabled:shadow-none"
+                                    className="flex items-center justify-center bg-[var(--color-accent-500)] hover:bg-[var(--color-accent-400)] text-[oklch(0.13_0.01_260)] w-11 h-11 rounded-xl outline-none transition-all disabled:opacity-50 disabled:shadow-none"
+                                    style={{ boxShadow: !text.trim() || isParsing ? "none" : "0 0 15px oklch(0.65 0.22 160 / 0.35)" }}
                                     aria-label="Parse Nutrition"
                                     title="Press Enter to parse"
                                 >
                                     {isParsing ? (
                                         <span
-                                            className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                                            className="inline-block w-4 h-4 border-2 border-current/30 border-t-current rounded-full"
                                             style={{ animation: "spin 0.6s linear infinite" }}
                                             aria-hidden="true"
                                         />
@@ -301,15 +317,15 @@ export default function NutritionPage() {
                         <section aria-label="Daily macro summary" className="animate-slide-up">
                             <div className="glass-card p-6 space-y-5">
                                 <div className="flex items-center justify-between">
-                                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <h2 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
                                         <CalendarDays className="w-4 h-4" />
                                         Daily Summary
                                     </h2>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-2xl font-bold text-white tabular-nums">
+                                        <span className="stat-value text-2xl">
                                             {summary.totalCalories.toFixed(0)}
                                         </span>
-                                        <span className="text-xs text-surface-400">kcal</span>
+                                        <span className="text-xs text-[var(--muted-foreground)]">kcal</span>
                                         <DeltaBadge current={summary.totalCalories} previous={yesterdaySummary.totalCalories} unit="" />
                                     </div>
                                 </div>
@@ -366,7 +382,7 @@ export default function NutritionPage() {
                     ) : items.length > 0 ? (
                         <section aria-label="Food items breakdown" className="animate-slide-up space-y-4">
                             <div className="flex items-center justify-between px-1">
-                                <h2 className="text-lg font-bold text-white">
+                                <h2 className="text-lg font-bold text-[var(--foreground)]">
                                     Food Log
                                 </h2>
                                 <button
@@ -376,7 +392,10 @@ export default function NutritionPage() {
                                             deleteDay();
                                         }
                                     }}
-                                    className="text-xs text-red-400/60 hover:text-red-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-500/10 flex items-center gap-1"
+                                    className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+                                    style={{ color: "oklch(0.55 0.2 25 / 0.7)" }}
+                                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "oklch(0.65 0.2 25)"; (e.currentTarget as HTMLElement).style.background = "oklch(0.55 0.2 25 / 0.1)"; }}
+                                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "oklch(0.55 0.2 25 / 0.7)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                                 >
                                     <Trash2 className="w-3 h-3" />
                                     Clear Day
@@ -396,10 +415,10 @@ export default function NutritionPage() {
                     ) : (
                         <div className="glass-card p-12 text-center animate-slide-up">
                             <p className="text-4xl mb-3 text-[var(--muted-foreground)]">🥗</p>
-                            <p className="text-surface-400">
+                            <p className="text-[var(--muted-foreground)]">
                                 No food logged for this date.
                             </p>
-                            <p className="text-surface-400/60 text-sm mt-1">
+                            <p className="text-[var(--muted-foreground)] opacity-60 text-sm mt-1">
                                 Paste your food notes above to get started.
                             </p>
                         </div>
@@ -502,72 +521,76 @@ function MealGroup({
     return (
         <div className="glass-card overflow-hidden">
             {/* Meal header */}
-            <div className="px-5 py-3 border-b border-surface-300/20 flex items-center justify-between">
+            <div className="px-5 py-3 border-b border-[var(--border)]/20 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[var(--muted-foreground)] bg-white/5 rounded-md w-5 h-5 flex items-center justify-center">
+                    <span
+                        className="text-xs font-bold text-[var(--muted-foreground)] rounded-md w-5 h-5 flex items-center justify-center"
+                        style={{ background: "oklch(0.22 0.015 260)" }}
+                    >
                         {MEAL_ICON[meal as MealType]}
                     </span>
-                    <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
+                    <h3 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">
                         {meal}
                     </h3>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] text-surface-400 tabular-nums">
+                <div className="flex items-center gap-3 text-[11px] text-[var(--muted-foreground)] tabular-nums">
                     <span>P: {subtotalP.toFixed(1)}</span>
                     <span>C: {subtotalC.toFixed(1)}</span>
                     <span>F: {subtotalF.toFixed(1)}</span>
-                    <span className="text-surface-300">|</span>
-                    <span className="text-white/80">{subtotalCal.toFixed(0)} kcal</span>
+                    <span className="opacity-30">|</span>
+                    <span className="text-[var(--foreground)] opacity-80 font-medium">{subtotalCal.toFixed(0)} kcal</span>
                 </div>
             </div>
 
             {/* Items */}
-            <div className="divide-y divide-surface-300/10">
+            <div className="divide-y divide-[var(--border)]/10">
                 {items.map((item) =>
                     editingId === item.id ? (
                         /* ——— Edit mode ——— */
                         <div
                             key={item.id}
-                            className="px-5 py-3 bg-surface-100/40 space-y-2"
+                            className="px-5 py-3 space-y-2"
+                            style={{ background: "oklch(0.22 0.015 260 / 0.4)" }}
                         >
                             <input
                                 type="text"
                                 value={editValues.food_name}
                                 onChange={(e) => setEditValues((v) => ({ ...v, food_name: e.target.value }))}
                                 onKeyDown={(e) => handleEditKeyDown(e, item.id)}
-                                className="glass-input w-full px-3 py-1.5 text-sm text-white"
+                                className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
                                 autoFocus
                             />
                             <div className="grid grid-cols-3 gap-2">
                                 <div>
-                                    <label className="text-[10px] text-emerald-400/70 block mb-0.5">Protein</label>
+                                    <label className="text-[10px] block mb-0.5" style={{ color: "oklch(0.72 0.19 160 / 0.8)" }}>Protein</label>
                                     <input
                                         type="number"
                                         value={editValues.protein}
                                         onChange={(e) => setEditValues((v) => ({ ...v, protein: e.target.value }))}
                                         onKeyDown={(e) => handleEditKeyDown(e, item.id)}
-                                        className="glass-input w-full px-2 py-1.5 text-sm text-white"
+                                        className="glass-input w-full px-2 py-1.5 text-sm text-[var(--foreground)]"
                                         step="0.1"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-amber-400/70 block mb-0.5">Carbs</label>
+                                    <label className="text-[10px] block mb-0.5" style={{ color: "oklch(0.65 0.22 55 / 0.8)" }}>Carbs</label>
                                     <input
                                         type="number"
                                         value={editValues.carbs}
                                         onChange={(e) => setEditValues((v) => ({ ...v, carbs: e.target.value }))}
                                         onKeyDown={(e) => handleEditKeyDown(e, item.id)}
-                                        className="glass-input w-full px-2 py-1.5 text-sm text-white"
+                                        className="glass-input w-full px-2 py-1.5 text-sm text-[var(--foreground)]"
                                         step="0.1"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-rose-400/70 block mb-0.5">Fat</label>
+                                    <label className="text-[10px] block mb-0.5" style={{ color: "oklch(0.65 0.2 330 / 0.8)" }}>Fat</label>
                                     <input
                                         type="number"
                                         value={editValues.fat}
                                         onChange={(e) => setEditValues((v) => ({ ...v, fat: e.target.value }))}
                                         onKeyDown={(e) => handleEditKeyDown(e, item.id)}
-                                        className="glass-input w-full px-2 py-1.5 text-sm text-white"
+                                        className="glass-input w-full px-2 py-1.5 text-sm text-[var(--foreground)]"
                                         step="0.1"
                                     />
                                 </div>
@@ -576,14 +599,17 @@ function MealGroup({
                                 <button
                                     type="button"
                                     onClick={cancelEdit}
-                                    className="text-xs text-surface-400 hover:text-white px-3 py-1 rounded-lg hover:bg-surface-200/50 transition-colors"
+                                    className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] px-3 py-1 rounded-lg hover:bg-[var(--color-surface-200)]/50 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => saveEdit(item.id)}
-                                    className="text-xs text-emerald-400 hover:text-emerald-300 px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
+                                    className="text-xs px-3 py-1 rounded-lg transition-colors"
+                                    style={{ color: "oklch(0.72 0.19 160)", background: "oklch(0.65 0.22 160 / 0.1)" }}
+                                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "oklch(0.65 0.22 160 / 0.2)"; }}
+                                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "oklch(0.65 0.22 160 / 0.1)"; }}
                                 >
                                     Save
                                 </button>
@@ -593,10 +619,10 @@ function MealGroup({
                         /* ——— Display mode ——— */
                         <div
                             key={item.id}
-                            className="px-5 py-3 flex items-center justify-between hover:bg-surface-100/30 transition-colors group"
+                            className="px-5 py-3 flex items-center justify-between hover:bg-[var(--color-surface-200)]/30 transition-colors group"
                         >
                             <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <span className="text-sm text-white truncate">
+                                <span className="text-sm text-[var(--foreground)] truncate">
                                     {item.food_name}
                                 </span>
                             </div>
@@ -611,7 +637,7 @@ function MealGroup({
                                 <button
                                     type="button"
                                     onClick={() => startEdit(item)}
-                                    className="text-surface-400/0 group-hover:text-surface-400/60 hover:!text-[var(--chart-1)] transition-colors text-xs px-1"
+                                    className="text-transparent group-hover:text-[var(--muted-foreground)] hover:!text-[var(--chart-1)] transition-colors text-xs px-1"
                                     aria-label={`Edit ${item.food_name}`}
                                 >
                                     ✎
@@ -619,7 +645,10 @@ function MealGroup({
                                 <button
                                     type="button"
                                     onClick={() => onDelete(item.id)}
-                                    className="text-red-400/0 group-hover:text-red-400/60 hover:!text-red-400 transition-colors text-xs px-1"
+                                    className="text-transparent group-hover:text-[var(--muted-foreground)]/60 transition-colors text-xs px-1"
+                                    style={{}}
+                                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "oklch(0.65 0.2 25)"; }}
+                                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ""; }}
                                     aria-label={`Delete ${item.food_name}`}
                                 >
                                     ✕
@@ -632,4 +661,3 @@ function MealGroup({
         </div>
     );
 }
-
