@@ -102,7 +102,7 @@ export function useProfile(): UseProfileReturn {
       if (res.success && res.data) {
         return res.data.map((r: BodyweightRecord) => {
           return {
-            date: formatDate(r.date),
+            date: formatDate(r.created_at),
             weight: r.weight_kg,
           };
         });
