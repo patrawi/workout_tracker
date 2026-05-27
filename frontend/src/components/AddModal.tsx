@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import type { WorkoutRow } from "../types";
+import DialogBase from "./DialogBase";
 
 interface AddModalProps {
     exerciseName: string;
@@ -33,24 +34,14 @@ export default function AddModal({ exerciseName, defaultValues, onSave, onCancel
     }, [weight, reps, rpe, isBodyweight, isAssisted, onSave]);
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add workout set"
+        <DialogBase
+            open={true}
+            onClose={onCancel}
+            ariaLabel="Add workout set"
+            className="max-w-lg"
         >
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
-                onClick={onCancel}
-                aria-hidden="true"
-            />
-
             {/* Modal */}
-            <div
-                className="relative glass-card w-full max-w-lg max-h-[85vh] flex flex-col animate-slide-up"
-                style={{ overscrollBehavior: "contain" }}
-            >
+            <div className="glass-card w-full flex flex-col animate-slide-up">
                 {/* Header */}
                 <div className="p-6 pb-4 border-b border-surface-300/30">
                     <div className="flex items-center justify-between mb-2">
@@ -98,6 +89,7 @@ export default function AddModal({ exerciseName, defaultValues, onSave, onCancel
                                     className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums"
                                     step="0.5"
                                     min="0"
+                                    inputMode="decimal"
                                 />
                             </div>
                             <div>
@@ -108,6 +100,7 @@ export default function AddModal({ exerciseName, defaultValues, onSave, onCancel
                                     onChange={(e) => setReps(Number(e.target.value))}
                                     className="glass-input w-full px-3 py-2 text-sm text-white"
                                     min="0"
+                                    inputMode="numeric"
                                 />
                             </div>
                             <div>
@@ -118,6 +111,7 @@ export default function AddModal({ exerciseName, defaultValues, onSave, onCancel
                                     onChange={(e) => setRpe(Number(e.target.value))}
                                     className="glass-input w-full px-3 py-2 text-sm text-white"
                                     min="0"
+                                    inputMode="numeric"
                                     max="10"
                                 />
                             </div>
@@ -172,6 +166,6 @@ export default function AddModal({ exerciseName, defaultValues, onSave, onCancel
                     </div>
                 </div>
             </div>
-        </div>
+        </DialogBase>
     );
 }

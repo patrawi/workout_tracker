@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import type { NutritionItem } from "../types";
+import DialogBase from "./DialogBase";
 
 interface NutritionReviewModalProps {
     items: NutritionItem[];
@@ -89,24 +90,13 @@ export default function NutritionReviewModal({
     };
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Review parsed nutrition"
+        <DialogBase
+            open={true}
+            onClose={onCancel}
+            ariaLabel="Review parsed nutrition"
         >
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
-                onClick={onCancel}
-                aria-hidden="true"
-            />
-
             {/* Modal */}
-            <div
-                className="relative glass-card w-full max-w-3xl max-h-[85vh] flex flex-col animate-slide-up"
-                style={{ overscrollBehavior: "contain" }}
-            >
+            <div className="glass-card w-full flex flex-col animate-slide-up">
                 {/* Header */}
                 <div className="p-6 pb-4 border-b border-surface-300/30">
                     <div className="flex items-center justify-between mb-2">
@@ -229,6 +219,7 @@ export default function NutritionReviewModal({
                                                     className="glass-input w-full px-3 py-1.5 text-sm text-white font-variant-numeric tabular-nums"
                                                     step="0.1"
                                                     min="0"
+                                                    inputMode="decimal"
                                                 />
                                             </div>
                                             <div>
@@ -244,6 +235,7 @@ export default function NutritionReviewModal({
                                                     className="glass-input w-full px-3 py-1.5 text-sm text-white font-variant-numeric tabular-nums"
                                                     step="0.1"
                                                     min="0"
+                                                    inputMode="decimal"
                                                 />
                                             </div>
                                             <div>
@@ -259,6 +251,7 @@ export default function NutritionReviewModal({
                                                     className="glass-input w-full px-3 py-1.5 text-sm text-white font-variant-numeric tabular-nums"
                                                     step="0.1"
                                                     min="0"
+                                                    inputMode="decimal"
                                                 />
                                             </div>
                                             <div>
@@ -313,6 +306,6 @@ export default function NutritionReviewModal({
                     </button>
                 </div>
             </div>
-        </div>
+        </DialogBase>
     );
 }

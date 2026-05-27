@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import type { WorkoutData, SessionActivityData } from "../types";
+import DialogBase from "./DialogBase";
 
 interface ReviewModalProps {
     items: WorkoutData[];
@@ -65,25 +66,13 @@ export default function ReviewModal({
     );
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Review parsed workouts"
+        <DialogBase
+            open={true}
+            onClose={onCancel}
+            ariaLabel="Review parsed workouts"
         >
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 backdrop-blur-sm animate-fade-in"
-                style={{ background: "oklch(0.05 0.005 260 / 0.7)" }}
-                onClick={onCancel}
-                aria-hidden="true"
-            />
-
             {/* Modal */}
-            <div
-                className="relative glass-card w-full max-w-3xl max-h-[85vh] flex flex-col animate-slide-up"
-                style={{ overscrollBehavior: "contain" }}
-            >
+            <div className="glass-card w-full flex flex-col animate-slide-up">
                 {/* Header */}
                 <div className="p-6 pb-4 border-b border-surface-300/30">
                     <div className="flex items-center justify-between mb-2">
@@ -156,6 +145,7 @@ export default function ReviewModal({
                                         className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)] tabular-nums"
                                         step="0.5"
                                         min="0"
+                                        inputMode="decimal"
                                         disabled={item.is_bodyweight && item.weight === 0}
                                         placeholder={item.is_bodyweight ? "Body weight" : "0"}
                                     />
@@ -172,6 +162,7 @@ export default function ReviewModal({
                                         }
                                         className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
                                         min="0"
+                                        inputMode="numeric"
                                     />
                                 </div>
                                 <div>
@@ -186,6 +177,7 @@ export default function ReviewModal({
                                         }
                                         className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
                                         min="0"
+                                        inputMode="numeric"
                                         max="10"
                                     />
                                 </div>
@@ -328,6 +320,6 @@ export default function ReviewModal({
                     </button>
                 </div>
             </div>
-        </div>
+        </DialogBase>
     );
 }

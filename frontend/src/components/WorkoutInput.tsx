@@ -63,6 +63,7 @@ export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestD
                     disabled={isLoading}
                     autoComplete="off"
                     spellCheck={false}
+                    enterKeyHint="send"
                     className="w-full px-3 py-2 text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] resize-none bg-transparent outline-none max-h-[200px] overflow-y-auto"
                     style={{ minHeight: "24px" }}
                 />

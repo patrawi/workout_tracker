@@ -19,6 +19,12 @@
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" as="style" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'; this.onload=null" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" /></noscript>
+    <!-- Kick off auth check during HTML parsing so React picks up the cached response -->
+    <script>
+      window.__authPromise = fetch('/api/auth/verify', { credentials: 'include' })
+        .then(r => r.json())
+        .catch(() => ({ success: false }));
+    </script>
   </head>
   <body>
     <div id="root"></div>

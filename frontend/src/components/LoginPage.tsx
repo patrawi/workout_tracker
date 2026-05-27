@@ -68,6 +68,7 @@ export default function LoginPage() {
               placeholder="••••••••"
               autoFocus
               required
+              autoComplete="current-password"
               className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder:text-[var(--muted-foreground)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--chart-1)]/50 transition-all"
             />
           </div>

@@ -22,34 +22,27 @@ export default function Layout() {
         };
     }, []);
 
-    // Show a loading skeleton while checking auth - maintain page structure to avoid CLS
-    if (isCheckingAuth) {
-        return (
-            <div className="min-h-screen flex flex-col">
-                <div
-                    className="fixed inset-0 pointer-events-none -z-10"
-                    aria-hidden="true"
-                    style={{
-                        background:
-                            "radial-gradient(ellipse 60% 40% at 50% 0%, oklch(0.3 0.15 160 / 0.15), transparent), radial-gradient(ellipse 40% 50% at 80% 20%, oklch(0.25 0.15 290 / 0.1), transparent)",
-                    }}
-                />
-                <Header onLogout={logout} />
-                <div className="flex-1 flex items-center justify-center">
-                    <div className="animate-spin h-8 w-8 border-2 border-white/20 border-t-white rounded-full" />
-                </div>
-                <PWAInstallPrompt />
-            </div>
-        );
-    }
-
-    // Show login page if not authenticated
-    if (!isAuthenticated) {
+    // Render app shell immediately while auth verifies in background.
+    // Only show a login overlay if auth is confirmed as unauthenticated.
+    // This avoids blocking FCP on the /api/auth/verify round-trip.
+    if (!isCheckingAuth && !isAuthenticated) {
         return <LoginPage />;
     }
 
     return (
         <div className="min-h-screen flex flex-col">
+            {/* Skip to content link */}
+            <a
+                href="#content"
+                className="visually-hidden focus:not-visually-hidden focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-[var(--color-accent-500)] focus:text-black focus:rounded-lg focus:font-medium"
+            >
+                Skip to content
+            </a>
+
+            {/* Centralized live regions for dynamic announcements */}
+            <div aria-live="polite" aria-atomic="true" className="visually-hidden" />
+            <div aria-live="assertive" className="visually-hidden" />
+
             {/* Background ambient glow - Persistent across all routes */}
             <div
                 className="fixed inset-0 pointer-events-none -z-10"
@@ -71,7 +64,7 @@ export default function Layout() {
             <Header onLogout={logout} />
 
             {/* Dynamic Page Content */}
-            <div className="flex-1">
+            <div id="content" tabIndex={-1} className="flex-1 outline-none">
                 <Outlet />
             </div>
 

@@ -21,11 +21,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  // Check authentication on mount
+  // Check authentication on mount.
+  // Uses pre-fetched promise from index.html if available (started during HTML parsing).
   useEffect(() => {
-    authApi
-      .verify()
-      .then((data) => setIsAuthenticated(data.data?.authenticated === true))
+    const promise = (window as unknown as { __authPromise?: Promise<{ success: boolean; data?: { authenticated: boolean } }> }).__authPromise;
+
+    const verify = promise
+      ? promise.then((data) => data?.data?.authenticated === true)
+      : authApi.verify().then((data) => data.data?.authenticated === true);
+
+    verify
+      .then(setIsAuthenticated)
       .catch(() => setIsAuthenticated(false))
       .finally(() => setIsCheckingAuth(false));
   }, []);
