@@ -1,5 +1,6 @@
+import { useState, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
-import { TrendingUp, BarChart3 as BarChartIcon, Brain, FileText } from "lucide-react";
+import { TrendingUp, BarChart3 as BarChartIcon, Brain, FileText, ChevronDown } from "lucide-react";
 import {
     LineChart,
     Line,
@@ -13,6 +14,7 @@ import {
     Tooltip,
     ResponsiveContainer,
 } from "recharts";
+import { Popover } from "radix-ui";
 import {
     Select,
     SelectContent,
@@ -77,6 +79,43 @@ export default function AnalyticsPage() {
         hasData,
     } = useAnalyticsData();
 
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const [highlightedIndex, setHighlightedIndex] = useState(0);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const filtered = useMemo(() => {
+        if (!search.trim()) return exercises;
+        const q = search.toLowerCase();
+        return exercises.filter((ex) => ex.toLowerCase().includes(q));
+    }, [exercises, search]);
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (!nextOpen) {
+            setSearch("");
+            setHighlightedIndex(0);
+        }
+        setOpen(nextOpen);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlightedIndex((i) => Math.min(i + 1, filtered.length - 1));
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlightedIndex((i) => Math.max(i - 1, 0));
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (filtered[highlightedIndex]) {
+                setSelectedExercise(filtered[highlightedIndex]);
+                setOpen(false);
+            }
+        } else if (e.key === "Escape") {
+            setOpen(false);
+        }
+    };
+
     return (
         <div className="min-h-screen">
             {/* Background ambient glow */}
@@ -101,26 +140,82 @@ export default function AnalyticsPage() {
 
                 {/* Global Controls */}
                 <section className="flex flex-wrap gap-3 mb-8 animate-slide-up">
-                    <Select
-                        key={selectedExercise}
-                        value={selectedExercise}
-                        onValueChange={setSelectedExercise}
-                    >
-                        <SelectTrigger className="w-64 bg-[var(--card)] border-[var(--border)] text-[var(--foreground)]">
-                            <SelectValue placeholder="Select exercise…" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[var(--card)] border-[var(--border)]">
-                            {exercises.map((ex) => (
-                                <SelectItem
-                                    key={ex}
-                                    value={ex}
-                                    className="text-[var(--foreground)] hover:bg-[var(--accent)] focus:bg-[var(--accent)]"
+                    <Popover.Root open={open} onOpenChange={handleOpenChange}>
+                        <Popover.Trigger asChild>
+                            <button
+                                className="border-input [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex w-64 items-center justify-between gap-2 rounded-md border bg-[var(--card)] px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] h-9"
+                                aria-expanded={open}
+                                aria-haspopup="listbox"
+                            >
+                                <span className={selectedExercise ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"}>
+                                    {selectedExercise || "Select exercise…"}
+                                </span>
+                                <ChevronDown className="size-4 opacity-50" />
+                            </button>
+                        </Popover.Trigger>
+                        <Popover.Portal>
+                            <Popover.Content
+                                className="z-50 min-w-[16rem] rounded-md border border-[var(--border)] bg-[var(--card)] p-1 shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+                                sideOffset={4}
+                                onOpenAutoFocus={(e) => {
+                                    e.preventDefault();
+                                    inputRef.current?.focus();
+                                }}
+                            >
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => {
+                                        setSearch(e.target.value);
+                                        setHighlightedIndex(0);
+                                    }}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Search exercises…"
+                                    role="combobox"
+                                    aria-expanded={open}
+                                    aria-controls="exercise-listbox"
+                                    aria-activedescendant={
+                                        filtered[highlightedIndex]
+                                            ? `exercise-option-${highlightedIndex}`
+                                            : undefined
+                                    }
+                                    className="w-full rounded-sm border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] outline-none focus-visible:ring-[var(--ring)] focus-visible:ring-1 mb-1"
+                                />
+                                <ul
+                                    id="exercise-listbox"
+                                    role="listbox"
+                                    className="max-h-64 overflow-auto"
                                 >
-                                    {ex}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                                    {filtered.map((ex, i) => (
+                                        <li
+                                            key={ex}
+                                            id={`exercise-option-${i}`}
+                                            role="option"
+                                            aria-selected={i === highlightedIndex}
+                                            className={`relative cursor-default select-none rounded-sm px-3 py-1.5 text-sm text-[var(--foreground)] ${
+                                                i === highlightedIndex
+                                                    ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                                                    : ""
+                                            }`}
+                                            onClick={() => {
+                                                setSelectedExercise(ex);
+                                                setOpen(false);
+                                            }}
+                                            onMouseEnter={() => setHighlightedIndex(i)}
+                                        >
+                                            {ex}
+                                        </li>
+                                    ))}
+                                    {filtered.length === 0 && (
+                                        <li className="px-3 py-2 text-sm text-[var(--muted-foreground)]">
+                                            No exercises found
+                                        </li>
+                                    )}
+                                </ul>
+                            </Popover.Content>
+                        </Popover.Portal>
+                    </Popover.Root>
 
                     <Select value={selectedRange} onValueChange={setSelectedRange}>
                         <SelectTrigger className="w-44 bg-[var(--card)] border-[var(--border)] text-[var(--foreground)]">
