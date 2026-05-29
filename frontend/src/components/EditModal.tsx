@@ -66,7 +66,7 @@ export default function EditModal({ workout, onSave, onCancel }: EditModalProps)
             className="max-w-lg"
         >
             {/* Modal */}
-            <div className="glass-card w-full flex flex-col animate-slide-up">
+            <div className="glass-card w-full flex flex-col animate-slide-up max-h-[85vh] overflow-hidden">
                 {/* Header */}
                 <div className="p-6 pb-4 border-b border-surface-300/30">
                     <div className="flex items-center justify-between mb-2">
