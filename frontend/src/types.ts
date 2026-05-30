@@ -58,8 +58,10 @@ export interface NutritionItem {
     protein: number;       // grams (after scaling)
     carbs: number;
     fat: number;
-    calories: number;      // computed: P×4 + C×4 + F×9
-    has_missing_macros: boolean;  // AI flag, review UI only
+    calories: number;      // computed: Px4 + Cx4 + Fx9
+    amount: number;        // how much was eaten
+    unit: string;          // "g" | "ml" | "serving" | "piece"
+    has_missing_macros: boolean;  // true when LLM couldn't extract macros
 }
 
 export interface NutritionRow {

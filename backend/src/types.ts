@@ -45,14 +45,28 @@ export interface ProfileRow extends ProfileData {
 
 export type MealType = "Breakfast" | "Lunch" | "Dinner" | "Snack";
 
+export interface RawLLMItem {
+  food_name?: string;
+  meal?: string;
+  protein?: number | null;
+  carbs?: number | null;
+  fat?: number | null;
+  serving_size_value?: number;
+  serving_size_unit?: string;
+  amount_eaten_value?: number;
+  amount_eaten_unit?: string;
+}
+
 export interface NutritionItem {
   food_name: string;
   meal: MealType;
   protein: number;       // grams (after scaling)
   carbs: number;
   fat: number;
-  calories: number;      // computed: P×4 + C×4 + F×9
-  has_missing_macros: boolean;  // AI flag, used in review UI only
+  calories: number;      // computed in code: Px4 + Cx4 + Fx9
+  amount: number;        // how much was eaten
+  unit: string;          // "g" | "ml" | "serving" | "piece"
+  has_missing_macros: boolean;  // true when LLM couldn't extract macros
 }
 
 export interface NutritionRow {

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import type { NutritionItem } from "../types";
+import type { NutritionItem, RawLLMItem } from "../types";
 import { NUTRITION_SYSTEM_PROMPT } from "./prompts";
 import { normalizeNutritionItem } from "./normalizers";
 import { GEMINI_MODEL_NUTRITION, GEMINI_TEMPERATURE } from "../constants";
@@ -10,6 +10,8 @@ export interface NutritionAIClient {
 
 /**
  * Create a nutrition AI client that parses nutrition text via Gemini.
+ * The LLM only extracts raw text/numbers (probabilistic task).
+ * All math (scaling, calories) is done deterministically in normalizeNutritionItem.
  */
 export function createNutritionAIClient(
   apiKey: string,
@@ -28,7 +30,7 @@ export function createNutritionAIClient(
         },
       });
       const textContent = response.text ?? "";
-      console.log("test");
+
       // Clean potential markdown code fences
       const cleaned = textContent
         .replace(/```json\s*/gi, "")
@@ -37,7 +39,7 @@ export function createNutritionAIClient(
 
       try {
         const parsed = JSON.parse(cleaned);
-        const items: Record<string, unknown>[] = Array.isArray(parsed)
+        const items: RawLLMItem[] = Array.isArray(parsed)
           ? parsed
           : [parsed];
 

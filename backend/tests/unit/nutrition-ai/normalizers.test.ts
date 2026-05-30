@@ -4,6 +4,7 @@ import {
   normalizeMeal,
   roundTo1,
 } from "../../../src/nutrition-ai/normalizers";
+import type { RawLLMItem } from "../../../src/types";
 
 describe("roundTo1", () => {
   test("rounds to 1 decimal place", () => {
@@ -47,38 +48,100 @@ describe("normalizeNutritionItem", () => {
     expect(result.carbs).toBe(0);
     expect(result.fat).toBe(0);
     expect(result.calories).toBe(0);
-    expect(result.has_missing_macros).toBe(false);
+    expect(result.amount).toBe(1);
+    expect(result.unit).toBe("g");
+    expect(result.has_missing_macros).toBe(true);
   });
 
-  test("preserves provided values", () => {
+  test("scales macros by amount eaten vs serving size", () => {
     const result = normalizeNutritionItem({
       food_name: "Chicken Breast",
       meal: "Lunch",
-      protein: 30.5,
+      protein: 31,
       carbs: 0,
       fat: 3.6,
-      calories: 165,
-      has_missing_macros: true,
+      serving_size_value: 100,
+      serving_size_unit: "g",
+      amount_eaten_value: 200,
+      amount_eaten_unit: "g",
     });
 
     expect(result.food_name).toBe("Chicken Breast");
     expect(result.meal).toBe("Lunch");
-    expect(result.protein).toBe(30.5);
+    expect(result.protein).toBe(62);   // 31 * 2
+    expect(result.carbs).toBe(0);
+    expect(result.fat).toBe(7.2);      // 3.6 * 2
+    expect(result.calories).toBe(312.8); // 62*4 + 0*4 + 7.2*9 = 248 + 64.8
+    expect(result.amount).toBe(200);
+    expect(result.unit).toBe("g");
+    expect(result.has_missing_macros).toBe(false);
+  });
+
+  test("scale factor is 1 when serving size equals amount eaten", () => {
+    const result = normalizeNutritionItem({
+      food_name: "Rice",
+      protein: 2.6,
+      carbs: 28,
+      fat: 0.3,
+      serving_size_value: 100,
+      amount_eaten_value: 100,
+    });
+
+    expect(result.protein).toBe(2.6);
+    expect(result.carbs).toBe(28);
+    expect(result.fat).toBe(0.3);
+    // (2.6*4) + (28*4) + (0.3*9) = 10.4 + 112 + 2.7 = 125.1
+    expect(result.calories).toBe(125.1);
+  });
+
+  test("rounds macros to 1 decimal after scaling", () => {
+    const result = normalizeNutritionItem({
+      food_name: "Sauce",
+      protein: 1.23,
+      carbs: 12.34,
+      fat: 5.67,
+      serving_size_value: 100,
+      amount_eaten_value: 33,
+    });
+
+    // Scale factor = 33/100 = 0.33
+    // protein: 1.23 * 0.33 = 0.4059 -> 0.4
+    // carbs: 12.34 * 0.33 = 4.0722 -> 4.1
+    // fat: 5.67 * 0.33 = 1.8711 -> 1.9
+    expect(result.protein).toBe(0.4);
+    expect(result.carbs).toBe(4.1);
+    expect(result.fat).toBe(1.9);
+  });
+
+  test("null macros become 0 and flag has_missing_macros", () => {
+    const result = normalizeNutritionItem({
+      food_name: "Banana",
+      meal: "Snack",
+      protein: null,
+      carbs: null,
+      fat: null,
+      serving_size_value: 100,
+      amount_eaten_value: 120,
+    });
+
+    expect(result.protein).toBe(0);
+    expect(result.carbs).toBe(0);
+    expect(result.fat).toBe(0);
+    expect(result.calories).toBe(0);
     expect(result.has_missing_macros).toBe(true);
   });
 
-  test("rounds numbers to 1 decimal", () => {
+  test("amount and unit come from amount_eaten fields", () => {
     const result = normalizeNutritionItem({
-      food_name: "Rice",
-      protein: 2.345,
-      carbs: 45.678,
-      fat: 0.123,
-      calories: 205.55,
+      food_name: "Milk",
+      protein: 3.3,
+      carbs: 5,
+      fat: 3.6,
+      amount_eaten_value: 250,
+      amount_eaten_unit: "ml",
     });
 
-    expect(result.protein).toBe(2.3);
-    expect(result.carbs).toBe(45.7);
-    expect(result.fat).toBe(0.1);
-    expect(result.calories).toBe(205.6);
+    expect(result.amount).toBe(250);
+    expect(result.unit).toBe("ml");
   });
 });

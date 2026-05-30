@@ -181,6 +181,11 @@ export default function NutritionReviewModal({
                                                 className="glass-input flex-1 px-3 py-1.5 text-sm text-white font-medium"
                                                 aria-label={`Food name for item ${originalIndex + 1}`}
                                             />
+                                            {item.amount > 0 && (
+                                                <span className="text-xs text-surface-500 whitespace-nowrap tabular-nums">
+                                                    {item.amount}{item.unit}
+                                                </span>
+                                            )}
                                             <select
                                                 value={item.meal}
                                                 onChange={(e) =>
