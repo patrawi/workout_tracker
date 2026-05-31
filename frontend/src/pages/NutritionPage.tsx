@@ -1,12 +1,12 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CalendarDays, Trash2, ArrowUp, ArrowDown, Minus, RefreshCw } from "lucide-react";
+import { CalendarDays, Trash2, ArrowUp, ArrowDown, Minus, RefreshCw, Plus } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useNutrition } from "@/features/nutrition/hooks/useNutrition";
 import NutritionReviewModal from "@/components/NutritionReviewModal";
 import { queryKeys } from "@/lib/query-keys";
 import { nutritionApi, foodCatalogApi } from "@/lib/api";
-import type { NutritionRow, MealType } from "@/types";
+import type { NutritionRow, NutritionItem, MealType } from "@/types";
 
 const MEAL_ORDER: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 const MEAL_ICON: Record<MealType, string> = {
@@ -212,6 +212,49 @@ export default function NutritionPage() {
         [confirmItems],
     );
 
+    // Quick manual add — log a one-off food without re-parsing text (saves AI cost/time).
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [addForm, setAddForm] = useState({
+        food_name: "",
+        meal: "Snack" as MealType,
+        protein: "",
+        carbs: "",
+        fat: "",
+    });
+
+    const addCalories = useMemo(() => {
+        const p = parseFloat(addForm.protein) || 0;
+        const c = parseFloat(addForm.carbs) || 0;
+        const f = parseFloat(addForm.fat) || 0;
+        return Math.round((p * 4 + c * 4 + f * 9) * 10) / 10;
+    }, [addForm.protein, addForm.carbs, addForm.fat]);
+
+    const resetAddForm = useCallback(() => {
+        setAddForm({ food_name: "", meal: "Snack", protein: "", carbs: "", fat: "" });
+        setShowAddForm(false);
+    }, []);
+
+    const handleAddManual = useCallback(async () => {
+        const name = addForm.food_name.trim();
+        if (!name || isConfirming) return;
+        const p = parseFloat(addForm.protein) || 0;
+        const c = parseFloat(addForm.carbs) || 0;
+        const f = parseFloat(addForm.fat) || 0;
+        const item: NutritionItem = {
+            food_name: name,
+            meal: addForm.meal,
+            protein: Math.round(p * 10) / 10,
+            carbs: Math.round(c * 10) / 10,
+            fat: Math.round(f * 10) / 10,
+            calories: Math.round((p * 4 + c * 4 + f * 9) * 10) / 10,
+            amount: 1,
+            unit: "serving",
+            has_missing_macros: false,
+        };
+        await confirmItems([item]);
+        resetAddForm();
+    }, [addForm, isConfirming, confirmItems, resetAddForm]);
+
     // Group saved items by meal — memoized
     const groupedItems = useMemo(
         () =>
@@ -338,6 +381,103 @@ export default function NutritionPage() {
                         <p className="text-[11px] text-[var(--muted-foreground)] text-center mt-3">
                             Paste in Thai or English. Press <kbd className="px-1.5 py-0.5 rounded-md bg-[var(--card)] border border-[var(--border)] font-sans text-[10px]">Enter</kbd> to parse, <kbd className="px-1.5 py-0.5 rounded-md bg-[var(--card)] border border-[var(--border)] font-sans text-[10px]">Shift + Enter</kbd> for newline.
                         </p>
+                    </section>
+
+                    {/* Quick manual add — one-off food, no AI parse */}
+                    <section aria-label="Add food manually">
+                        {!showAddForm ? (
+                            <button
+                                type="button"
+                                onClick={() => setShowAddForm(true)}
+                                className="w-full glass-card py-3 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add a food manually
+                            </button>
+                        ) : (
+                            <div className="glass-card p-4 space-y-3 animate-slide-up">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={addForm.food_name}
+                                        onChange={(e) => setAddForm((v) => ({ ...v, food_name: e.target.value }))}
+                                        placeholder="Food name"
+                                        className="glass-input flex-1 px-3 py-2 text-sm text-[var(--foreground)]"
+                                        autoFocus
+                                    />
+                                    <select
+                                        value={addForm.meal}
+                                        onChange={(e) => setAddForm((v) => ({ ...v, meal: e.target.value as MealType }))}
+                                        className="glass-input px-2 py-2 text-sm text-[var(--muted-foreground)] bg-transparent"
+                                        aria-label="Meal"
+                                    >
+                                        {MEAL_ORDER.map((m) => (
+                                            <option key={m} value={m}>{m}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label className="text-[10px] block mb-0.5" style={{ color: "oklch(0.72 0.19 160 / 0.8)" }}>Protein (g)</label>
+                                        <input
+                                            type="number"
+                                            inputMode="decimal"
+                                            min="0"
+                                            step="0.1"
+                                            value={addForm.protein}
+                                            onChange={(e) => setAddForm((v) => ({ ...v, protein: e.target.value }))}
+                                            className="glass-input w-full px-2 py-1.5 text-sm text-[var(--foreground)]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] block mb-0.5" style={{ color: "oklch(0.65 0.22 55 / 0.8)" }}>Carbs (g)</label>
+                                        <input
+                                            type="number"
+                                            inputMode="decimal"
+                                            min="0"
+                                            step="0.1"
+                                            value={addForm.carbs}
+                                            onChange={(e) => setAddForm((v) => ({ ...v, carbs: e.target.value }))}
+                                            className="glass-input w-full px-2 py-1.5 text-sm text-[var(--foreground)]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] block mb-0.5" style={{ color: "oklch(0.65 0.2 330 / 0.8)" }}>Fat (g)</label>
+                                        <input
+                                            type="number"
+                                            inputMode="decimal"
+                                            min="0"
+                                            step="0.1"
+                                            value={addForm.fat}
+                                            onChange={(e) => setAddForm((v) => ({ ...v, fat: e.target.value }))}
+                                            className="glass-input w-full px-2 py-1.5 text-sm text-[var(--foreground)]"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between pt-1">
+                                    <span className="text-[11px] text-[var(--muted-foreground)] tabular-nums">
+                                        {addCalories.toFixed(0)} kcal
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={resetAddForm}
+                                            className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] px-3 py-1.5 rounded-lg transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleAddManual}
+                                            disabled={!addForm.food_name.trim() || isConfirming}
+                                            className="btn-primary text-xs flex items-center gap-1.5"
+                                        >
+                                            {isConfirming ? "Adding…" : "Add"}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </section>
 
                     {/* Daily Summary */}
