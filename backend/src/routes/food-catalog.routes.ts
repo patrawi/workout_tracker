@@ -10,12 +10,16 @@ export function registerFoodCatalogRoutes(app: any, ctx: AppContext): void {
 
   app
     // Pull new Sheet rows into the embedded catalog (idempotent).
-    .post("/food-catalog/sync", routeHandler(async () => {
+    // `?refresh=true` re-embeds + upserts every row (e.g. after a parsing fix).
+    .post("/food-catalog/sync", routeHandlerCtx(async ({ query }) => {
+      const refresh = String(query?.refresh ?? "") === "true";
       return await syncCatalogFromSheet(foodCatalogService, {
         spreadsheetId: configService.googleSheetsId,
         credentialsJson: configService.googleCredentialsJson,
-      });
-    }))
+      }, refresh);
+    }), {
+      query: t.Object({ refresh: t.Optional(t.String()) }),
+    })
     // How many foods are in the catalog.
     .get("/food-catalog/count", routeHandler(async () => {
       return { count: await foodCatalogService.count() };

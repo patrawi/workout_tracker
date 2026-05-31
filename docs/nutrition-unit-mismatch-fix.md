@@ -54,6 +54,28 @@ case-1 message **"No confident catalog match"** — misleading. Two observed bug
    - Warning icon for `uncertain || unit_mismatch || has_missing_macros`.
    - Match existing tokens (glass-input, amber-400, emerald-400, surface-*).
 
+## Follow-up: zero-macro matches from bad sheet parsing
+
+Symptom: "Heck Chicken Chipolatas" matched green ✓ but macros 0/0/0.
+
+Root cause: sheet macro cells carry units ("11g"). Old `num()` did
+`Number("11g")` → NaN → fallback 0, stored 0 in pgvector.
+
+Fix:
+- **`sheet-source.ts` `num()`** — extract first numeric token via regex, so
+  "11g"→11, "2.5 g"→2.5, "200 kcal"→200, "trace"→0.
+- **`sync.ts` + route** — add `refresh` flag (`POST /food-catalog/sync?refresh=true`)
+  that bypasses `source_row_id` dedup and re-embeds/upserts every row. Needed
+  because incremental sync skips already-synced rows, so the bad 0-macro rows
+  won't self-heal otherwise.
+- **`tests/unit/food-catalog/sheet-source.test.ts`** — covers unit-suffixed cells.
+
+Action required (manual, prod): run `POST /food-catalog/sync?refresh=true` with
+`GOOGLE_SHEETS_ID` + `GOOGLE_CREDENTIALS_JSON` set, to rewrite existing rows.
+
+Upstream: the nutrition_ocr bot should also cleanse "11g"→11 at write time;
+the parser fix here is defensive.
+
 ## Success criteria
 
 - `bun test` green.

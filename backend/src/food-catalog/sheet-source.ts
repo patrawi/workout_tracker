@@ -22,9 +22,11 @@ export interface SheetFoodRow {
   fat: string;
 }
 
+// Sheet cells often carry units ("11g", "228 kcal") that `Number()` rejects as
+// NaN. Pull the first numeric token so "11g" → 11, "13.5 g" → 13.5, "trace" → fallback.
 function num(value: string | undefined, fallback = 0): number {
-  const n = Number(String(value ?? "").trim());
-  return Number.isFinite(n) ? n : fallback;
+  const match = String(value ?? "").match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : fallback;
 }
 
 function slugify(text: string): string {
