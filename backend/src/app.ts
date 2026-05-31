@@ -57,7 +57,7 @@ export function createApp(ctx: AppContext) {
     .use(
       cors({
         credentials: true,
-        origin: true,
+        origin: configService.allowedOrigins,
       }),
     )
     // SPA fallback - serve index.html for client-side routes (no caching)

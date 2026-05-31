@@ -12,7 +12,16 @@ export interface AppConfig {
   CRON_SECRET: string;
   googleSheetsId: string;
   googleCredentialsJson: string;
+  allowedOrigins: string[];
 }
+
+// Origins permitted to make credentialed cross-origin requests. Override via
+// ALLOWED_ORIGINS (comma-separated) in prod; defaults cover the deployed app +
+// local dev so an unset env never blocks the real frontend.
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://workout.patrawi.com",
+  "http://localhost:3000",
+];
 
 export class ConfigService {
   constructor(private readonly config: AppConfig) {}
@@ -30,6 +39,7 @@ export class ConfigService {
       CRON_SECRET: getOptionalEnv(env, "CRON_SECRET"),
       googleSheetsId: getOptionalEnv(env, "GOOGLE_SHEETS_ID"),
       googleCredentialsJson: getOptionalEnv(env, "GOOGLE_CREDENTIALS_JSON"),
+      allowedOrigins: getListEnv(env, "ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGINS),
     });
   }
 
@@ -46,6 +56,7 @@ export class ConfigService {
       CRON_SECRET: "test-cron-secret",
       googleSheetsId: "",
       googleCredentialsJson: "",
+      allowedOrigins: DEFAULT_ALLOWED_ORIGINS,
       ...overrides,
     });
   }
@@ -61,6 +72,7 @@ export class ConfigService {
   get CRON_SECRET() { return this.config.CRON_SECRET; }
   get googleSheetsId() { return this.config.googleSheetsId; }
   get googleCredentialsJson() { return this.config.googleCredentialsJson; }
+  get allowedOrigins() { return this.config.allowedOrigins; }
   get isAuthEnabled() { return this.config.masterPassword.length > 0; }
 }
 
@@ -79,6 +91,14 @@ function getOptionalEnv(env: NodeJS.ProcessEnv, name: string, fallback = ""): st
     return fallback;
   }
   return value;
+}
+
+function getListEnv(env: NodeJS.ProcessEnv, name: string, fallback: string[]): string[] {
+  const value = env[name];
+  if (!value || value.trim().length === 0) {
+    return fallback;
+  }
+  return value.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 function getNumberEnv(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
