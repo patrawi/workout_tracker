@@ -71,6 +71,16 @@ export interface NutritionItem {
   matched_food_name?: string;   // name of the catalog food the macros came from
   matched_food_id?: string;     // catalog id of that food
   uncertain?: boolean;          // true when no confident catalog match — needs manual review
+  unit_mismatch?: boolean;      // matched, but logged unit ≠ catalog unit — macros are best-effort, verify amount
+  // Catalog basis for the matched row (per `per_amount` `per_unit`), so the client
+  // can re-scale macros live when the user edits the amount.
+  catalog?: {
+    per_amount: number;
+    per_unit: string;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
 }
 
 export interface NutritionRow {

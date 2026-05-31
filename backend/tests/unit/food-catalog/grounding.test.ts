@@ -84,10 +84,23 @@ describe("groundNutritionItems", () => {
     expect(out.has_missing_macros).toBe(true);
   });
 
-  test("flags uncertain on unit mismatch even within distance threshold", async () => {
+  test("flags unit_mismatch (not uncertain) on discrete unit, seeds 1 unit = 1 serving", async () => {
     const catalog = catalogWith([{ ...EGG, distance: 0.02 }]);
+    // ate "1 piece" of a per-100g food → seed scale = count = 1 → per-100g macros.
     const out = await groundOne(item({ unit: "piece", amount: 1 }), catalog);
-    expect(out.uncertain).toBe(true);
+    expect(out.uncertain).toBe(false);
+    expect(out.unit_mismatch).toBe(true);
+    expect(out.protein).toBeCloseTo(12.6, 1); // not zero, not 0.1
     expect(out.matched_food_name).toBe("Lidl Free Range Eggs");
+    expect(out.catalog?.per_amount).toBe(100);
+  });
+
+  test("treats g and ml as compatible — no unit_mismatch, correct scale", async () => {
+    // catalog stored per 200 ml; logged 200 g → scale 1, no flag.
+    const catalog = catalogWith([{ ...EGG, per_amount: 200, per_unit: "ml", distance: 0.02 }]);
+    const out = await groundOne(item({ unit: "g", amount: 200 }), catalog);
+    expect(out.unit_mismatch).toBe(false);
+    expect(out.uncertain).toBe(false);
+    expect(out.protein).toBeCloseTo(12.6, 1); // 200/200 × 12.6
   });
 });

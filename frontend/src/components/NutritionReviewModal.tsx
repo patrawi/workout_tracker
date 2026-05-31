@@ -38,6 +38,16 @@ export default function NutritionReviewModal({
                     );
                 }
 
+                // Editing the amount re-scales macros from the matched catalog basis,
+                // so correcting "1 slice" → "38 g" updates the numbers live.
+                if (field === "amount" && updated.catalog && updated.catalog.per_amount > 0) {
+                    const scale = (value as number) / updated.catalog.per_amount;
+                    updated.protein = Math.round(updated.catalog.protein * scale * 10) / 10;
+                    updated.carbs = Math.round(updated.catalog.carbs * scale * 10) / 10;
+                    updated.fat = Math.round(updated.catalog.fat * scale * 10) / 10;
+                    updated.calories = computeCalories(updated.protein, updated.carbs, updated.fat);
+                }
+
                 copy[index] = updated;
                 return copy;
             });
@@ -159,17 +169,23 @@ export default function NutritionReviewModal({
                                         className={`rounded-xl bg-surface-100/50 border p-4 hover:border-surface-300/40 transition-colors ${
                                             item.uncertain
                                                 ? "border-amber-500/50"
-                                                : item.has_missing_macros
+                                                : item.unit_mismatch || item.has_missing_macros
                                                   ? "border-amber-500/30"
                                                   : "border-surface-300/20"
                                         }`}
                                     >
                                         {/* Food name + remove */}
                                         <div className="flex items-center gap-3 mb-3">
-                                            {(item.uncertain || item.has_missing_macros) && (
+                                            {(item.uncertain || item.unit_mismatch || item.has_missing_macros) && (
                                                 <span
                                                     className="text-amber-400 text-xs"
-                                                    title={item.uncertain ? "No confident catalog match — verify" : "Macros missing — verify"}
+                                                    title={
+                                                        item.uncertain
+                                                            ? "No confident catalog match — verify"
+                                                            : item.unit_mismatch
+                                                              ? "Unit differs from catalog — verify amount"
+                                                              : "Macros missing — verify"
+                                                    }
                                                 >
                                                     ⚠️
                                                 </span>
@@ -183,11 +199,21 @@ export default function NutritionReviewModal({
                                                 className="glass-input flex-1 px-3 py-1.5 text-sm text-white font-medium"
                                                 aria-label={`Food name for item ${originalIndex + 1}`}
                                             />
-                                            {item.amount > 0 && (
-                                                <span className="text-xs text-surface-500 whitespace-nowrap tabular-nums">
-                                                    {item.amount}{item.unit}
-                                                </span>
-                                            )}
+                                            <div className="flex items-center gap-1 whitespace-nowrap">
+                                                <input
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    min={0}
+                                                    step="any"
+                                                    value={item.amount}
+                                                    onChange={(e) =>
+                                                        updateItem(originalIndex, "amount", Number(e.target.value))
+                                                    }
+                                                    className="glass-input w-16 px-2 py-1.5 text-xs text-white tabular-nums text-right"
+                                                    aria-label={`Amount for item ${originalIndex + 1}`}
+                                                />
+                                                <span className="text-xs text-surface-500">{item.unit}</span>
+                                            </div>
                                             <select
                                                 value={item.meal}
                                                 onChange={(e) =>
@@ -216,6 +242,11 @@ export default function NutritionReviewModal({
                                             <p className="text-[11px] text-amber-400/90 mb-2">
                                                 No confident catalog match
                                                 {item.matched_food_name ? ` — nearest: ${item.matched_food_name}` : ""}. Verify macros.
+                                            </p>
+                                        ) : item.unit_mismatch && item.matched_food_name ? (
+                                            <p className="text-[11px] text-amber-400/90 mb-2">
+                                                ✓ From catalog: {item.matched_food_name} — logged {item.amount}{item.unit}
+                                                {item.catalog ? `, catalog per ${item.catalog.per_amount}${item.catalog.per_unit}` : ""}. Verify amount.
                                             </p>
                                         ) : item.matched_food_name ? (
                                             <p className="text-[11px] text-emerald-400/80 mb-2">

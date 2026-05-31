@@ -10,6 +10,22 @@ function caloriesFrom(protein: number, carbs: number, fat: number): number {
   return roundTo1(protein * 4 + carbs * 4 + fat * 9);
 }
 
+// Metric mass/volume units → grams. Food density ≈ 1, so g and ml are
+// treated as interchangeable. Anything not here (slice, can, serving, piece)
+// is a discrete count whose gram weight is unknown.
+const METRIC_TO_GRAMS: Record<string, number> = {
+  g: 1, gram: 1, grams: 1, gm: 1,
+  kg: 1000, kilogram: 1000, kilograms: 1000,
+  ml: 1, milliliter: 1, millilitre: 1,
+  l: 1000, liter: 1000, litre: 1000, litres: 1000,
+  oz: 28.3495, lb: 453.592,
+};
+
+function metricGrams(amount: number, unit: string): number | null {
+  const factor = METRIC_TO_GRAMS[unit.trim().toLowerCase()];
+  return factor === undefined ? null : amount * factor;
+}
+
 /**
  * Fill in macros for items the LLM couldn't extract, using the embedded food
  * catalog. For each missing-macro item we vector-search the catalog and, if the
@@ -65,15 +81,34 @@ export async function groundNutritionItems(
         };
       }
 
-      const scale = best.per_amount > 0 ? item.amount / best.per_amount : 1;
+      // Work out how much was eaten relative to the catalog's per-amount basis.
+      const eatenG = metricGrams(item.amount, item.unit);
+      const baseG = metricGrams(best.per_amount, best.per_unit);
+      const sameUnit =
+        item.unit.trim().toLowerCase() === best.per_unit.trim().toLowerCase();
+
+      let scale: number;
+      let unitMismatch: boolean;
+      if (eatenG !== null && baseG !== null && baseG > 0) {
+        // Both metric (g/ml/kg/...). g≈ml, so this is exact — no flag.
+        scale = eatenG / baseG;
+        unitMismatch = false;
+      } else if (sameUnit && best.per_amount > 0) {
+        // Same discrete unit on both sides (e.g. logged "2 serving", catalog
+        // per "1 serving") — also exact.
+        scale = item.amount / best.per_amount;
+        unitMismatch = false;
+      } else {
+        // Discrete unit vs metric basis (e.g. "1 slice"/"1 can" vs per-100g):
+        // true grams unknown. Seed each unit as one catalog serving and flag so
+        // the user can correct the amount.
+        scale = item.amount;
+        unitMismatch = true;
+      }
+
       const protein = roundTo1(best.protein * scale);
       const carbs = roundTo1(best.carbs * scale);
       const fat = roundTo1(best.fat * scale);
-
-      // Units that don't line up (ate "1 piece" but catalog is per-gram) still
-      // get a best-effort scale, but are flagged so the user verifies.
-      const unitMismatch =
-        item.unit.trim().toLowerCase() !== best.per_unit.trim().toLowerCase();
 
       return {
         ...item,
@@ -84,7 +119,15 @@ export async function groundNutritionItems(
         has_missing_macros: false,
         matched_food_name: best.name,
         matched_food_id: best.id,
-        uncertain: unitMismatch,
+        uncertain: false,
+        unit_mismatch: unitMismatch,
+        catalog: {
+          per_amount: best.per_amount,
+          per_unit: best.per_unit,
+          protein: best.protein,
+          carbs: best.carbs,
+          fat: best.fat,
+        },
       };
     }),
   );
