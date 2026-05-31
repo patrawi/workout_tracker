@@ -11,6 +11,7 @@ import { registerBodyweightRoutes } from "./routes/bodyweight.routes";
 import { registerRestDayRoutes } from "./routes/rest-days.routes";
 import { registerProfileRoutes } from "./routes/profile.routes";
 import { registerNutritionRoutes } from "./routes/nutrition.routes";
+import { registerFoodCatalogRoutes } from "./routes/food-catalog.routes";
 import { registerHistoryRoutes } from "./routes/history.routes";
 import { notificationsRoutes } from "./routes/notifications";
 import { cronRoutes } from "./routes/cron";
@@ -135,6 +136,7 @@ export function createApp(ctx: AppContext) {
             (a) => registerRestDayRoutes(a, ctx),
             (a) => registerProfileRoutes(a, ctx),
             (a) => registerNutritionRoutes(a, ctx),
+            (a) => registerFoodCatalogRoutes(a, ctx),
             (a) => registerHistoryRoutes(a, ctx),
           );
           return app;

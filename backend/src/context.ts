@@ -8,6 +8,7 @@ import { createBodyweightRepository } from "./repositories/bodyweight.repository
 import { createRestDayRepository } from "./repositories/rest-day.repository";
 import { createHistoryRepository } from "./repositories/history.repository";
 import { createNutritionRepository } from "./repositories/nutrition.repository";
+import { createFoodCatalogRepository } from "./repositories/food-catalog.repository";
 import { createAIService } from "./services/ai.service";
 import { createAnalyticsService } from "./services/analytics.service";
 import { createBodyweightService } from "./services/bodyweight.service";
@@ -16,6 +17,9 @@ import { createHistoryService } from "./services/history.service";
 import { createProfileService } from "./services/profile.service";
 import { createWorkoutService } from "./services/workout.service";
 import { createNutritionService } from "./services/nutrition.service";
+import { createFoodCatalogService } from "./services/food-catalog.service";
+import type { FoodCatalogService } from "./services/food-catalog.service";
+import { createEmbeddingClient } from "./embeddings/client";
 import { createAuthService } from "./services/auth.service";
 import type { AnalyticsService } from "./services/analytics.service";
 import type { BodyweightService } from "./services/bodyweight.service";
@@ -35,6 +39,7 @@ export interface AppContext {
   profileService: ProfileService;
   workoutService: WorkoutService;
   nutritionService: NutritionService;
+  foodCatalogService: FoodCatalogService;
   configService: ConfigService;
   authService: AuthService;
 }
@@ -51,9 +56,11 @@ export function createAppContext(
   const restDayRepo = createRestDayRepository(db);
   const historyRepo = createHistoryRepository(db);
   const nutritionRepo = createNutritionRepository(db);
+  const foodCatalogRepo = createFoodCatalogRepository(db);
 
   // Create AI service
   const aiService = createAIService(config);
+  const embeddingClient = createEmbeddingClient(config.geminiApiKey);
 
   // Create services
   const analyticsService = createAnalyticsService(analyticsRepo, workoutRepo);
@@ -61,7 +68,8 @@ export function createAppContext(
   const restDayService = createRestDayService(restDayRepo);
   const historyService = createHistoryService(historyRepo);
   const workoutService = createWorkoutService(workoutRepo, aiService);
-  const nutritionService = createNutritionService(nutritionRepo, aiService);
+  const foodCatalogService = createFoodCatalogService(foodCatalogRepo, embeddingClient);
+  const nutritionService = createNutritionService(nutritionRepo, aiService, foodCatalogService);
   const profileService = createProfileService(profileRepo, bodyweightService);
   const authService = createAuthService(config);
 
@@ -73,6 +81,7 @@ export function createAppContext(
     profileService,
     workoutService,
     nutritionService,
+    foodCatalogService,
     configService: config,
     authService,
   };

@@ -9,7 +9,11 @@ import {
     jsonb,
     pgEnum,
     index,
+    vector,
 } from "drizzle-orm/pg-core";
+
+// Embedding dimension for the food catalog (Gemini text-embedding-004).
+export const EMBEDDING_DIMENSIONS = 768;
 
 // ——— Enums ———
 export const mealTypeEnum = pgEnum("meal_type", [
@@ -103,6 +107,36 @@ export const nutritionLogs = pgTable(
     },
     (table) => [
         index("nutrition_logs_date_idx").on(table.date),
+    ],
+);
+
+// ——— Food Catalog Table (embedded reference catalog for RAG nutrition parse) ———
+// Macros are stored per `per_amount` `per_unit` (e.g. per 100 g). Scaling to the
+// eaten amount happens at parse time, never stored here. Source of truth is the
+// Google Sheet filled by the separate nutrition_ocr bot; rows are synced + embedded.
+export const foodCatalog = pgTable(
+    "food_catalog",
+    {
+        id: text("id").primaryKey(),                            // slug, e.g. "personal-kikkoman-teriyaki"
+        name: text("name").notNull(),                           // "Kikkoman Sauce teriyaki"
+        brand: text("brand").default(""),                       // "Kikkoman"
+        product_type: text("product_type").default(""),         // "sauce"
+        per_amount: real("per_amount").default(100).notNull(),  // 100
+        per_unit: text("per_unit").default("g").notNull(),      // "g" | "ml" | "serving" | "piece"
+        calories: real("calories").default(0),
+        protein: real("protein").default(0),
+        carbs: real("carbs").default(0),
+        fat: real("fat").default(0),
+        source: text("source").default("google_sheet").notNull(), // "google_sheet" | "ocr" | "manual"
+        source_row_id: text("source_row_id"),                   // "row_12" — dedup key for Sheet rows
+        embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
+        created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+        updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
+    },
+    (table) => [
+        index("food_catalog_source_row_id_idx").on(table.source_row_id),
+        index("food_catalog_embedding_idx")
+            .using("hnsw", table.embedding.op("vector_cosine_ops")),
     ],
 );
 

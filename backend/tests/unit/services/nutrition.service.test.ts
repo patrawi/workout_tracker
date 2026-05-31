@@ -20,11 +20,22 @@ function createMockAIService() {
   };
 }
 
+function createMockFoodCatalogService() {
+  return {
+    upsertFood: mock(async () => {}),
+    upsertMany: mock(async () => {}),
+    search: mock(async () => []),
+    getExistingRowIds: mock(async () => new Set<string>()),
+    count: mock(async () => 0),
+  };
+}
+
 describe("createNutritionService", () => {
   test("creates service with all methods", () => {
     const mockRepo = createMockNutritionRepo();
     const mockAI = createMockAIService();
-    const service = createNutritionService(mockRepo as any, mockAI);
+    const mockCatalog = createMockFoodCatalogService();
+    const service = createNutritionService(mockRepo as any, mockAI, mockCatalog as any);
 
     expect(typeof service.parse).toBe("function");
     expect(typeof service.log).toBe("function");
@@ -37,7 +48,8 @@ describe("createNutritionService", () => {
   test("parse validates raw_text", async () => {
     const mockRepo = createMockNutritionRepo();
     const mockAI = createMockAIService();
-    const service = createNutritionService(mockRepo as any, mockAI);
+    const mockCatalog = createMockFoodCatalogService();
+    const service = createNutritionService(mockRepo as any, mockAI, mockCatalog as any);
 
     await expect(service.parse("")).rejects.toThrow(ValidationError);
   });
@@ -45,7 +57,8 @@ describe("createNutritionService", () => {
   test("log validates items", async () => {
     const mockRepo = createMockNutritionRepo();
     const mockAI = createMockAIService();
-    const service = createNutritionService(mockRepo as any, mockAI);
+    const mockCatalog = createMockFoodCatalogService();
+    const service = createNutritionService(mockRepo as any, mockAI, mockCatalog as any);
 
     await expect(service.log([], "2024-01-01")).rejects.toThrow(ValidationError);
   });

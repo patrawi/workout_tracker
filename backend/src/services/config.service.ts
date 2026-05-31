@@ -10,6 +10,8 @@ export interface AppConfig {
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
   CRON_SECRET: string;
+  googleSheetsId: string;
+  googleCredentialsJson: string;
 }
 
 export class ConfigService {
@@ -26,6 +28,8 @@ export class ConfigService {
       VAPID_PRIVATE_KEY: getOptionalEnv(env, "VAPID_PRIVATE_KEY"),
       VAPID_SUBJECT: getOptionalEnv(env, "VAPID_SUBJECT", "mailto:admin@localhost"),
       CRON_SECRET: getOptionalEnv(env, "CRON_SECRET"),
+      googleSheetsId: getOptionalEnv(env, "GOOGLE_SHEETS_ID"),
+      googleCredentialsJson: getOptionalEnv(env, "GOOGLE_CREDENTIALS_JSON"),
     });
   }
 
@@ -40,6 +44,8 @@ export class ConfigService {
       VAPID_PRIVATE_KEY: "test-vapid-private",
       VAPID_SUBJECT: "mailto:test@localhost",
       CRON_SECRET: "test-cron-secret",
+      googleSheetsId: "",
+      googleCredentialsJson: "",
       ...overrides,
     });
   }
@@ -53,6 +59,8 @@ export class ConfigService {
   get VAPID_PRIVATE_KEY() { return this.config.VAPID_PRIVATE_KEY; }
   get VAPID_SUBJECT() { return this.config.VAPID_SUBJECT; }
   get CRON_SECRET() { return this.config.CRON_SECRET; }
+  get googleSheetsId() { return this.config.googleSheetsId; }
+  get googleCredentialsJson() { return this.config.googleCredentialsJson; }
   get isAuthEnabled() { return this.config.masterPassword.length > 0; }
 }
 

@@ -157,17 +157,19 @@ export default function NutritionReviewModal({
                                     <div
                                         key={originalIndex}
                                         className={`rounded-xl bg-surface-100/50 border p-4 hover:border-surface-300/40 transition-colors ${
-                                            item.has_missing_macros
-                                                ? "border-amber-500/30"
-                                                : "border-surface-300/20"
+                                            item.uncertain
+                                                ? "border-amber-500/50"
+                                                : item.has_missing_macros
+                                                  ? "border-amber-500/30"
+                                                  : "border-surface-300/20"
                                         }`}
                                     >
                                         {/* Food name + remove */}
                                         <div className="flex items-center gap-3 mb-3">
-                                            {item.has_missing_macros && (
+                                            {(item.uncertain || item.has_missing_macros) && (
                                                 <span
                                                     className="text-amber-400 text-xs"
-                                                    title="Macros were estimated — verify"
+                                                    title={item.uncertain ? "No confident catalog match — verify" : "Macros missing — verify"}
                                                 >
                                                     ⚠️
                                                 </span>
@@ -208,6 +210,18 @@ export default function NutritionReviewModal({
                                                 Remove
                                             </button>
                                         </div>
+
+                                        {/* Catalog match caption */}
+                                        {item.uncertain ? (
+                                            <p className="text-[11px] text-amber-400/90 mb-2">
+                                                No confident catalog match
+                                                {item.matched_food_name ? ` — nearest: ${item.matched_food_name}` : ""}. Verify macros.
+                                            </p>
+                                        ) : item.matched_food_name ? (
+                                            <p className="text-[11px] text-emerald-400/80 mb-2">
+                                                ✓ From catalog: {item.matched_food_name}
+                                            </p>
+                                        ) : null}
 
                                         {/* Macros grid */}
                                         <div className="grid grid-cols-4 gap-3">

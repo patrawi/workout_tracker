@@ -67,6 +67,10 @@ export interface NutritionItem {
   amount: number;        // how much was eaten
   unit: string;          // "g" | "ml" | "serving" | "piece"
   has_missing_macros: boolean;  // true when LLM couldn't extract macros
+  // ——— Catalog grounding (RAG) — optional, populated by the grounding pass ———
+  matched_food_name?: string;   // name of the catalog food the macros came from
+  matched_food_id?: string;     // catalog id of that food
+  uncertain?: boolean;          // true when no confident catalog match — needs manual review
 }
 
 export interface NutritionRow {

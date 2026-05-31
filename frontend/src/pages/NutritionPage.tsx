@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CalendarDays, Trash2, ArrowUp, ArrowDown, Minus } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { CalendarDays, Trash2, ArrowUp, ArrowDown, Minus, RefreshCw } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useNutrition } from "@/features/nutrition/hooks/useNutrition";
 import NutritionReviewModal from "@/components/NutritionReviewModal";
 import { queryKeys } from "@/lib/query-keys";
-import { nutritionApi } from "@/lib/api";
+import { nutritionApi, foodCatalogApi } from "@/lib/api";
 import type { NutritionRow, MealType } from "@/types";
 
 const MEAL_ORDER: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -141,6 +141,19 @@ export default function NutritionPage() {
     const [text, setText] = useState("");
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // Catalog sync — pulls new Google Sheet rows into the embedded food catalog.
+    const [syncMsg, setSyncMsg] = useState<string | null>(null);
+    const syncMutation = useMutation({
+        mutationFn: async () => {
+            const res = await foodCatalogApi.sync();
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Sync failed");
+        },
+        onSuccess: (d) =>
+            setSyncMsg(`Catalog synced — ${d.added} new, ${d.skipped} already known (${d.total} total)`),
+        onError: (e) => setSyncMsg(e instanceof Error ? e.message : "Sync failed"),
+    });
+
     // Fetch yesterday's data for delta comparison
     const yesterdayString = new Date(new Date().getTime() - 86400000).toISOString().slice(0, 10);
 
@@ -230,12 +243,27 @@ export default function NutritionPage() {
                     >
                         ← Back to Tracker
                     </Link>
-                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[var(--foreground)]">
-                        Nutrition Log
-                    </h1>
+                    <div className="flex items-start justify-between gap-3">
+                        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[var(--foreground)]">
+                            Nutrition Log
+                        </h1>
+                        <button
+                            type="button"
+                            onClick={() => { setSyncMsg(null); syncMutation.mutate(); }}
+                            disabled={syncMutation.isPending}
+                            className="flex-shrink-0 mt-1 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--card)] transition-colors disabled:opacity-50"
+                            title="Pull new scanned foods from the Google Sheet into the catalog"
+                        >
+                            <RefreshCw className={`w-3.5 h-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                            {syncMutation.isPending ? "Syncing…" : "Sync catalog"}
+                        </button>
+                    </div>
                     <p className="text-[var(--muted-foreground)] text-sm mt-2">
-                        Paste your food notes — AI parses macros from labels and estimates the rest.
+                        Paste your food notes — the catalog fills in real label macros, AI scales the rest.
                     </p>
+                    {syncMsg && (
+                        <p className="text-[11px] text-[var(--muted-foreground)] mt-2">{syncMsg}</p>
+                    )}
                 </header>
 
                 {/* Error banner */}

@@ -3,6 +3,7 @@ import type { NutritionItem, RawLLMItem } from "../types";
 import { NUTRITION_SYSTEM_PROMPT } from "./prompts";
 import { normalizeNutritionItem } from "./normalizers";
 import { GEMINI_MODEL_NUTRITION, GEMINI_TEMPERATURE } from "../constants";
+import { logger } from "../lib/logger";
 
 export interface NutritionAIClient {
   parse(rawText: string): Promise<NutritionItem[]>;
@@ -31,6 +32,7 @@ export function createNutritionAIClient(
       });
       const textContent = response.text ?? "";
 
+      logger.info("Logging parse json", { textContent });
       // Clean potential markdown code fences
       const cleaned = textContent
         .replace(/```json\s*/gi, "")
@@ -39,9 +41,7 @@ export function createNutritionAIClient(
 
       try {
         const parsed = JSON.parse(cleaned);
-        const items: RawLLMItem[] = Array.isArray(parsed)
-          ? parsed
-          : [parsed];
+        const items: RawLLMItem[] = Array.isArray(parsed) ? parsed : [parsed];
 
         return items.map(normalizeNutritionItem);
       } catch {

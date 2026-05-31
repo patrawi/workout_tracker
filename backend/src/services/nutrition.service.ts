@@ -2,6 +2,8 @@
 
 import type { NutritionItem, NutritionRow } from "../types";
 import type { AIService } from "./ai.service";
+import type { FoodCatalogService } from "./food-catalog.service";
+import { groundNutritionItems } from "../food-catalog/grounding";
 import { ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
 
@@ -19,14 +21,30 @@ export interface NutritionService {
 
 export function createNutritionService(
   repo: ReturnType<typeof import("../repositories/nutrition.repository").createNutritionRepository>,
-  aiService: AIService
+  aiService: AIService,
+  foodCatalogService: FoodCatalogService,
 ): NutritionService {
   return {
     async parse(rawText: string): Promise<NutritionItem[]> {
       if (!rawText || rawText.trim().length === 0) {
         throw new ValidationError("raw_text cannot be empty");
       }
-      return aiService.parseNutritionText(rawText);
+      const items = await aiService.parseNutritionText(rawText);
+
+      // Ground missing macros against the embedded food catalog. Best-effort:
+      // if the catalog is empty or grounding fails, fall back to the raw parse.
+      const needsGrounding = items.some((i) => i.has_missing_macros);
+      if (!needsGrounding) return items;
+      try {
+        const catalogSize = await foodCatalogService.count();
+        if (catalogSize === 0) return items;
+        return await groundNutritionItems(items, foodCatalogService);
+      } catch (error) {
+        logger.warn("Catalog grounding failed; returning raw parse", {
+          error: String(error),
+        });
+        return items;
+      }
     },
 
     async log(items: NutritionItem[], date: string): Promise<NutritionRow[]> {
