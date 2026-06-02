@@ -22,6 +22,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage.tsx'))
 const HistoryPage = lazy(() => import('./pages/HistoryPage.tsx'))
 const DailyWorkoutPage = lazy(() => import('./pages/DailyWorkoutPage.tsx'))
 const NutritionPage = lazy(() => import('./pages/NutritionPage.tsx'))
+const CoachPage = lazy(() => import('./pages/CoachPage.tsx'))
 
 const app = (
   <QueryClientProvider client={queryClient}>
@@ -79,6 +80,14 @@ const app = (
             element={
               <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="skeleton h-8 w-40" /></div>}>
                 <NutritionPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/coach"
+            element={
+              <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="skeleton h-8 w-40" /></div>}>
+                <CoachPage />
               </Suspense>
             }
           />

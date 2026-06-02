@@ -6,6 +6,8 @@ export interface AppConfig {
   masterPassword: string;
   jwtSecret: string;
   geminiApiKey: string;
+  deepseekApiKey: string;
+  llmProvider: "gemini" | "deepseek";
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
@@ -33,6 +35,8 @@ export class ConfigService {
       masterPassword: getOptionalEnv(env, "MASTER_PASSWORD"),
       jwtSecret: getOptionalEnv(env, "JWT_SECRET", "frictionless-tracker-secret-change-me"),
       geminiApiKey: getOptionalEnv(env, "GEMINI_API_KEY"),
+      deepseekApiKey: getOptionalEnv(env, "DEEPSEEK_API_KEY"),
+      llmProvider: getOptionalEnv(env, "LLM_PROVIDER", "gemini").toLowerCase() === "deepseek" ? "deepseek" : "gemini",
       VAPID_PUBLIC_KEY: getOptionalEnv(env, "VAPID_PUBLIC_KEY"),
       VAPID_PRIVATE_KEY: getOptionalEnv(env, "VAPID_PRIVATE_KEY"),
       VAPID_SUBJECT: getOptionalEnv(env, "VAPID_SUBJECT", "mailto:admin@localhost"),
@@ -50,6 +54,8 @@ export class ConfigService {
       masterPassword: "test-password",
       jwtSecret: "test-secret",
       geminiApiKey: "test-gemini-key",
+      deepseekApiKey: "",
+      llmProvider: "gemini",
       VAPID_PUBLIC_KEY: "test-vapid-public",
       VAPID_PRIVATE_KEY: "test-vapid-private",
       VAPID_SUBJECT: "mailto:test@localhost",
@@ -66,6 +72,8 @@ export class ConfigService {
   get masterPassword() { return this.config.masterPassword; }
   get jwtSecret() { return this.config.jwtSecret; }
   get geminiApiKey() { return this.config.geminiApiKey; }
+  get deepseekApiKey() { return this.config.deepseekApiKey; }
+  get llmProvider() { return this.config.llmProvider; }
   get VAPID_PUBLIC_KEY() { return this.config.VAPID_PUBLIC_KEY; }
   get VAPID_PRIVATE_KEY() { return this.config.VAPID_PRIVATE_KEY; }
   get VAPID_SUBJECT() { return this.config.VAPID_SUBJECT; }

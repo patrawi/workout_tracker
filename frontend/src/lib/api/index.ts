@@ -8,3 +8,4 @@ export { heatmapApi, type HeatmapDay } from "./heatmap";
 export { nutritionApi } from "./nutrition";
 export { foodCatalogApi, type CatalogSyncResult } from "./food-catalog";
 export { historyApi, type HistoryDate } from "./history";
+export { coachApi } from "./coach";

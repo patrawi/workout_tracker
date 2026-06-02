@@ -1,9 +1,24 @@
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { withWorkoutDefaults } from "../lib/defaults";
 import { mapWorkoutRow } from "../db/mappers";
 import { sessions, workouts } from "../schema";
 import type { WorkoutData, WorkoutRow, SessionActivityData } from "../types";
+
+export interface SessionExercise {
+  exercise_name: string;
+  weight: number;
+  reps: number;
+  rpe: number;
+  is_bodyweight: boolean;
+  muscle_group: string;
+}
+
+export interface SessionWithWorkouts {
+  session_id: number;
+  created_at: string | null;
+  workouts: SessionExercise[];
+}
 
 export interface WorkoutUpdateData {
   exercise_name?: string;
@@ -230,6 +245,45 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         .orderBy(workouts.created_at);
 
       return rows.map(mapWorkoutRow);
+    },
+
+    // Recent sessions, each with its workout rows — used to derive day-type and
+    // pull the latest actual sets for a given Push/Pull/Legs session.
+    async getRecentSessionsWithWorkouts(limit = 30): Promise<SessionWithWorkouts[]> {
+      const sess = await dbInstance
+        .select({ id: sessions.id, created_at: sessions.created_at })
+        .from(sessions)
+        .orderBy(desc(sessions.created_at))
+        .limit(limit);
+
+      if (sess.length === 0) return [];
+
+      const ids = sess.map((s) => s.id);
+      const rows = await dbInstance
+        .select()
+        .from(workouts)
+        .where(inArray(workouts.session_id, ids))
+        .orderBy(asc(workouts.id));
+
+      const grouped = new Map<number, SessionExercise[]>();
+      for (const r of rows) {
+        const list = grouped.get(r.session_id) ?? [];
+        list.push({
+          exercise_name: r.exercise_name,
+          weight: r.weight ?? 0,
+          reps: r.reps ?? 0,
+          rpe: r.rpe ?? 0,
+          is_bodyweight: r.is_bodyweight ?? false,
+          muscle_group: r.muscle_group,
+        });
+        grouped.set(r.session_id, list);
+      }
+
+      return sess.map((s) => ({
+        session_id: s.id,
+        created_at: s.created_at,
+        workouts: grouped.get(s.id) ?? [],
+      }));
     },
 
     async getRecentNotes(exercise: string, limit = 5): Promise<WorkoutRow[]> {

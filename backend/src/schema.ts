@@ -57,6 +57,26 @@ export const workouts = pgTable("workouts", {
     index("workouts_exercise_name_idx").on(table.exercise_name),
 ]);
 
+// ——— Coach Plan Table (current target per exercise per day-type) ———
+// The evolving progression state. day_type is 'Push' | 'Pull' | 'Legs'.
+export const coachPlan = pgTable("coach_plan", {
+    id: serial("id").primaryKey(),
+    day_type: text("day_type").notNull(),
+    position: integer("position").default(0).notNull(),
+    exercise_name: text("exercise_name").notNull(),
+    is_bodyweight: boolean("is_bodyweight").default(false).notNull(),
+    target_weight: real("target_weight"),
+    sets: integer("sets").default(3).notNull(),
+    rep_low: integer("rep_low").default(0).notNull(),
+    rep_high: integer("rep_high").default(0).notNull(),
+    rpe_low: integer("rpe_low").default(0).notNull(),
+    rpe_high: integer("rpe_high").default(0).notNull(),
+    notes: text("notes").default("").notNull(),
+    updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
+}, (table) => [
+    index("coach_plan_day_type_idx").on(table.day_type),
+]);
+
 // ——— Profile Table (single row, id always = 1) ———
 export const profile = pgTable("profile", {
     id: integer("id").primaryKey().default(1),

@@ -13,6 +13,7 @@ import { registerProfileRoutes } from "./routes/profile.routes";
 import { registerNutritionRoutes } from "./routes/nutrition.routes";
 import { registerFoodCatalogRoutes } from "./routes/food-catalog.routes";
 import { registerHistoryRoutes } from "./routes/history.routes";
+import { registerCoachRoutes } from "./routes/coach.routes";
 import { notificationsRoutes } from "./routes/notifications";
 import { cronRoutes } from "./routes/cron";
 
@@ -89,6 +90,10 @@ export function createApp(ctx: AppContext) {
       set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
       return Bun.file("./public/index.html")
     })
+    .get("/coach", ({ set }) => {
+      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
+      return Bun.file("./public/index.html")
+    })
     .get("/health", () => ({ status: "ok", timestamp: new Date().toISOString() }))
     // Public routes (no auth required)
     .use(notificationsRoutes)
@@ -138,6 +143,7 @@ export function createApp(ctx: AppContext) {
             (a) => registerNutritionRoutes(a, ctx),
             (a) => registerFoodCatalogRoutes(a, ctx),
             (a) => registerHistoryRoutes(a, ctx),
+            (a) => registerCoachRoutes(a, ctx),
           );
           return app;
         }),

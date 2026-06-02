@@ -19,6 +19,19 @@ export const GEMINI_MODEL_WORKOUT = "gemini-3-flash-preview";
 export const GEMINI_MODEL_NUTRITION = "gemini-3-flash-preview";
 export const GEMINI_TEMPERATURE = 0.1;
 
+// AI Coach (conversational — higher temperature than the parsers)
+export const COACH_MODEL = "gemini-3-flash-preview";
+export const COACH_TEMPERATURE = 0.6;
+export const COACH_CONTEXT_DAYS = 14; // window for the grounding summary
+export const COACH_NUTRITION_DAYS = 7; // days of nutrition to average
+
+// DeepSeek (OpenAI-compatible REST). Selected via LLM_PROVIDER=deepseek + DEEPSEEK_API_KEY.
+// Coach runs thinking mode ON (plan reasoning); parsers run thinking OFF.
+export const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+export const DEEPSEEK_COACH_MODEL = "deepseek-v4-flash";
+export const DEEPSEEK_PARSER_MODEL = "deepseek-v4-flash";
+export const DEEPSEEK_TEMPERATURE = 0.1;
+
 // Food Catalog — embeddings + retrieval (RAG nutrition parse)
 export const GEMINI_MODEL_EMBEDDING = "gemini-embedding-001"; // free tier; dim requested below
 export const EMBEDDING_DIM = 768; // gemini-embedding-001 defaults to 3072 — we request 768

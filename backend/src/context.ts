@@ -9,6 +9,7 @@ import { createRestDayRepository } from "./repositories/rest-day.repository";
 import { createHistoryRepository } from "./repositories/history.repository";
 import { createNutritionRepository } from "./repositories/nutrition.repository";
 import { createFoodCatalogRepository } from "./repositories/food-catalog.repository";
+import { createCoachPlanRepository } from "./repositories/coach-plan.repository";
 import { createAIService } from "./services/ai.service";
 import { createAnalyticsService } from "./services/analytics.service";
 import { createBodyweightService } from "./services/bodyweight.service";
@@ -19,6 +20,8 @@ import { createWorkoutService } from "./services/workout.service";
 import { createNutritionService } from "./services/nutrition.service";
 import { createFoodCatalogService } from "./services/food-catalog.service";
 import type { FoodCatalogService } from "./services/food-catalog.service";
+import { createCoachService } from "./services/coach.service";
+import type { CoachService } from "./services/coach.service";
 import { createEmbeddingClient } from "./embeddings/client";
 import { createAuthService } from "./services/auth.service";
 import type { AnalyticsService } from "./services/analytics.service";
@@ -40,6 +43,7 @@ export interface AppContext {
   workoutService: WorkoutService;
   nutritionService: NutritionService;
   foodCatalogService: FoodCatalogService;
+  coachService: CoachService;
   configService: ConfigService;
   authService: AuthService;
 }
@@ -57,6 +61,7 @@ export function createAppContext(
   const historyRepo = createHistoryRepository(db);
   const nutritionRepo = createNutritionRepository(db);
   const foodCatalogRepo = createFoodCatalogRepository(db);
+  const coachPlanRepo = createCoachPlanRepository(db);
 
   // Create AI service
   const aiService = createAIService(config);
@@ -72,6 +77,14 @@ export function createAppContext(
   const nutritionService = createNutritionService(nutritionRepo, aiService, foodCatalogService);
   const profileService = createProfileService(profileRepo, bodyweightService);
   const authService = createAuthService(config);
+  const coachService = createCoachService(config, {
+    analyticsService,
+    nutritionService,
+    bodyweightService,
+    profileService,
+    coachPlanRepo,
+    workoutRepo,
+  });
 
   return {
     analyticsService,
@@ -82,6 +95,7 @@ export function createAppContext(
     workoutService,
     nutritionService,
     foodCatalogService,
+    coachService,
     configService: config,
     authService,
   };
