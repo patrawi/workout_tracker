@@ -32,6 +32,8 @@ interface UseNutritionReturn {
     parsedItems: NutritionItem[] | null;
     loggedDates: string[];
     targets: MacroTargets;
+    calorieGoal: number;
+    waterTarget: number;
     summary: DailySummary;
 
     // Loading states
@@ -94,6 +96,9 @@ export function useNutrition(initialDate?: string): UseNutritionReturn {
             fat_target: profileData.fat_target,
         }
         : { protein_target: 0, carbs_target: 0, fat_target: 0 };
+
+    const calorieGoal = profileData?.calories_intake ?? 0;
+    const waterTarget = profileData?.water_target_glasses ?? 10;
 
     const summary: DailySummary = useMemo((): DailySummary => {
         let totalProtein = 0;
@@ -219,6 +224,8 @@ export function useNutrition(initialDate?: string): UseNutritionReturn {
         parsedItems,
         loggedDates,
         targets,
+        calorieGoal,
+        waterTarget,
         summary,
         isLoading: isLoadingItems,
         isParsing: parseMutation.isPending,

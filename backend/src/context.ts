@@ -8,6 +8,7 @@ import { createBodyweightRepository } from "./repositories/bodyweight.repository
 import { createRestDayRepository } from "./repositories/rest-day.repository";
 import { createHistoryRepository } from "./repositories/history.repository";
 import { createNutritionRepository } from "./repositories/nutrition.repository";
+import { createWaterRepository } from "./repositories/water.repository";
 import { createFoodCatalogRepository } from "./repositories/food-catalog.repository";
 import { createCoachPlanRepository } from "./repositories/coach-plan.repository";
 import { createAIService } from "./services/ai.service";
@@ -18,6 +19,7 @@ import { createHistoryService } from "./services/history.service";
 import { createProfileService } from "./services/profile.service";
 import { createWorkoutService } from "./services/workout.service";
 import { createNutritionService } from "./services/nutrition.service";
+import { createWaterService } from "./services/water.service";
 import { createFoodCatalogService } from "./services/food-catalog.service";
 import type { FoodCatalogService } from "./services/food-catalog.service";
 import { createCoachService } from "./services/coach.service";
@@ -31,6 +33,7 @@ import type { HistoryService } from "./services/history.service";
 import type { ProfileService } from "./services/profile.service";
 import type { WorkoutService } from "./services/workout.service";
 import type { NutritionService } from "./services/nutrition.service";
+import type { WaterService } from "./services/water.service";
 import type { ConfigService } from "./services/config.service";
 import type { AuthService } from "./services/auth.service";
 
@@ -42,6 +45,7 @@ export interface AppContext {
   profileService: ProfileService;
   workoutService: WorkoutService;
   nutritionService: NutritionService;
+  waterService: WaterService;
   foodCatalogService: FoodCatalogService;
   coachService: CoachService;
   configService: ConfigService;
@@ -60,6 +64,7 @@ export function createAppContext(
   const restDayRepo = createRestDayRepository(db);
   const historyRepo = createHistoryRepository(db);
   const nutritionRepo = createNutritionRepository(db);
+  const waterRepo = createWaterRepository(db);
   const foodCatalogRepo = createFoodCatalogRepository(db);
   const coachPlanRepo = createCoachPlanRepository(db);
 
@@ -75,6 +80,7 @@ export function createAppContext(
   const workoutService = createWorkoutService(workoutRepo, aiService);
   const foodCatalogService = createFoodCatalogService(foodCatalogRepo, embeddingClient);
   const nutritionService = createNutritionService(nutritionRepo, aiService, foodCatalogService);
+  const waterService = createWaterService(waterRepo);
   const profileService = createProfileService(profileRepo, bodyweightService);
   const authService = createAuthService(config);
   const coachService = createCoachService(config, {
@@ -94,6 +100,7 @@ export function createAppContext(
     profileService,
     workoutService,
     nutritionService,
+    waterService,
     foodCatalogService,
     coachService,
     configService: config,

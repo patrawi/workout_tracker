@@ -37,7 +37,8 @@ function profileEquals(a: ProfileData, b: ProfileData): boolean {
     a.calories_intake === b.calories_intake &&
     a.protein_target === b.protein_target &&
     a.carbs_target === b.carbs_target &&
-    a.fat_target === b.fat_target
+    a.fat_target === b.fat_target &&
+    a.water_target_glasses === b.water_target_glasses
   );
 }
 
@@ -51,6 +52,7 @@ export function useProfile(): UseProfileReturn {
     protein_target: 0,
     carbs_target: 0,
     fat_target: 0,
+    water_target_glasses: 10,
   });
   const [bodyweightDate, setBodyweightDate] = useState(getLocalDateString);
   const [selectedRange, setSelectedRange] = useState("180");
@@ -64,6 +66,7 @@ export function useProfile(): UseProfileReturn {
     protein_target: 0,
     carbs_target: 0,
     fat_target: 0,
+    water_target_glasses: 10,
   });
   const [syncedBwDate, setSyncedBwDate] = useState(getLocalDateString);
 
@@ -88,6 +91,7 @@ export function useProfile(): UseProfileReturn {
         protein_target: profileData.protein_target,
         carbs_target: profileData.carbs_target,
         fat_target: profileData.fat_target,
+        water_target_glasses: profileData.water_target_glasses,
       };
       setProfile(next);
       setSyncedProfile(next);

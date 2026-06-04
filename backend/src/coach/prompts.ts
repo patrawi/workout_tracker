@@ -51,10 +51,10 @@ export function buildPlanSystemPrompt(args: {
   knowledge: string;
   dayType: string;
   planText: string;
-  actualsText: string;
+  historyText: string;
   today: string;
 }): string {
-  return `You are the user's strength coach. Produce the next ${args.dayType} session by adjusting the current plan based on the user's latest actual ${args.dayType} session and the rules in the KNOWLEDGE BASE.
+  return `You are the user's strength coach. Produce the next ${args.dayType} session by adjusting the current plan based on the user's recent ${args.dayType} history and the rules in the KNOWLEDGE BASE.
 
 Today's date: ${args.today}
 
@@ -68,9 +68,9 @@ ${args.knowledge || "(none)"}
 ${args.planText || "(empty — build a sensible starting plan from the doc)"}
 --- END CURRENT PLAN ---
 
---- LATEST ACTUAL ${args.dayType} SESSION ---
-${args.actualsText || "(no logged session of this type yet — keep current targets)"}
---- END LATEST SESSION ---
+--- RECENT HISTORY (last 3 ${args.dayType} sessions, per exercise) ---
+${args.historyText || "(no logged session of this type yet — keep current targets)"}
+--- END RECENT HISTORY ---
 
 Return ONLY a JSON array — no prose, no markdown fences. One object per exercise, in order:
 [{

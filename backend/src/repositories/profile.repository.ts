@@ -12,6 +12,7 @@ export interface ProfileUpdateInput {
   protein_target: number;
   carbs_target: number;
   fat_target: number;
+  water_target_glasses: number;
 }
 
 export function createProfileRepository(dbInstance: PostgresJsDatabase) {
@@ -41,6 +42,7 @@ export function createProfileRepository(dbInstance: PostgresJsDatabase) {
           protein_target: data.protein_target,
           carbs_target: data.carbs_target,
           fat_target: data.fat_target,
+          water_target_glasses: data.water_target_glasses,
           updated_at: sql`now()`,
         })
         .where(eq(profile.id, 1));

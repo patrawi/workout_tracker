@@ -23,6 +23,7 @@ export function registerProfileRoutes(app: any, ctx: AppContext): void {
         protein_target: t.Number(),
         carbs_target: t.Number(),
         fat_target: t.Number(),
+        water_target_glasses: t.Number(),
         bodyweight_date: t.Optional(t.String()),
       }),
     });

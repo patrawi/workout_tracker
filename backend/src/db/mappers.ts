@@ -1,4 +1,4 @@
-import { workouts, profile, restDays, bodyweightLogs, nutritionLogs } from "../schema";
+import { workouts, profile, restDays, bodyweightLogs, nutritionLogs, waterLogs } from "../schema";
 import type { WorkoutRow, ProfileRow, NutritionRow } from "../types";
 import {
   defaultNumber,
@@ -53,6 +53,7 @@ export function mapProfileRow(row: typeof profile.$inferSelect): ProfileRow {
     protein_target: defaultNumber(row.protein_target),
     carbs_target: defaultNumber(row.carbs_target),
     fat_target: defaultNumber(row.fat_target),
+    water_target_glasses: defaultNumber(row.water_target_glasses),
     updated_at: defaultString(row.updated_at),
   };
 }
@@ -93,5 +94,19 @@ export function mapNutritionLogRow(
     fat: defaultNumber(row.fat),
     calories: defaultNumber(row.calories),
     created_at: defaultString(row.created_at),
+  };
+}
+
+export interface WaterLogRow {
+  date: string;
+  glasses: number;
+}
+
+export function mapWaterLogRow(
+  row: typeof waterLogs.$inferSelect,
+): WaterLogRow {
+  return {
+    date: row.date,
+    glasses: defaultNumber(row.glasses),
   };
 }

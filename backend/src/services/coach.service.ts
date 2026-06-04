@@ -13,7 +13,7 @@ import { getLocalDateString } from "../lib/date";
 import { classifySession } from "../coach/classify";
 import { extractJsonItems } from "../llm/extract-json";
 import type { createCoachPlanRepository, CoachPlanRow, CoachPlanInput } from "../repositories/coach-plan.repository";
-import type { createWorkoutRepository } from "../repositories/workout.repository";
+import type { createWorkoutRepository, SessionWithWorkouts } from "../repositories/workout.repository";
 import { COACH_CONTEXT_DAYS, COACH_NUTRITION_DAYS } from "../constants";
 
 const logger = createChildLogger("coach-service");
@@ -159,6 +159,43 @@ function planToText(rows: CoachPlanRow[]): string {
     .join("\n");
 }
 
+function daysAgo(createdAt: string | null, today: string): string {
+  if (!createdAt) return "";
+  const then = new Date(`${createdAt.slice(0, 10)}T00:00:00.000Z`).getTime();
+  const now = new Date(`${today}T00:00:00.000Z`).getTime();
+  const d = Math.round((now - then) / 86_400_000);
+  return d <= 0 ? "today" : `${d}d ago`;
+}
+
+/**
+ * Render last-3 matching sessions as per-exercise history lines for the plan prompt.
+ * sessions must be pre-filtered to the target day-type, newest first, max 3.
+ */
+export function buildHistoryText(
+  sessions: SessionWithWorkouts[],
+  plan: CoachPlanRow[],
+  today: string,
+): string {
+  const norm = (s: string) => s.trim().toLowerCase();
+  return plan
+    .map((p) => {
+      const lines = sessions
+        .map((s) => {
+          const sets = s.workouts.filter((w) => norm(w.exercise_name) === norm(p.exercise_name));
+          if (!sets.length) return null;
+          const setStr = sets
+            .map((w) => `${w.is_bodyweight ? "BW" : `${w.weight}kg`} x${w.reps}@${w.rpe}`)
+            .join(", ");
+          return `  ${daysAgo(s.created_at, today)}: ${setStr}`;
+        })
+        .filter(Boolean);
+      const target = p.is_bodyweight ? "BW" : `${p.target_weight ?? "?"}kg`;
+      const body = lines.length ? lines.join("\n") : "  (no recent data)";
+      return `${p.exercise_name} — target ${target}:\n${body}`;
+    })
+    .join("\n");
+}
+
 function coerceProposed(raw: Record<string, unknown>, index: number): ProposedExercise {
   const change = toStr(raw.change);
   const is_bodyweight = raw.is_bodyweight === true;
@@ -243,24 +280,21 @@ export function createCoachService(
           deps.workoutRepo.getRecentSessionsWithWorkouts(40),
         ]);
 
-        // Newest session whose derived day-type matches.
-        const latest = sessions.find(
-          (s) => classifySession(s.workouts.map((w) => w.muscle_group)) === day,
-        );
-        const actualsText = latest
-          ? latest.workouts
-              .map(
-                (w) =>
-                  `${w.exercise_name}: ${w.is_bodyweight ? "BW" : `${w.weight}kg`} x${w.reps} @RPE ${w.rpe}`,
-              )
-              .join("\n")
-          : "";
+        // Last 3 sessions classified as this day type, newest first.
+        const matching = sessions
+          .filter(
+            (s) =>
+              classifySession(s.workouts.map((w) => w.muscle_group)) === day,
+          )
+          .slice(0, 3);
+
+        const historyText = buildHistoryText(matching, plan, getLocalDateString());
 
         const systemPrompt = buildPlanSystemPrompt({
           knowledge,
           dayType: day,
           planText: planToText(plan),
-          actualsText,
+          historyText,
           today: getLocalDateString(),
         });
 
@@ -271,7 +305,7 @@ export function createCoachService(
           .map(coerceProposed)
           .sort((a, b) => a.position - b.position);
 
-        return { day_type: day, based_on_date: latest?.created_at ?? null, exercises };
+        return { day_type: day, based_on_date: matching[0]?.created_at ?? null, exercises };
       } catch (error) {
         if (error instanceof ValidationError) throw error;
         logger.error("Coach plan proposal failed", { error: String(error) });

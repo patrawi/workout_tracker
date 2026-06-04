@@ -64,6 +64,13 @@
       "when": 1780435139887,
       "tag": "0008_broad_cammi",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780597134782,
+      "tag": "0009_goofy_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

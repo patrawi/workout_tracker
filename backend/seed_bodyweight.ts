@@ -8,7 +8,7 @@ const profileRepo = createProfileRepository(db);
 const bodyweightRepo = createBodyweightRepository(db);
 
 async function run() {
-    await profileRepo.update({ weight_kg: 71.7, height_cm: 180, tdee: 2500, calories_intake: 2300, protein_target: 0, carbs_target: 0, fat_target: 0 });
+    await profileRepo.update({ weight_kg: 71.7, height_cm: 180, tdee: 2500, calories_intake: 2300, protein_target: 0, carbs_target: 0, fat_target: 0, water_target_glasses: 10 });
 
     // Based on the provided chart screenshot points (approximate matching the line)
     await bodyweightRepo.insert('2026-01-05', 72.5);

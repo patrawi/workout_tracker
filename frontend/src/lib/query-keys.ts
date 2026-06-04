@@ -16,6 +16,10 @@ export const queryKeys = {
         byDate: (date: string) => [...queryKeys.nutrition.all, "byDate", date] as const,
         dates: () => [...queryKeys.nutrition.all, "dates"] as const,
     },
+    water: {
+        all: ["water"] as const,
+        byDate: (date: string) => [...queryKeys.water.all, "byDate", date] as const,
+    },
     analytics: {
         all: ["analytics"] as const,
         exercises: () => [...queryKeys.analytics.all, "exercises"] as const,

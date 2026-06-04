@@ -87,6 +87,7 @@ export const profile = pgTable("profile", {
     protein_target: real("protein_target").default(0),
     carbs_target: real("carbs_target").default(0),
     fat_target: real("fat_target").default(0),
+    water_target_glasses: integer("water_target_glasses").default(10),
     updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
 });
 
@@ -129,6 +130,14 @@ export const nutritionLogs = pgTable(
         index("nutrition_logs_date_idx").on(table.date),
     ],
 );
+
+// ——— Water Logs Table (one row per date; glasses of 250ml) ———
+export const waterLogs = pgTable("water_logs", {
+    id: serial("id").primaryKey(),
+    date: text("date").notNull().unique(),                 // "YYYY-MM-DD"
+    glasses: integer("glasses").default(0).notNull(),      // 250ml each
+    created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+});
 
 // ——— Food Catalog Table (embedded reference catalog for RAG nutrition parse) ———
 // Macros are stored per `per_amount` `per_unit` (e.g. per 100 g). Scaling to the

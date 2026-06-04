@@ -11,6 +11,7 @@ import { registerBodyweightRoutes } from "./routes/bodyweight.routes";
 import { registerRestDayRoutes } from "./routes/rest-days.routes";
 import { registerProfileRoutes } from "./routes/profile.routes";
 import { registerNutritionRoutes } from "./routes/nutrition.routes";
+import { registerWaterRoutes } from "./routes/water.routes";
 import { registerFoodCatalogRoutes } from "./routes/food-catalog.routes";
 import { registerHistoryRoutes } from "./routes/history.routes";
 import { registerCoachRoutes } from "./routes/coach.routes";
@@ -141,6 +142,7 @@ export function createApp(ctx: AppContext) {
             (a) => registerRestDayRoutes(a, ctx),
             (a) => registerProfileRoutes(a, ctx),
             (a) => registerNutritionRoutes(a, ctx),
+            (a) => registerWaterRoutes(a, ctx),
             (a) => registerFoodCatalogRoutes(a, ctx),
             (a) => registerHistoryRoutes(a, ctx),
             (a) => registerCoachRoutes(a, ctx),

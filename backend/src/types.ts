@@ -36,6 +36,7 @@ export interface ProfileData {
   protein_target: number;
   carbs_target: number;
   fat_target: number;
+  water_target_glasses: number;
 }
 
 export interface ProfileRow extends ProfileData {

@@ -336,6 +336,34 @@ export default function ProfilePage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Water target */}
+                    <div className="mt-4">
+                      <label className="text-xs block mb-1" style={{ color: "oklch(0.7 0.13 200 / 0.85)" }}>
+                        Daily Water Target
+                      </label>
+                      <div className="relative max-w-[10rem]">
+                        <input
+                          type="number"
+                          value={profile.water_target_glasses || ""}
+                          onChange={(e) =>
+                            updateField(
+                              "water_target_glasses",
+                              Number(e.target.value),
+                            )
+                          }
+                          className="glass-input w-full pl-2.5 py-2.5 text-sm text-[var(--foreground)] pr-16"
+                          min="0"
+                          placeholder="10"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[var(--muted-foreground)]">
+                          glasses
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[var(--muted-foreground)] mt-1">
+                        250&nbsp;ml each · {((profile.water_target_glasses || 0) * 250 / 1000).toFixed(2)} L
+                      </p>
+                    </div>
                   </div>
                 </div>
 

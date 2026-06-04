@@ -13,6 +13,7 @@ function createMockProfileRepo() {
       protein_target: 150,
       carbs_target: 250,
       fat_target: 65,
+      water_target_glasses: 10,
       updated_at: "2024-01-01",
     })),
     update: mock(async (data: any) => {}),
@@ -49,6 +50,7 @@ describe("createProfileService", () => {
       protein_target: 150,
       carbs_target: 250,
       fat_target: 65,
+      water_target_glasses: 10,
     });
 
     expect(mockRepo.update).toHaveBeenCalled();
@@ -67,6 +69,7 @@ describe("createProfileService", () => {
       protein_target: 150,
       carbs_target: 250,
       fat_target: 65,
+      water_target_glasses: 10,
     });
 
     expect(mockBW.log).toHaveBeenCalled();
@@ -85,6 +88,7 @@ describe("createProfileService", () => {
       protein_target: 150,
       carbs_target: 250,
       fat_target: 65,
+      water_target_glasses: 10,
     });
 
     expect(mockBW.log).not.toHaveBeenCalled();
