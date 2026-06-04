@@ -87,6 +87,9 @@ export function createApp(ctx: AppContext) {
         maxAge: 0,
         etag: true,
         ignorePatterns: ["assets/**"],
+        // Register concrete per-file routes so they win over the SPA `*` catch-all
+        // (otherwise the wildcard shadows them and SW/manifest/icons 404).
+        alwaysStatic: true,
       }),
     )
     .use(
@@ -150,10 +153,13 @@ export function createApp(ctx: AppContext) {
           return app;
         }),
     )
-    // SPA fallback — any unmatched GET returns index.html so the React router
-    // handles it. Registered last; `/api`, `/assets`, `/health` already matched.
-    .get("*", ({ path, set }) => {
-      if (path.startsWith("/api")) {
+    // SPA fallback — serve index.html ONLY for top-level navigations so the
+    // React router can handle the path. Unmatched asset / SW / fetch requests
+    // (Accept != text/html) must 404, never receive HTML — otherwise the browser
+    // gets HTML where it expected JS and the app white-screens. Registered last.
+    .get("*", ({ path, request, set }) => {
+      const accept = request.headers.get("accept") ?? "";
+      if (path.startsWith("/api") || !accept.includes("text/html")) {
         set.status = 404;
         return { error: "Not found" };
       }
