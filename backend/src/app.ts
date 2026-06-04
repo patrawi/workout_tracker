@@ -31,20 +31,53 @@ function registerRoutes<TApp>(
   return app;
 }
 
+// Content type by extension for hashed build assets (the `.br`/`.gz` variant
+// keeps the original extension's type, e.g. index-abc.js.br → text/javascript).
+const ASSET_TYPES: Record<string, string> = {
+  js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  svg: "image/svg+xml",
+  json: "application/json; charset=utf-8",
+  map: "application/json; charset=utf-8",
+  woff2: "font/woff2",
+  woff: "font/woff",
+  png: "image/png",
+  webp: "image/webp",
+  ico: "image/x-icon",
+};
+
+// Serve a hashed asset, preferring a precompressed (.br/.gz) variant when the
+// client accepts it. Immutable cache since filenames change with content.
+async function serveAsset(rel: string | undefined, acceptEncoding: string): Promise<Response> {
+  if (!rel || rel.includes("..")) return new Response("forbidden", { status: 403 });
+  const base = `./public/assets/${rel}`;
+  const ext = rel.slice(rel.lastIndexOf(".") + 1).toLowerCase();
+  const headers: Record<string, string> = {
+    "Content-Type": ASSET_TYPES[ext] ?? "application/octet-stream",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    Vary: "Accept-Encoding",
+  };
+
+  if (acceptEncoding.includes("br")) {
+    const br = Bun.file(`${base}.br`);
+    if (await br.exists()) return new Response(br, { headers: { ...headers, "Content-Encoding": "br" } });
+  }
+  if (acceptEncoding.includes("gzip")) {
+    const gz = Bun.file(`${base}.gz`);
+    if (await gz.exists()) return new Response(gz, { headers: { ...headers, "Content-Encoding": "gzip" } });
+  }
+  const raw = Bun.file(base);
+  if (await raw.exists()) return new Response(raw, { headers });
+  return new Response("not found", { status: 404 });
+}
+
 export function createApp(ctx: AppContext) {
   const { configService, authService } = ctx;
 
   const app = new Elysia()
-    // Serve hashed assets (JS/CSS/images) with 1-year cache - filenames change when content changes
-    .use(
-      staticPlugin({
-        assets: "./public/assets",
-        prefix: "/assets",
-        maxAge: 60 * 60 * 24 * 365, // 1 year
-        directive: "immutable",
-        etag: true,
-        alwaysStatic: true,
-      }),
+    // Serve hashed assets, preferring precompressed .br/.gz, with 1-year immutable cache
+    .get("/assets/*", ({ params, request }) =>
+      serveAsset((params as Record<string, string>)["*"], request.headers.get("accept-encoding") ?? ""),
     )
     // Serve root files (index.html, manifest, icons) with no cache
     .use(
@@ -62,39 +95,6 @@ export function createApp(ctx: AppContext) {
         origin: configService.allowedOrigins,
       }),
     )
-    // SPA fallback - serve index.html for client-side routes (no caching)
-    .get("/", ({ set }) => {
-      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-      return Bun.file("./public/index.html")
-    })
-    .get("/login", ({ set }) => {
-      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-      return Bun.file("./public/index.html")
-    })
-    .get("/analytics", ({ set }) => {
-      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-      return Bun.file("./public/index.html")
-    })
-    .get("/profile", ({ set }) => {
-      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-      return Bun.file("./public/index.html")
-    })
-    .get("/history", ({ set }) => {
-      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-      return Bun.file("./public/index.html")
-    })
-    .get("/history/*", ({ set }) => {
-      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-      return Bun.file("./public/index.html")
-    })
-    .get("/nutrition", ({ set }) => {
-      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-      return Bun.file("./public/index.html")
-    })
-    .get("/coach", ({ set }) => {
-      set.headers['Cache-Control'] = 'public, max-age=0, must-revalidate'
-      return Bun.file("./public/index.html")
-    })
     .get("/health", () => ({ status: "ok", timestamp: new Date().toISOString() }))
     // Public routes (no auth required)
     .use(notificationsRoutes)
@@ -149,7 +149,17 @@ export function createApp(ctx: AppContext) {
           );
           return app;
         }),
-    );
+    )
+    // SPA fallback — any unmatched GET returns index.html so the React router
+    // handles it. Registered last; `/api`, `/assets`, `/health` already matched.
+    .get("*", ({ path, set }) => {
+      if (path.startsWith("/api")) {
+        set.status = 404;
+        return { error: "Not found" };
+      }
+      set.headers["Cache-Control"] = "public, max-age=0, must-revalidate";
+      return Bun.file("./public/index.html");
+    });
 
   return app;
 }
