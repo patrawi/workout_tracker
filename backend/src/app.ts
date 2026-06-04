@@ -86,7 +86,11 @@ export function createApp(ctx: AppContext) {
         prefix: "/",
         maxAge: 0,
         etag: true,
-        ignorePatterns: ["assets/**"],
+        // Don't let static touch index.html — its Bun HTML handler tries to
+        // re-bundle the prebuilt file and fails (empty/500). The SPA catch-all
+        // below serves the raw shell via Bun.file instead.
+        ignorePatterns: ["assets/**", /index\.html$/],
+        indexHTML: false,
         // Register concrete per-file routes so they win over the SPA `*` catch-all
         // (otherwise the wildcard shadows them and SW/manifest/icons 404).
         alwaysStatic: true,
