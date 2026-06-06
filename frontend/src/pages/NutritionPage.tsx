@@ -534,7 +534,7 @@ export default function NutritionPage() {
             if (res.success && res.data) return res.data;
             throw new Error(res.error ?? "Sync failed");
         },
-        onSuccess: (d) => setSyncMsg(`Catalog synced — ${d.added} new, ${d.skipped} known (${d.total} total)`),
+        onSuccess: (d) => setSyncMsg(`Catalog synced — ${d.added} new, ${d.updated} updated, ${d.skipped} unchanged (${d.total} total)`),
         onError: (e) => setSyncMsg(e instanceof Error ? e.message : "Sync failed"),
     });
 

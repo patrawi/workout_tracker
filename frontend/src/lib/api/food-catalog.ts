@@ -2,6 +2,7 @@ import { api } from "../api-client";
 
 export interface CatalogSyncResult {
     added: number;
+    updated: number;
     skipped: number;
     total: number;
 }

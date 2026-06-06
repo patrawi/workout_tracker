@@ -1,4 +1,4 @@
-import { cosineDistance, sql } from "drizzle-orm";
+import { cosineDistance, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { foodCatalog } from "../schema";
 
@@ -16,6 +16,10 @@ export interface FoodCatalogRecord {
   fat: number;
   source: string;
   source_row_id: string | null;
+  /** Hash of the embedded text (name/brand/type); a change means re-embed. */
+  doc_hash: string;
+  /** Hash of the macros; a change means update the row (no embedding call). */
+  macro_hash: string;
 }
 
 export interface FoodCatalogSearchResult extends FoodCatalogRecord {
@@ -40,13 +44,19 @@ const RECORD_COLUMNS = {
 
 export function createFoodCatalogRepository(dbInstance: PostgresJsDatabase) {
   return {
-    /** Set of `source_row_id`s already in the catalog (for incremental sync dedup). */
-    async getExistingRowIds(): Promise<Set<string>> {
+    /** Map of `id` → stored hashes, for incremental sync diffing. */
+    async getRowHashes(): Promise<
+      Map<string, { doc_hash: string | null; macro_hash: string | null }>
+    > {
       const rows = await dbInstance
-        .select({ source_row_id: foodCatalog.source_row_id })
+        .select({
+          id: foodCatalog.id,
+          doc_hash: foodCatalog.doc_hash,
+          macro_hash: foodCatalog.macro_hash,
+        })
         .from(foodCatalog);
-      return new Set(
-        rows.map((r) => r.source_row_id).filter((v): v is string => Boolean(v)),
+      return new Map(
+        rows.map((r) => [r.id, { doc_hash: r.doc_hash, macro_hash: r.macro_hash }]),
       );
     },
 
@@ -59,6 +69,23 @@ export function createFoodCatalogRepository(dbInstance: PostgresJsDatabase) {
           target: foodCatalog.id,
           set: { ...record, embedding, updated_at: sql`now()` },
         });
+    },
+
+    /** Update macros + macro_hash only, leaving the embedding untouched (keyed on `id`). */
+    async updateMacros(record: FoodCatalogRecord): Promise<void> {
+      await dbInstance
+        .update(foodCatalog)
+        .set({
+          per_amount: record.per_amount,
+          per_unit: record.per_unit,
+          calories: record.calories,
+          protein: record.protein,
+          carbs: record.carbs,
+          fat: record.fat,
+          macro_hash: record.macro_hash,
+          updated_at: sql`now()`,
+        })
+        .where(eq(foodCatalog.id, record.id));
     },
 
     /** Top-k nearest catalog foods by cosine distance. */

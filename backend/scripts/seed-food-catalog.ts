@@ -15,7 +15,7 @@ import type { FoodCatalogRecord } from "../src/repositories/food-catalog.reposit
 
 // Real per-100g (or per-serving) macros. `per_amount`/`per_unit` define the basis;
 // the parse scales these by how much you say you ate.
-const FOODS: FoodCatalogRecord[] = [
+const SEED: Omit<FoodCatalogRecord, "doc_hash" | "macro_hash">[] = [
   {
     id: "lidl-free-range-eggs",
     name: "Lidl Free Range Eggs",
@@ -62,6 +62,16 @@ const FOODS: FoodCatalogRecord[] = [
     source: "seed", source_row_id: "seed_chicken",
   },
 ];
+
+// Attach change-detection hashes (seed rows aren't sheet-synced, so any valid
+// hash is fine — these just satisfy the record shape and let re-seeding diff).
+const FOODS: FoodCatalogRecord[] = SEED.map((f) => ({
+  ...f,
+  doc_hash: String(Bun.hash([f.name, f.brand, f.product_type].join(" "))),
+  macro_hash: String(
+    Bun.hash([f.per_amount, f.per_unit, f.calories, f.protein, f.carbs, f.fat].join(" ")),
+  ),
+}));
 
 if (!config.geminiApiKey || config.geminiApiKey.startsWith("<")) {
   console.error("❌ GEMINI_API_KEY is not set (or is a placeholder). Add a real key to backend/.env first.");

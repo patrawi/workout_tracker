@@ -7,18 +7,17 @@ import type {
 } from "../repositories/food-catalog.repository";
 
 /**
- * Build the text that gets embedded for a catalog food. Mirrors the sandbox
- * `foodToDocument` shape — name + brand + type + a per-amount nutrition summary —
- * so semantically-similar meal notes ("2 lidl eggs") land near the right food.
+ * Build the text that gets embedded for a catalog food: name + brand + type.
+ * Deliberately macro-independent so editing a macro doesn't change the embedded
+ * text — that lets sync update macros without spending an embedding call (the
+ * macros are noise for a name-similarity match anyway). Mirrors the meal-note
+ * shape so "2 lidl eggs" lands near the right food. Kept in lockstep with
+ * `doc_hash` in `sheet-source.ts`.
  */
 export function buildFoodDocument(r: FoodCatalogRecord): string {
   const parts = [r.name];
   if (r.brand) parts.push(`Brand: ${r.brand}`);
   if (r.product_type) parts.push(`Type: ${r.product_type}`);
-  parts.push(
-    `Nutrition per ${r.per_amount} ${r.per_unit}: ${r.calories} kcal, ` +
-      `protein ${r.protein}g, carbs ${r.carbs}g, fat ${r.fat}g.`,
-  );
   return parts.join("\n");
 }
 
@@ -28,8 +27,11 @@ const EMBED_BATCH_SIZE = 100;
 export interface FoodCatalogService {
   upsertFood(record: FoodCatalogRecord): Promise<void>;
   upsertMany(records: FoodCatalogRecord[]): Promise<void>;
+  updateMacros(records: FoodCatalogRecord[]): Promise<void>;
   search(query: string, k?: number): Promise<FoodCatalogSearchResult[]>;
-  getExistingRowIds(): Promise<Set<string>>;
+  getRowHashes(): Promise<
+    Map<string, { doc_hash: string | null; macro_hash: string | null }>
+  >;
   count(): Promise<number>;
 }
 
@@ -56,12 +58,19 @@ export function createFoodCatalogService(
       }
     },
 
+    /** Update macros for rows whose only change is nutrition — no embedding calls. */
+    async updateMacros(records: FoodCatalogRecord[]): Promise<void> {
+      for (const record of records) {
+        await repo.updateMacros(record);
+      }
+    },
+
     async search(query: string, k: number = CATALOG_TOPK): Promise<FoodCatalogSearchResult[]> {
       const embedding = await embeddings.embed(query);
       return repo.search(embedding, k);
     },
 
-    getExistingRowIds: () => repo.getExistingRowIds(),
+    getRowHashes: () => repo.getRowHashes(),
     count: () => repo.count(),
   };
 }

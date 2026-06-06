@@ -158,6 +158,8 @@ export const foodCatalog = pgTable(
         fat: real("fat").default(0),
         source: text("source").default("google_sheet").notNull(), // "google_sheet" | "ocr" | "manual"
         source_row_id: text("source_row_id"),                   // "row_12" — dedup key for Sheet rows
+        doc_hash: text("doc_hash"),                             // hash of embedded text (name/brand/type) — re-embed when changed
+        macro_hash: text("macro_hash"),                         // hash of macros (per_amount/unit + cal/p/c/f) — update DB when changed
         embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
         created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
         updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
