@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
-import { deepseekChat } from "../llm/deepseek";
+import { deepseekChat, deepseekChatRaw, type DeepSeekMessage } from "../llm/deepseek";
 import { COACH_MODEL, COACH_TEMPERATURE, DEEPSEEK_COACH_MODEL } from "../constants";
+
+const MAX_TOOL_ITERS = 5;
 
 export interface CoachMessage {
   role: "user" | "coach";
@@ -11,12 +13,16 @@ export interface CoachClient {
   chat(systemPrompt: string, messages: CoachMessage[]): Promise<string>;
 }
 
+export interface CoachTools {
+  schemas: {
+    type: "function";
+    function: { name: string; description: string; parameters: Record<string, unknown> };
+  }[];
+  run: (name: string, args: Record<string, unknown>) => Promise<string>;
+}
+
 /**
  * Create a coach chat client backed by Gemini.
- *
- * Provider note: the coach talks to one LLM through this single `chat`
- * function. Swapping to another provider (e.g. DeepSeek) later is a localized
- * change here — the call site in coach.service stays the same.
  */
 export function createCoachClient(
   apiKey: string,
@@ -47,26 +53,69 @@ export function createCoachClient(
 
 /**
  * Coach chat client backed by DeepSeek (thinking mode ON for plan reasoning).
- * Same CoachClient interface — coach.service picks the impl by provider.
+ * If `tools` is provided, runs an agentic loop: call the LLM, execute any
+ * tool_calls, feed results back, repeat (max 5 iterations). Otherwise behaves
+ * as the plain text-only client.
  */
 export function createDeepSeekCoachClient(
   apiKey: string,
-  model: string = DEEPSEEK_COACH_MODEL
+  model: string = DEEPSEEK_COACH_MODEL,
+  tools?: CoachTools
 ): CoachClient {
   return {
     async chat(systemPrompt: string, messages: CoachMessage[]): Promise<string> {
-      return deepseekChat({
-        apiKey,
-        model,
-        thinking: true,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages.map((m) => ({
-            role: (m.role === "coach" ? "assistant" : "user") as "assistant" | "user",
-            content: m.text,
-          })),
-        ],
-      });
+      const history: DeepSeekMessage[] = [
+        { role: "system", content: systemPrompt },
+        ...messages.map((m) => ({
+          role: (m.role === "coach" ? "assistant" : "user") as "assistant" | "user",
+          content: m.text,
+        })),
+      ];
+
+      if (!tools) {
+        return deepseekChat({ apiKey, model, thinking: true, messages: history });
+      }
+
+      for (let i = 0; i < MAX_TOOL_ITERS; i++) {
+        const result = await deepseekChatRaw({
+          apiKey,
+          model,
+          thinking: true,
+          messages: history,
+          tools: tools.schemas,
+        });
+
+        if (!result.tool_calls?.length) {
+          return result.content;
+        }
+
+        // Append the assistant message (content may be empty when tool_calls present)
+        history.push({
+          role: "assistant",
+          content: result.content ?? "",
+          tool_calls: result.tool_calls,
+        });
+
+        // Execute each tool call and append tool results
+        for (const tc of result.tool_calls) {
+          let toolResult: string;
+          try {
+            const args = JSON.parse(tc.function.arguments);
+            toolResult = await tools.run(tc.function.name, args);
+          } catch (err) {
+            toolResult = JSON.stringify({ error: String(err) });
+          }
+          history.push({
+            role: "tool",
+            content: toolResult,
+            tool_call_id: tc.id,
+          });
+        }
+      }
+
+      // Max iterations reached without a final text reply — ask for one
+      history.push({ role: "user", content: "Please answer the user's original question based on the tool results above." });
+      return deepseekChat({ apiKey, model, thinking: true, messages: history });
     },
   };
 }

@@ -15,6 +15,7 @@ What you do:
 Rules:
 - Reply in the SAME language the user writes in (Thai or English). Match their tone.
 - Ground every number in the KNOWLEDGE BASE or USER DATA. If the data needed is missing, say so or ask — never invent sets, weights, or sessions.
+- You have tools to fetch exact daily/range numbers (nutrition, workouts, bodyweight, volume). When the user asks for per-day breakdowns, daily deficit, or any figure not already in the USER DATA summary, call the appropriate tool before answering. Do NOT say "I only have the average" — just call the tool.
 - Be decisive: give a clear recommendation, not a list of caveats.`;
 
 interface CoachPromptParts {

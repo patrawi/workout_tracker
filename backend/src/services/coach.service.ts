@@ -7,6 +7,7 @@ import type { BodyweightService } from "./bodyweight.service";
 import type { ProfileService } from "./profile.service";
 import { createCoachClient, createDeepSeekCoachClient, type CoachClient, type CoachMessage } from "../coach/client";
 import { buildCoachSystemPrompt, buildPlanSystemPrompt, loadCoachKnowledge } from "../coach/prompts";
+import { buildCoachTools } from "../coach/tools";
 import { ExternalServiceError, ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
 import { getLocalDateString } from "../lib/date";
@@ -14,7 +15,7 @@ import { classifySession } from "../coach/classify";
 import { extractJsonItems } from "../llm/extract-json";
 import type { createCoachPlanRepository, CoachPlanRow, CoachPlanInput } from "../repositories/coach-plan.repository";
 import type { createWorkoutRepository, SessionWithWorkouts } from "../repositories/workout.repository";
-import { COACH_CONTEXT_DAYS, COACH_NUTRITION_DAYS } from "../constants";
+import { COACH_CONTEXT_DAYS, COACH_NUTRITION_DAYS, DEEPSEEK_COACH_MODEL } from "../constants";
 
 const logger = createChildLogger("coach-service");
 
@@ -225,7 +226,7 @@ export function createCoachService(
   // Pick the coach LLM by provider; fall back to Gemini if DeepSeek isn't configured.
   let client: CoachClient | null = null;
   if (config.llmProvider === "deepseek" && config.deepseekApiKey) {
-    client = createDeepSeekCoachClient(config.deepseekApiKey);
+    client = createDeepSeekCoachClient(config.deepseekApiKey, DEEPSEEK_COACH_MODEL, buildCoachTools(deps));
   } else if (config.geminiApiKey) {
     client = createCoachClient(config.geminiApiKey);
   } else {

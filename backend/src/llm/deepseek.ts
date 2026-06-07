@@ -1,8 +1,16 @@
 import { DEEPSEEK_BASE_URL } from "../constants";
 
+export interface DeepSeekToolCall {
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+}
+
 export interface DeepSeekMessage {
-    role: "system" | "user" | "assistant";
+    role: "system" | "user" | "assistant" | "tool";
     content: string;
+    tool_call_id?: string;
+    tool_calls?: DeepSeekToolCall[];
 }
 
 export interface DeepSeekChatOptions {
@@ -11,15 +19,16 @@ export interface DeepSeekChatOptions {
     messages: DeepSeekMessage[];
     thinking?: boolean;
     temperature?: number;
+    tools?: { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }[];
 }
 
-/**
- * Call DeepSeek's OpenAI-compatible chat completions endpoint via fetch.
- * Thinking mode is toggled with the `thinking` field on V4 models
- * (see https://api-docs.deepseek.com). Returns the final answer text only.
- */
-export async function deepseekChat(options: DeepSeekChatOptions): Promise<string> {
-    const { apiKey, model, messages, thinking = false, temperature } = options;
+export interface DeepSeekAssistantMessage {
+    content: string;
+    tool_calls?: DeepSeekToolCall[];
+}
+
+async function doChat(options: DeepSeekChatOptions): Promise<DeepSeekAssistantMessage> {
+    const { apiKey, model, messages, thinking = false, temperature, tools } = options;
 
     const body: Record<string, unknown> = {
         model,
@@ -29,6 +38,9 @@ export async function deepseekChat(options: DeepSeekChatOptions): Promise<string
     // Thinking mode doesn't accept sampling params; only send temperature otherwise.
     if (!thinking && temperature !== undefined) {
         body.temperature = temperature;
+    }
+    if (tools?.length) {
+        body.tools = tools;
     }
 
     const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
@@ -46,7 +58,26 @@ export async function deepseekChat(options: DeepSeekChatOptions): Promise<string
     }
 
     const data = (await res.json()) as {
-        choices?: { message?: { content?: string } }[];
+        choices?: { message?: { content?: string; tool_calls?: DeepSeekToolCall[] } }[];
     };
-    return data.choices?.[0]?.message?.content ?? "";
+    const msg = data.choices?.[0]?.message;
+    return { content: msg?.content ?? "", tool_calls: msg?.tool_calls };
+}
+
+/**
+ * Call DeepSeek's OpenAI-compatible chat completions endpoint via fetch.
+ * Thinking mode is toggled with the `thinking` field on V4 models
+ * (see https://api-docs.deepseek.com). Returns the final answer text only.
+ */
+export async function deepseekChat(options: DeepSeekChatOptions): Promise<string> {
+    const result = await doChat(options);
+    return result.content;
+}
+
+/**
+ * Raw variant: returns the full assistant message (content + tool_calls)
+ * so callers can run an agentic tool-calling loop.
+ */
+export async function deepseekChatRaw(options: DeepSeekChatOptions): Promise<DeepSeekAssistantMessage> {
+    return doChat(options);
 }
