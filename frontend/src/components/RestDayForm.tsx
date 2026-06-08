@@ -1,15 +1,10 @@
 import { useState } from "react";
+import DatePicker from "@/components/DatePicker";
+import { getLocalDateStr } from "@/lib/date-utils";
 
 interface RestDayFormProps {
     onSubmit: (data: { date: string; walked_10k: boolean; did_liss: boolean; did_stretch: boolean; notes: string }) => Promise<void>;
     isLoading: boolean;
-}
-
-function getLocalDateStr() {
-    const now = new Date();
-    const offset = now.getTimezoneOffset();
-    const local = new Date(now.getTime() - offset * 60000);
-    return local.toISOString().slice(0, 10);
 }
 
 export default function RestDayForm({ onSubmit, isLoading }: RestDayFormProps) {
@@ -43,14 +38,7 @@ export default function RestDayForm({ onSubmit, isLoading }: RestDayFormProps) {
                     <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-2">
                         <span>🧘</span> Active Recovery Day
                     </h3>
-                    <input
-                        type="date"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        required
-                        disabled={isLoading}
-                        className="bg-[var(--color-surface-200)] text-xs text-[var(--foreground)] px-2 py-1 rounded-md outline-none border border-[var(--border)] hover:border-[var(--color-surface-400)] transition-colors focus:ring-1 focus:ring-[var(--color-accent-400)]"
-                    />
+                    <DatePicker value={date} onChange={setDate} disabled={isLoading} />
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">

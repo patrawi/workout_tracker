@@ -19,14 +19,26 @@ function BubbleImpl({ m }: { m: CoachMessage }) {
     return (
         <div className={`flex gap-3 items-start ${user ? "flex-row-reverse" : ""}`}>
             {!user && <CoachAvatar />}
-            <div
-                className={`max-w-[80%] sm:max-w-[76%] px-4 py-3 rounded-2xl leading-relaxed text-[15px] border text-[var(--foreground)] ${
-                    user
-                        ? "bg-[var(--primary)]/10 border-[var(--primary)]/40 rounded-tr-sm whitespace-pre-wrap"
-                        : "bg-[var(--secondary)] border-[var(--border)] rounded-tl-sm"
-                }`}
-            >
-                {user ? m.text : <MarkdownMessage text={m.text} />}
+            <div className="max-w-[80%] sm:max-w-[76%] flex flex-col gap-1.5">
+                {!user && m.reasoning && (
+                    <details className="rounded-xl border border-[var(--border)] bg-[var(--card)]/60 text-[13px] text-[var(--muted-foreground)]">
+                        <summary className="cursor-pointer select-none px-3 py-1.5 font-semibold">
+                            💭 Show thinking
+                        </summary>
+                        <div className="px-3 pb-2.5 pt-0.5 whitespace-pre-wrap leading-relaxed border-t border-[var(--border)] mt-0.5">
+                            {m.reasoning}
+                        </div>
+                    </details>
+                )}
+                <div
+                    className={`px-4 py-3 rounded-2xl leading-relaxed text-[15px] border text-[var(--foreground)] ${
+                        user
+                            ? "bg-[var(--primary)]/10 border-[var(--primary)]/40 rounded-tr-sm whitespace-pre-wrap"
+                            : "bg-[var(--secondary)] border-[var(--border)] rounded-tl-sm"
+                    }`}
+                >
+                    {user ? m.text : <MarkdownMessage text={m.text} />}
+                </div>
             </div>
         </div>
     );

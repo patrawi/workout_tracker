@@ -10,7 +10,7 @@ import type {
 
 export const coachApi = {
     chat: (messages: CoachMessage[]) =>
-        api.post<{ reply: string }>("/coach/chat", { messages }),
+        api.post<{ reply: string; reasoning?: string }>("/coach/chat", { messages }),
 
     getPlan: () => api.get<CoachPlanGrouped>("/coach/plan"),
 

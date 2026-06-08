@@ -37,7 +37,7 @@ export interface PlanProposal {
 export type CoachPlanGrouped = Record<PlanDayType, CoachPlanRow[]>;
 
 export interface CoachService {
-  chat(messages: CoachMessage[]): Promise<{ reply: string }>;
+  chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string }>;
   getPlan(): Promise<CoachPlanGrouped>;
   proposeNextSession(dayType: string): Promise<PlanProposal>;
   savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
@@ -249,7 +249,7 @@ export function createCoachService(
   const provider = config.llmProvider === "deepseek" && config.deepseekApiKey ? "DeepSeek" : "Gemini";
 
   return {
-    async chat(messages: CoachMessage[]): Promise<{ reply: string }> {
+    async chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string }> {
       if (!client) {
         throw new ExternalServiceError(provider, "No LLM API key is set");
       }
@@ -267,7 +267,7 @@ export function createCoachService(
           today: getLocalDateString(),
         });
         const reply = await client.chat(systemPrompt, messages);
-        return { reply };
+        return { reply: reply.text, reasoning: reply.reasoning };
       } catch (error) {
         logger.error("Coach chat failed", { error: String(error) });
         throw new ExternalServiceError(provider, String(error));
@@ -313,7 +313,7 @@ export function createCoachService(
           today: getLocalDateString(),
         });
 
-        const text = await client.chat(systemPrompt, [
+        const { text } = await client.chat(systemPrompt, [
           { role: "user", text: `Generate the next ${day} session as a JSON array.` },
         ]);
         const exercises = extractJsonItems(text, "coach plan")

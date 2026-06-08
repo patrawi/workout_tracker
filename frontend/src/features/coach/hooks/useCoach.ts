@@ -30,7 +30,7 @@ export function useCoach() {
     const mutation = useMutation({
         mutationFn: async (history: CoachMessage[]) => {
             const res = await coachApi.chat(history.slice(-MAX_TURNS));
-            if (res.success && res.data) return res.data.reply;
+            if (res.success && res.data) return res.data;
             throw new Error(res.error || "Coach failed to reply");
         },
     });
@@ -43,7 +43,8 @@ export function useCoach() {
             const next: CoachMessage[] = [...messages, { role: "user", text: clean }];
             setMessages(next);
             mutation.mutate(next, {
-                onSuccess: (reply) => setMessages((m) => [...m, { role: "coach", text: reply }]),
+                onSuccess: (data) =>
+                    setMessages((m) => [...m, { role: "coach", text: data.reply, reasoning: data.reasoning }]),
                 onError: (err: Error) =>
                     setMessages((m) => [...m, { role: "coach", text: `⚠️ ${err.message}` }]),
             });

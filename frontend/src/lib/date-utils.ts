@@ -1,4 +1,18 @@
 /**
+ * Timezone-safe: format a Date to "YYYY-MM-DD" using local date parts (avoids UTC off-by-one).
+ */
+export const toYMD = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/**
+ * Timezone-safe: parse "YYYY-MM-DD" into a Date at LOCAL midnight (not UTC).
+ */
+export const fromYMD = (s: string) => {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+/**
  * Format a date string (YYYY-MM-DD) into "Mon DD" format
  */
 export function formatDate(dateStr: string): string {

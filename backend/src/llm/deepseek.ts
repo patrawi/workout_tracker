@@ -24,6 +24,7 @@ export interface DeepSeekChatOptions {
 
 export interface DeepSeekAssistantMessage {
     content: string;
+    reasoning?: string;
     tool_calls?: DeepSeekToolCall[];
 }
 
@@ -58,10 +59,10 @@ async function doChat(options: DeepSeekChatOptions): Promise<DeepSeekAssistantMe
     }
 
     const data = (await res.json()) as {
-        choices?: { message?: { content?: string; tool_calls?: DeepSeekToolCall[] } }[];
+        choices?: { message?: { content?: string; reasoning_content?: string; tool_calls?: DeepSeekToolCall[] } }[];
     };
     const msg = data.choices?.[0]?.message;
-    return { content: msg?.content ?? "", tool_calls: msg?.tool_calls };
+    return { content: msg?.content ?? "", reasoning: msg?.reasoning_content, tool_calls: msg?.tool_calls };
 }
 
 /**

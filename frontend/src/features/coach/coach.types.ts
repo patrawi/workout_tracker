@@ -3,6 +3,7 @@ export type CoachRole = "user" | "coach";
 export interface CoachMessage {
   role: CoachRole;
   text: string;
+  reasoning?: string;
 }
 
 export type PlanDayType = "Push" | "Pull" | "Legs";

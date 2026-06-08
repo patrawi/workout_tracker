@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 import { Moon } from "lucide-react";
+import DatePicker from "@/components/DatePicker";
 
 interface WorkoutInputProps {
     onSubmit: (text: string, workoutDate: string) => Promise<void>;
@@ -20,6 +21,9 @@ export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestD
     const [text, setText] = useState("");
     const [workoutDate, setWorkoutDate] = useState(getLocalDateTimeNow);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const datePart = useMemo(() => workoutDate.slice(0, 10), [workoutDate]);
+    const timePart = useMemo(() => workoutDate.slice(11, 16), [workoutDate]);
 
     // Auto-resize textarea
     useEffect(() => {
@@ -69,14 +73,18 @@ export default function WorkoutInput({ onSubmit, isLoading, onRestDay, showRestD
                 />
 
                 <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
-                    {/* Compact Date Picker */}
-                    <div className="relative group">
-                        <input
+                    {/* Date + Time */}
+                    <div className="flex items-center gap-1.5">
+                        <DatePicker
                             id="workout-date-input"
-                            type="datetime-local"
-                            value={workoutDate}
-                            onChange={(e) => setWorkoutDate(e.target.value)}
-                            className="bg-transparent text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] px-2 py-1 rounded cursor-pointer transition-colors outline-none focus:ring-1 focus:ring-[var(--color-accent-400)]"
+                            value={datePart}
+                            onChange={(ymd) => setWorkoutDate(`${ymd}T${timePart}`)}
+                        />
+                        <input
+                            type="time"
+                            value={timePart}
+                            onChange={(e) => setWorkoutDate(`${datePart}T${e.target.value || "00:00"}`)}
+                            className="bg-transparent text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] px-1.5 py-1 rounded cursor-pointer transition-colors outline-none focus:ring-1 focus:ring-[var(--color-accent-400)] w-[90px]"
                         />
                     </div>
 

@@ -18,6 +18,7 @@ import {
 import { TIME_RANGES } from "@/lib/constants";
 import { useProfile } from "@/features/profile/hooks/useProfile";
 import PushNotificationToggle from "@/components/PushNotificationToggle";
+import DatePicker from "@/components/DatePicker";
 
 const CustomTooltip = ({
   active,
@@ -142,12 +143,7 @@ export default function ProfilePage() {
                     <label className="text-xs text-[var(--muted-foreground)] block mb-1.5">
                       Weigh-in Date
                     </label>
-                    <input
-                      type="date"
-                      value={bodyweightDate}
-                      onChange={(e) => setBodyweightDate(e.target.value)}
-                      className="glass-input w-full px-4 py-3 text-base text-[var(--foreground)]"
-                    />
+                    <DatePicker value={bodyweightDate} onChange={setBodyweightDate} className="glass-input w-full justify-start text-base px-4 py-3" />
                   </div>
                   <div>
                     <label className="text-xs text-[var(--muted-foreground)] block mb-1.5">

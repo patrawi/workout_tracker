@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { deepseekChat, deepseekChatRaw, type DeepSeekMessage } from "../llm/deepseek";
+import { deepseekChatRaw, type DeepSeekMessage } from "../llm/deepseek";
 import { COACH_MODEL, COACH_TEMPERATURE, DEEPSEEK_COACH_MODEL } from "../constants";
 
 const MAX_TOOL_ITERS = 5;
@@ -9,8 +9,13 @@ export interface CoachMessage {
   text: string;
 }
 
+export interface CoachReply {
+  text: string;
+  reasoning?: string;
+}
+
 export interface CoachClient {
-  chat(systemPrompt: string, messages: CoachMessage[]): Promise<string>;
+  chat(systemPrompt: string, messages: CoachMessage[]): Promise<CoachReply>;
 }
 
 export interface CoachTools {
@@ -31,7 +36,7 @@ export function createCoachClient(
   const ai = new GoogleGenAI({ apiKey });
 
   return {
-    async chat(systemPrompt: string, messages: CoachMessage[]): Promise<string> {
+    async chat(systemPrompt: string, messages: CoachMessage[]): Promise<CoachReply> {
       const contents = messages.map((m) => ({
         role: m.role === "coach" ? "model" : "user",
         parts: [{ text: m.text }],
@@ -46,7 +51,7 @@ export function createCoachClient(
         },
       });
 
-      return response.text ?? "";
+      return { text: response.text ?? "" };
     },
   };
 }
@@ -63,7 +68,7 @@ export function createDeepSeekCoachClient(
   tools?: CoachTools
 ): CoachClient {
   return {
-    async chat(systemPrompt: string, messages: CoachMessage[]): Promise<string> {
+    async chat(systemPrompt: string, messages: CoachMessage[]): Promise<CoachReply> {
       const history: DeepSeekMessage[] = [
         { role: "system", content: systemPrompt },
         ...messages.map((m) => ({
@@ -73,9 +78,12 @@ export function createDeepSeekCoachClient(
       ];
 
       if (!tools) {
-        return deepseekChat({ apiKey, model, thinking: true, messages: history });
+        const r = await deepseekChatRaw({ apiKey, model, thinking: true, messages: history });
+        return { text: r.content, reasoning: r.reasoning };
       }
 
+      // Accumulate reasoning from each iteration (pre-tool thinking + final).
+      const reasonings: string[] = [];
       for (let i = 0; i < MAX_TOOL_ITERS; i++) {
         const result = await deepseekChatRaw({
           apiKey,
@@ -84,9 +92,10 @@ export function createDeepSeekCoachClient(
           messages: history,
           tools: tools.schemas,
         });
+        if (result.reasoning) reasonings.push(result.reasoning);
 
         if (!result.tool_calls?.length) {
-          return result.content;
+          return { text: result.content, reasoning: reasonings.join("\n\n---\n\n") || undefined };
         }
 
         // Append the assistant message (content may be empty when tool_calls present)
@@ -115,7 +124,9 @@ export function createDeepSeekCoachClient(
 
       // Max iterations reached without a final text reply — ask for one
       history.push({ role: "user", content: "Please answer the user's original question based on the tool results above." });
-      return deepseekChat({ apiKey, model, thinking: true, messages: history });
+      const final = await deepseekChatRaw({ apiKey, model, thinking: true, messages: history });
+      if (final.reasoning) reasonings.push(final.reasoning);
+      return { text: final.content, reasoning: reasonings.join("\n\n---\n\n") || undefined };
     },
   };
 }
