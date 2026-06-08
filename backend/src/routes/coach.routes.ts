@@ -63,5 +63,52 @@ export function registerCoachRoutes(app: any, ctx: AppContext): void {
           exercises: t.Array(planExerciseSchema),
         }),
       }
+    )
+
+    // ── Coach Knowledge ──
+    .get(
+      "/coach/knowledge",
+      routeHandler(async () => {
+        return await coachService.listKnowledge();
+      })
+    )
+    .post(
+      "/coach/knowledge",
+      routeHandlerCtx(async ({ body }) => {
+        return await coachService.addKnowledge(body.title, body.body);
+      }),
+      {
+        body: t.Object({ title: t.String(), body: t.String() }),
+      }
+    )
+    .put(
+      "/coach/knowledge/:id",
+      routeHandlerCtx(async ({ params, body }) => {
+        return await coachService.updateKnowledge(Number(params.id), { title: body.title, body: body.body });
+      }),
+      {
+        params: t.Object({ id: t.String() }),
+        body: t.Object({ title: t.Optional(t.String()), body: t.Optional(t.String()) }),
+      }
+    )
+    .delete(
+      "/coach/knowledge/:id",
+      routeHandlerCtx(async ({ params }) => {
+        await coachService.deleteKnowledge(Number(params.id));
+        return { ok: true };
+      }),
+      {
+        params: t.Object({ id: t.String() }),
+      }
+    )
+    .put(
+      "/coach/knowledge/reorder",
+      routeHandlerCtx(async ({ body }) => {
+        await coachService.reorderKnowledge(body.ids);
+        return { ok: true };
+      }),
+      {
+        body: t.Object({ ids: t.Array(t.Number()) }),
+      }
     );
 }

@@ -5,6 +5,7 @@ import {
   ChevronRight,
   MessageSquare,
   ClipboardList,
+  Edit3,
 } from "lucide-react";
 import { useCoach } from "@/features/coach/hooks/useCoach";
 import { SUGGESTIONS } from "@/features/coach/coach.utils";
@@ -16,6 +17,7 @@ import {
 import { CoachPersona } from "@/features/coach/components/CoachPersona";
 import { KnowledgeDrawer } from "@/features/coach/components/KnowledgeDrawer";
 import { PlanView } from "@/features/coach/components/PlanView";
+import { KnowledgeEditorDrawer } from "@/features/coach/components/KnowledgeEditorDrawer";
 import { KB_CATEGORIES, KB_ARTICLES } from "@/features/coach/data/knowledge";
 
 type CoachTab = "chat" | "plan";
@@ -30,6 +32,7 @@ export default function CoachPage() {
   const { messages, send, reset, typing } = useCoach();
   const [drawer, setDrawer] = useState<DrawerState>({ open: false, id: null });
   const [tab, setTab] = useState<CoachTab>("chat");
+  const [editorOpen, setEditorOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const started = messages.length > 0;
 
@@ -120,15 +123,24 @@ export default function CoachPage() {
                       <div className="text-[13px] text-[var(--muted-foreground)] font-semibold uppercase tracking-wide">
                         Knowledge base
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDrawer({ open: true, id: null, cat: "concepts" })
-                        }
-                        className="inline-flex items-center gap-1.5 text-[var(--primary)] font-semibold text-[13px] cursor-pointer"
-                      >
-                        Browse all <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setEditorOpen(true)}
+                          className="inline-flex items-center gap-1.5 text-[var(--primary)] font-semibold text-[13px] cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" /> Edit doc
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDrawer({ open: true, id: null, cat: "concepts" })
+                          }
+                          className="inline-flex items-center gap-1.5 text-[var(--primary)] font-semibold text-[13px] cursor-pointer"
+                        >
+                          Browse all <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {KB_CATEGORIES.map((c) => (
@@ -200,6 +212,11 @@ export default function CoachPage() {
         articleId={drawer.id}
         initialCat={drawer.cat}
         onClose={() => setDrawer({ open: false, id: null })}
+      />
+
+      <KnowledgeEditorDrawer
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
       />
     </div>
   );

@@ -40,3 +40,11 @@ export interface PlanProposal {
 }
 
 export type CoachPlanGrouped = Record<PlanDayType, PlanRow[]>;
+
+export interface CoachKnowledgeRow {
+  id: number;
+  title: string;
+  body: string;
+  position: number;
+  updated_at: string | null;
+}

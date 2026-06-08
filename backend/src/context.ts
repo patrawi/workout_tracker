@@ -11,6 +11,7 @@ import { createNutritionRepository } from "./repositories/nutrition.repository";
 import { createWaterRepository } from "./repositories/water.repository";
 import { createFoodCatalogRepository } from "./repositories/food-catalog.repository";
 import { createCoachPlanRepository } from "./repositories/coach-plan.repository";
+import { createCoachKnowledgeRepository } from "./repositories/coach-knowledge.repository";
 import { createAIService } from "./services/ai.service";
 import { createAnalyticsService } from "./services/analytics.service";
 import { createBodyweightService } from "./services/bodyweight.service";
@@ -67,6 +68,7 @@ export function createAppContext(
   const waterRepo = createWaterRepository(db);
   const foodCatalogRepo = createFoodCatalogRepository(db);
   const coachPlanRepo = createCoachPlanRepository(db);
+  const coachKnowledgeRepo = createCoachKnowledgeRepository(db);
 
   // Create AI service
   const aiService = createAIService(config);
@@ -89,6 +91,7 @@ export function createAppContext(
     bodyweightService,
     profileService,
     coachPlanRepo,
+    coachKnowledgeRepo,
     workoutRepo,
   });
 

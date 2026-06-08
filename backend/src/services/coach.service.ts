@@ -6,7 +6,7 @@ import type { NutritionService } from "./nutrition.service";
 import type { BodyweightService } from "./bodyweight.service";
 import type { ProfileService } from "./profile.service";
 import { createCoachClient, createDeepSeekCoachClient, type CoachClient, type CoachMessage } from "../coach/client";
-import { buildCoachSystemPrompt, buildPlanSystemPrompt, loadCoachKnowledge } from "../coach/prompts";
+import { buildCoachSystemPrompt, buildPlanSystemPrompt } from "../coach/prompts";
 import { buildCoachTools } from "../coach/tools";
 import { ExternalServiceError, ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
@@ -14,6 +14,7 @@ import { getLocalDateString } from "../lib/date";
 import { classifySession } from "../coach/classify";
 import { extractJsonItems } from "../llm/extract-json";
 import type { createCoachPlanRepository, CoachPlanRow, CoachPlanInput } from "../repositories/coach-plan.repository";
+import type { createCoachKnowledgeRepository, CoachKnowledgeRow } from "../repositories/coach-knowledge.repository";
 import type { createWorkoutRepository, SessionWithWorkouts } from "../repositories/workout.repository";
 import { COACH_CONTEXT_DAYS, COACH_NUTRITION_DAYS, DEEPSEEK_COACH_MODEL } from "../constants";
 
@@ -40,6 +41,11 @@ export interface CoachService {
   getPlan(): Promise<CoachPlanGrouped>;
   proposeNextSession(dayType: string): Promise<PlanProposal>;
   savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
+  listKnowledge(): Promise<CoachKnowledgeRow[]>;
+  addKnowledge(title: string, body: string): Promise<CoachKnowledgeRow>;
+  updateKnowledge(id: number, data: { title?: string; body?: string }): Promise<CoachKnowledgeRow | null>;
+  deleteKnowledge(id: number): Promise<void>;
+  reorderKnowledge(ids: number[]): Promise<void>;
 }
 
 export interface CoachServiceDeps {
@@ -48,6 +54,7 @@ export interface CoachServiceDeps {
   bodyweightService: BodyweightService;
   profileService: ProfileService;
   coachPlanRepo: ReturnType<typeof createCoachPlanRepository>;
+  coachKnowledgeRepo: ReturnType<typeof createCoachKnowledgeRepository>;
   workoutRepo: ReturnType<typeof createWorkoutRepository>;
 }
 
@@ -133,6 +140,13 @@ async function buildContext(deps: CoachServiceDeps): Promise<string> {
   }
 
   return [targets, volumeLine, nutritionLine, bodyweightLine].join("\n");
+}
+
+async function loadCoachKnowledgeFromDB(
+  repo: ReturnType<typeof createCoachKnowledgeRepository>,
+): Promise<string> {
+  const sections = await repo.list();
+  return sections.map((s) => `# ${s.title}\n\n${s.body}`).join("\n\n");
 }
 
 // ── Plan helpers ────────────────────────────────────────────────────────────
@@ -245,7 +259,7 @@ export function createCoachService(
       try {
         const [contextSummary, knowledge] = await Promise.all([
           buildContext(deps),
-          loadCoachKnowledge(),
+          loadCoachKnowledgeFromDB(deps.coachKnowledgeRepo),
         ]);
         const systemPrompt = buildCoachSystemPrompt({
           contextSummary,
@@ -277,7 +291,7 @@ export function createCoachService(
       try {
         const [plan, knowledge, sessions] = await Promise.all([
           deps.coachPlanRepo.getByDayType(day),
-          loadCoachKnowledge(),
+          loadCoachKnowledgeFromDB(deps.coachKnowledgeRepo),
           deps.workoutRepo.getRecentSessionsWithWorkouts(40),
         ]);
 
@@ -317,6 +331,26 @@ export function createCoachService(
     async savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]> {
       const day = assertDayType(dayType);
       return deps.coachPlanRepo.replaceDayType(day, exercises);
+    },
+
+    async listKnowledge() {
+      return deps.coachKnowledgeRepo.list();
+    },
+
+    async addKnowledge(title: string, body: string) {
+      return deps.coachKnowledgeRepo.create(title, body);
+    },
+
+    async updateKnowledge(id: number, data: { title?: string; body?: string }) {
+      return deps.coachKnowledgeRepo.update(id, data);
+    },
+
+    async deleteKnowledge(id: number) {
+      await deps.coachKnowledgeRepo.delete(id);
+    },
+
+    async reorderKnowledge(ids: number[]) {
+      await deps.coachKnowledgeRepo.reorder(ids);
     },
   };
 }

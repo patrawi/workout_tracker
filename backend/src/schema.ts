@@ -77,6 +77,17 @@ export const coachPlan = pgTable("coach_plan", {
     index("coach_plan_day_type_idx").on(table.day_type),
 ]);
 
+// ——— Coach Knowledge Table (editable training doc, in sections) ———
+export const coachKnowledge = pgTable("coach_knowledge", {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull(),
+    body: text("body").default("").notNull(),
+    position: integer("position").default(0).notNull(),
+    updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
+}, (table) => [
+    index("coach_knowledge_position_idx").on(table.position),
+]);
+
 // ——— Profile Table (single row, id always = 1) ———
 export const profile = pgTable("profile", {
     id: integer("id").primaryKey().default(1),

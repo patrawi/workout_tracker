@@ -90,17 +90,3 @@ Return ONLY a JSON array — no prose, no markdown fences. One object per exerci
 }]
 Write "notes" and "rationale" in the user's language (Thai if the plan/notes are Thai). "rationale" must cite the actual-vs-target comparison. Set "target_weight" to null when "is_bodyweight" is true.`;
 }
-
-// The knowledge base is the user's training doc, shipped beside this file and
-// edited directly. Loaded once and cached.
-let cachedKnowledge: string | null = null;
-
-export async function loadCoachKnowledge(): Promise<string> {
-  if (cachedKnowledge !== null) return cachedKnowledge;
-  try {
-    cachedKnowledge = await Bun.file(new URL("./knowledge.md", import.meta.url)).text();
-  } catch {
-    cachedKnowledge = "";
-  }
-  return cachedKnowledge;
-}
