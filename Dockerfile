@@ -15,6 +15,7 @@ WORKDIR /app
 
 # Copy all source code
 COPY backend/src ./backend/src/
+COPY backend/scripts ./backend/scripts/
 COPY backend/drizzle.config.ts ./backend/
 COPY backend/drizzle ./backend/drizzle/
 COPY frontend ./frontend/
@@ -33,5 +34,5 @@ WORKDIR /app/backend
 # Expose port
 EXPOSE 3000
 
-# Start the server (run migrations first, then start app)
-CMD ["/bin/sh", "-c", "bun src/migrate.ts && bun src/index.ts"]
+# Start the server (migrate, seed coach knowledge if empty, then start app)
+CMD ["/bin/sh", "-c", "bun src/migrate.ts && bun scripts/seed-coach-knowledge.ts && bun src/index.ts"]
