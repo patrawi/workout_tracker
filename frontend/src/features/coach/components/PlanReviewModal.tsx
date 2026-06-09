@@ -6,8 +6,8 @@ import { coachApi } from "@/lib/api/coach";
 import type { PlanProposal, ProposedExercise } from "../coach.types";
 
 const CHANGE_META = {
-  increase: { Icon: ArrowUp, cls: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30", label: "Increase" },
-  decrease: { Icon: ArrowDown, cls: "text-amber-400 bg-amber-400/10 border-amber-400/30", label: "Decrease" },
+  increase: { Icon: ArrowUp, cls: "text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/30", label: "Increase" },
+  decrease: { Icon: ArrowDown, cls: "text-[var(--chart-4)] bg-[var(--chart-4)]/10 border-[var(--chart-4)]/30", label: "Decrease" },
   hold: { Icon: Minus, cls: "text-[var(--muted-foreground)] bg-white/5 border-[var(--border)]", label: "Hold" },
 } as const;
 
@@ -99,7 +99,7 @@ export function PlanReviewModal({ proposal, onClose, onSaved }: PlanReviewModalP
                 </div>
 
                 {ex.rationale && (
-                  <p className="mt-2.5 text-[13px] text-[var(--muted-foreground)] leading-relaxed border-l-2 border-[var(--primary)]/40 pl-2.5">
+                  <p className="mt-2.5 text-[13px] text-[var(--muted-foreground)] leading-relaxed rounded-lg bg-[var(--primary)]/5 px-3 py-2">
                     {ex.rationale}
                   </p>
                 )}
@@ -112,7 +112,7 @@ export function PlanReviewModal({ proposal, onClose, onSaved }: PlanReviewModalP
         </div>
 
         <div className="px-5 py-4 border-t border-[var(--border)] flex items-center justify-end gap-3">
-          {save.isError && <span className="text-sm text-red-400 mr-auto">{(save.error as Error).message}</span>}
+          {save.isError && <span className="text-sm text-[oklch(0.72_0.14_25)] mr-auto">{(save.error as Error).message}</span>}
           <button
             type="button"
             onClick={onClose}
@@ -124,7 +124,7 @@ export function PlanReviewModal({ proposal, onClose, onSaved }: PlanReviewModalP
             type="button"
             onClick={() => save.mutate()}
             disabled={save.isPending || rows.length === 0}
-            className="px-4 py-2 rounded-xl bg-[var(--primary)] text-[#04130d] font-bold text-sm cursor-pointer hover:brightness-110 disabled:opacity-50"
+            className="px-4 py-2 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-sm cursor-pointer hover:brightness-110 disabled:opacity-50"
           >
             {save.isPending ? "Saving…" : "Accept & save"}
           </button>

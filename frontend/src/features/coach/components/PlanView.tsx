@@ -26,7 +26,7 @@ function DayCard({ day, rows, onPlanNext, planning }: {
           type="button"
           onClick={() => onPlanNext(day)}
           disabled={planning}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--primary)] text-[#04130d] font-bold text-[13px] cursor-pointer hover:brightness-110 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-[13px] cursor-pointer hover:brightness-110 disabled:opacity-50"
         >
           {planning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           Plan next
@@ -87,8 +87,8 @@ export function PlanView() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-2 grid gap-4">
       {isLoading && <p className="text-[var(--muted-foreground)] text-sm">Loading plan…</p>}
-      {isError && <p className="text-red-400 text-sm">Couldn’t load the plan.</p>}
-      {propose.isError && <p className="text-red-400 text-sm">{(propose.error as Error).message}</p>}
+      {isError && <p className="text-[oklch(0.72_0.14_25)] text-sm">Couldn’t load the plan.</p>}
+      {propose.isError && <p className="text-[oklch(0.72_0.14_25)] text-sm">{(propose.error as Error).message}</p>}
 
       {data &&
         PLAN_DAY_TYPES.map((day) => (

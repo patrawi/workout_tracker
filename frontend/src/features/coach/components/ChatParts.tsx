@@ -6,8 +6,8 @@ import { MarkdownMessage } from "./MarkdownMessage";
 export function CoachAvatar({ size = 34 }: { size?: number }) {
     return (
         <div
-            className="flex-none grid place-items-center rounded-xl text-[#04130d]"
-            style={{ width: size, height: size, background: "linear-gradient(150deg,#1bd092,#0e7a55)" }}
+            className="flex-none grid place-items-center rounded-xl text-[var(--primary-foreground)]"
+            style={{ width: size, height: size, background: "linear-gradient(150deg,oklch(0.78 0.16 162),oklch(0.5 0.11 160))" }}
         >
             <Sparkles className="w-[18px] h-[18px]" />
         </div>
@@ -93,7 +93,7 @@ export function ChatInput({ onSend, disabled }: { onSend: (text: string) => void
 
     return (
         <div>
-            <div className="flex items-end gap-3 p-3 sm:p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)]">
+            <div className="flex items-end gap-3 p-3 sm:p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] focus-within:border-[var(--primary)]/50 transition-colors">
                 <textarea
                     ref={ref}
                     id="coach-input"
@@ -111,7 +111,7 @@ export function ChatInput({ onSend, disabled }: { onSend: (text: string) => void
                     aria-label="Send message"
                     className={`flex-none grid place-items-center w-11 h-11 rounded-xl transition-all ${
                         canSend
-                            ? "bg-[var(--primary)] text-[#04130d] cursor-pointer"
+                            ? "bg-[var(--primary)] text-[var(--primary-foreground)] cursor-pointer"
                             : "bg-white/5 text-[var(--muted-foreground)] cursor-default"
                     }`}
                 >

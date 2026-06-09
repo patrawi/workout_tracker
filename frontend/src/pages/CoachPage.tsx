@@ -46,8 +46,8 @@ export default function CoachPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-3 pb-1 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 font-extrabold text-lg text-[var(--foreground)]">
           <span
-            className="grid place-items-center w-8 h-8 rounded-lg text-[#04130d]"
-            style={{ background: "linear-gradient(150deg,#1bd092,#0e7a55)" }}
+            className="grid place-items-center w-8 h-8 rounded-lg text-[var(--primary-foreground)]"
+            style={{ background: "linear-gradient(150deg,oklch(0.78 0.16 162),oklch(0.5 0.11 160))" }}
           >
             <Sparkles className="w-4 h-4" />
           </span>

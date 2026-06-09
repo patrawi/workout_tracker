@@ -17,8 +17,8 @@ const PAGE_VARS = {
     "--accent-soft": "oklch(0.72 0.19 160 / 0.12)",
     "--accent-line": "oklch(0.72 0.19 160 / 0.35)",
     "--accent-glow": "oklch(0.72 0.19 160 / 0.18)",
-    "--carb": "#36b9d6",
-    "--fat": "#ef6f5e",
+    "--carb": "var(--chart-4)",
+    "--fat": "var(--chart-5)",
     "--teal": "var(--color-glow-cyan)",
     "--card-2": "var(--color-surface-200)",
     "--text": "var(--foreground)",
@@ -71,7 +71,7 @@ function Icon({ name, size = 18, style }: { name: string; size?: number; style?:
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
     return (
-        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 18, ...style }}>
+        <div className="glass-card" style={style}>
             {children}
         </div>
     );
@@ -88,7 +88,7 @@ function DateStrip({ selected, onSelect, loggedDates }: { selected: string; onSe
     const week: string[] = [];
     for (let i = -3; i <= 3; i++) week.push(shiftYMD(anchor, i));
     const monthLbl = fromYMD(anchor).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    const navBtn: React.CSSProperties = { width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", border: "1px solid var(--border)", background: "rgba(255,255,255,.03)", color: "var(--dim)", cursor: "pointer" };
+    const navBtn: React.CSSProperties = { width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", border: "1px solid var(--border)", background: "oklch(1 0 0 / .03)", color: "var(--dim)", cursor: "pointer" };
 
     // Close the calendar popover on outside click / Escape.
     const popRef = useRef<HTMLDivElement>(null);
@@ -133,7 +133,7 @@ function DateStrip({ selected, onSelect, loggedDates }: { selected: string; onSe
                             <div style={{
                                 ...calVars, position: "absolute", top: 42, right: 0, zIndex: 60,
                                 background: "var(--card)", border: "1px solid var(--border)", borderRadius: 16,
-                                padding: 10, boxShadow: "0 20px 50px rgba(0,0,0,.5)", color: "var(--text)",
+                                padding: 10, boxShadow: "0 20px 50px oklch(0 0 0 / .5)", color: "var(--text)",
                             }}>
                                 <DayPicker
                                     mode="single"
@@ -188,7 +188,7 @@ function CalorieRing({ consumed, goal, size = 210 }: { consumed: number; goal: n
             <line key={i}
                 x1={cx + ro * Math.cos(ang)} y1={cy + ro * Math.sin(ang)}
                 x2={cx + ri * Math.cos(ang)} y2={cy + ri * Math.sin(ang)}
-                stroke={active ? (over ? "var(--fat)" : "var(--accent)") : "rgba(255,255,255,.10)"}
+                stroke={active ? (over ? "var(--fat)" : "var(--accent)") : "oklch(1 0 0 / .10)"}
                 strokeWidth="3.2" strokeLinecap="round" />,
         );
     }
@@ -240,14 +240,14 @@ function MacroBars({ totals, goals, prev }: {
                 return (
                     <div key={row.k}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".04em" }}>{row.k}</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".04em" }}>{row.k}</span>
                             <span style={{ fontSize: 13, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>
                                 <b style={{ color: row.color }}>{r1(row.v)}</b>
                                 {row.g > 0 && <span style={{ color: "var(--faint)" }}> / {row.g}g</span>}
                                 <DeltaBadge current={row.v} previous={row.pv} />
                             </span>
                         </div>
-                        <div style={{ height: 7, borderRadius: 99, background: "rgba(255,255,255,.06)", overflow: "hidden" }}>
+                        <div style={{ height: 7, borderRadius: 99, background: "oklch(1 0 0 / .06)", overflow: "hidden" }}>
                             <div style={{ width: pct * 100 + "%", height: "100%", borderRadius: 99, background: row.color, transition: "width .6s cubic-bezier(.4,0,.2,1)" }} />
                         </div>
                         {row.g > 0 && (
@@ -270,12 +270,12 @@ function Glass({ filled }: { filled: boolean }) {
                 <clipPath id="cup"><path d="M9 6 h22 l-2.5 36 a3 3 0 0 1 -3 2.6 h-11 a3 3 0 0 1 -3 -2.6 z" /></clipPath>
             </defs>
             <g clipPath="url(#cup)">
-                <rect x="0" y="0" width="40" height="48" fill="rgba(255,255,255,.04)" />
+                <rect x="0" y="0" width="40" height="48" fill="oklch(1 0 0 / .04)" />
                 {filled && <rect x="0" y="16" width="40" height="48" fill="var(--teal)" opacity="0.85" />}
-                {filled && <rect x="0" y="16" width="40" height="4" fill="#fff" opacity="0.25" />}
+                {filled && <rect x="0" y="16" width="40" height="4" fill="oklch(1 0 0)" opacity="0.25" />}
             </g>
             <path d="M9 6 h22 l-2.5 36 a3 3 0 0 1 -3 2.6 h-11 a3 3 0 0 1 -3 -2.6 z" fill="none"
-                stroke={filled ? "var(--teal)" : "rgba(255,255,255,.18)"} strokeWidth="1.6" />
+                stroke={filled ? "var(--teal)" : "oklch(1 0 0 / .18)"} strokeWidth="1.6" />
         </svg>
     );
 }
@@ -285,17 +285,17 @@ function WaterCard({ glasses, goal, onSave, isSaving }: { glasses: number; goal:
     useEffect(() => { setDraft(glasses); }, [glasses]);
     const dirty = draft !== glasses;
     const ml = draft * 250;
-    const stepBtn: React.CSSProperties = { width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)", background: "rgba(255,255,255,.03)", color: "var(--text)", fontSize: 18, fontWeight: 700, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 };
+    const stepBtn: React.CSSProperties = { width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)", background: "oklch(1 0 0 / .03)", color: "var(--text)", fontSize: 18, fontWeight: 700, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 };
     return (
         <Card style={{ padding: 22, display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
                 <div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Water intake</div>
-                    <div style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 2 }}>Goal {goal} glasses · {(goal * 250 / 1000).toFixed(1)} L</div>
+                    <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }}>Goal {goal} glasses · {(goal * 250 / 1000).toFixed(1)} L</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 22, fontWeight: 800, color: "var(--teal)", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{(ml / 1000).toFixed(2)}L</div>
-                    <div style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 2 }}>{draft} of {goal}</div>
+                    <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>{draft} of {goal}</div>
                 </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -313,7 +313,7 @@ function WaterCard({ glasses, goal, onSave, isSaving }: { glasses: number; goal:
                 <button className="nut-tap" aria-label="Add a glass" onClick={() => setDraft(Math.min(goal, draft + 1))} style={stepBtn}>+</button>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 36 }}>
-                <span style={{ fontSize: 12.5, color: dirty ? "var(--dim)" : "var(--faint)" }}>
+                <span style={{ fontSize: 12, color: dirty ? "var(--dim)" : "var(--faint)" }}>
                     {dirty ? (draft > glasses ? `+${draft - glasses}` : draft - glasses) + " unsaved" : "All changes saved"}
                 </span>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -322,8 +322,8 @@ function WaterCard({ glasses, goal, onSave, isSaving }: { glasses: number; goal:
                     )}
                     <button onClick={() => dirty && onSave(draft)} disabled={!dirty || isSaving} style={{
                         display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 10, border: "none",
-                        background: dirty ? "var(--teal)" : "rgba(255,255,255,.05)", color: dirty ? "#04130d" : "var(--faint)",
-                        fontWeight: 700, fontSize: 13.5, cursor: dirty && !isSaving ? "pointer" : "default", transition: "all .15s ease",
+                        background: dirty ? "var(--teal)" : "oklch(1 0 0 / .05)", color: dirty ? "var(--primary-foreground)" : "var(--faint)",
+                        fontWeight: 700, fontSize: 13, cursor: dirty && !isSaving ? "pointer" : "default", transition: "all .15s ease",
                     }}>
                         <Icon name="check" size={15} /> {isSaving ? "Saving…" : "Save"}
                     </button>
@@ -344,24 +344,24 @@ function AIInput({ dateLabel, value, setValue, onParse, onManual, isParsing }: {
                 <textarea value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={onKey}
                     placeholder="Paste your food log… e.g. 'Breakfast: 2 eggs, 50g cereal for 40g serving…'"
                     rows={3} disabled={isParsing}
-                    style={{ width: "100%", resize: "vertical", minHeight: 92, padding: "18px 70px 14px 20px", border: "none", outline: "none", background: "transparent", color: "var(--text)", fontSize: 16, lineHeight: 1.5, fontFamily: "inherit" }} />
+                    style={{ width: "100%", resize: "vertical", minHeight: 92, padding: "18px 70px 14px 20px", border: "none", background: "transparent", color: "var(--text)", fontSize: 16, lineHeight: 1.5, fontFamily: "inherit" }} />
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px 14px 20px" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "var(--faint)" }}>
                         <Icon name="calendar" size={14} /> {dateLabel}
                     </span>
                     <button onClick={onParse} disabled={!value.trim() || isParsing} title="Parse with AI" style={{
                         position: "absolute", right: 16, bottom: 14, width: 44, height: 44, borderRadius: 13, border: "none",
-                        background: "var(--accent)", color: "#04130d", display: "grid", placeItems: "center",
+                        background: "var(--accent)", color: "var(--primary-foreground)", display: "grid", placeItems: "center",
                         cursor: !value.trim() || isParsing ? "default" : "pointer", opacity: !value.trim() || isParsing ? 0.5 : 1, boxShadow: "0 6px 18px var(--accent-glow)",
                     }}>
                         {isParsing
-                            ? <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,.3)", borderTopColor: "#04130d", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                            ? <span style={{ width: 16, height: 16, border: "2px solid oklch(0 0 0 / .3)", borderTopColor: "var(--primary-foreground)", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
                             : <Icon name="send" size={20} />}
                     </button>
                 </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-                <span style={{ fontSize: 12.5, color: "var(--faint)" }}>Paste in Thai or English · <span style={{ color: "var(--dim)" }}>Enter</span> to parse, <span style={{ color: "var(--dim)" }}>Shift+Enter</span> for newline.</span>
+                <span style={{ fontSize: 12, color: "var(--faint)" }}>Paste in Thai or English · <span style={{ color: "var(--dim)" }}>Enter</span> to parse, <span style={{ color: "var(--dim)" }}>Shift+Enter</span> for newline.</span>
                 <button className="nut-tap" onClick={onManual} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: "1px dashed var(--border)", background: "transparent", color: "var(--dim)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                     <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Add a food manually
                 </button>
@@ -386,12 +386,12 @@ function AddFoodModal({ open, meal, initial, onClose, onSave, isSaving }: {
         if (!f.name.trim()) return;
         onSave(f.meal, { name: f.name.trim(), p: num(f.p), c: num(f.c), f: num(f.f), kcal: f.kcal === "" ? autoKcal : num(f.kcal) });
     };
-    const fld: React.CSSProperties = { width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-2)", color: "var(--text)", fontSize: 16, outline: "none", fontFamily: "inherit" };
-    const lbl: React.CSSProperties = { fontSize: 11.5, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 5, display: "block" };
+    const fld: React.CSSProperties = { width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-2)", color: "var(--text)", fontSize: 16, fontFamily: "inherit" };
+    const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 5, display: "block" };
     const navBtn: React.CSSProperties = { width: 30, height: 30, borderRadius: 8, display: "grid", placeItems: "center", border: "1px solid var(--border)", background: "transparent", color: "var(--dim)", cursor: "pointer" };
     return (
-        <div onClick={onClose} style={{ ...PAGE_VARS, position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", zIndex: 200, padding: 20, overflowY: "auto" }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ width: 420, maxWidth: "100%", maxHeight: "calc(100dvh - 40px)", overflowY: "auto", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 18, padding: 24, boxShadow: "0 30px 70px rgba(0,0,0,.5)" }}>
+        <div onClick={onClose} style={{ ...PAGE_VARS, position: "fixed", inset: 0, background: "oklch(0 0 0 / .6)", display: "grid", placeItems: "center", zIndex: 200, padding: 20, overflowY: "auto" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: 420, maxWidth: "100%", maxHeight: "calc(100dvh - 40px)", overflowY: "auto", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 18, padding: 24, boxShadow: "0 30px 70px oklch(0 0 0 / .5)" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
                     <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text)" }}>{initial ? "Edit food" : "Add food"}</div>
                     <button className="nut-tap" onClick={onClose} aria-label="Close" style={navBtn}><Icon name="close" size={15} /></button>
@@ -419,7 +419,7 @@ function AddFoodModal({ open, meal, initial, onClose, onSave, isSaving }: {
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
                     <button onClick={onClose} style={{ padding: "10px 16px", borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--dim)", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>Cancel</button>
-                    <button onClick={save} disabled={!f.name.trim() || isSaving} style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#04130d", fontWeight: 700, fontSize: 14, cursor: "pointer", opacity: !f.name.trim() || isSaving ? 0.5 : 1 }}>
+                    <button onClick={save} disabled={!f.name.trim() || isSaving} style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "var(--accent)", color: "var(--primary-foreground)", fontWeight: 700, fontSize: 14, cursor: "pointer", opacity: !f.name.trim() || isSaving ? 0.5 : 1 }}>
                         {isSaving ? "Saving…" : initial ? "Save" : "Add food"}
                     </button>
                 </div>
@@ -432,7 +432,7 @@ function AddFoodModal({ open, meal, initial, onClose, onSave, isSaving }: {
 function Toast({ msg }: { msg: string }) {
     if (!msg) return null;
     return (
-        <div style={{ ...PAGE_VARS, position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 250, background: "var(--card-2)", border: "1px solid var(--accent-line)", color: "var(--text)", padding: "11px 18px", borderRadius: 12, fontSize: 14, fontWeight: 600, boxShadow: "0 12px 30px rgba(0,0,0,.45)", display: "flex", alignItems: "center", gap: 9 }}>
+        <div style={{ ...PAGE_VARS, position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 250, background: "var(--card-2)", border: "1px solid var(--accent-line)", color: "var(--text)", padding: "11px 18px", borderRadius: 12, fontSize: 14, fontWeight: 600, boxShadow: "0 12px 30px oklch(0 0 0 / .45)", display: "flex", alignItems: "center", gap: 9 }}>
             <Icon name="check" size={16} style={{ color: "var(--accent)" }} /> {msg}
         </div>
     );
@@ -441,7 +441,7 @@ function Toast({ msg }: { msg: string }) {
 // ——— Meal section ———
 function ColHead() {
     return (
-        <div className="nut-row" style={{ padding: "0 4px 7px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--faint)" }}>
+        <div className="nut-row" style={{ padding: "0 4px 7px", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--faint)" }}>
             <span>Item</span>
             <span className="nut-pcf" style={{ textAlign: "right" }}>P</span>
             <span className="nut-pcf" style={{ textAlign: "right" }}>C</span>
@@ -456,10 +456,10 @@ function FoodRow({ it, onRemove, onEdit }: { it: NutritionRow; onRemove: () => v
     const actBtn: React.CSSProperties = { width: 28, height: 28, borderRadius: 7, border: "1px solid var(--border)", background: "var(--card-2)", color: "var(--dim)", cursor: "pointer", display: "grid", placeItems: "center" };
     return (
         <div className="nut-row" style={{ padding: "11px 4px", borderTop: "1px solid var(--border)" }}>
-            <div style={{ minWidth: 0, fontSize: 14.5, color: "var(--text)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.food_name}</div>
-            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13.5, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.protein)}</span>
-            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13.5, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.carbs)}</span>
-            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13.5, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.fat)}</span>
+            <div style={{ minWidth: 0, fontSize: 14, color: "var(--text)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.food_name}</div>
+            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.protein)}</span>
+            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.carbs)}</span>
+            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.fat)}</span>
             <span style={{ textAlign: "right", fontSize: 14, color: "var(--text)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{r0(it.calories)}</span>
             <div className="nut-actions">
                 <button className="nut-tap" onClick={onEdit} title="Edit" aria-label={`Edit ${it.food_name}`} style={actBtn}><Icon name="edit" size={13} /></button>
@@ -497,7 +497,7 @@ function MealSection({ meal, emoji, items, onAdd, onRemove, onEdit }: {
                     {items.map((it) => <FoodRow key={it.id} it={it} onRemove={() => onRemove(it.id)} onEdit={() => onEdit(it)} />)}
                 </div>
             ) : (
-                <button onClick={() => onAdd(meal)} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "1px dashed var(--border)", background: "transparent", color: "var(--faint)", fontSize: 13.5, cursor: "pointer" }}>
+                <button onClick={() => onAdd(meal)} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "1px dashed var(--border)", background: "transparent", color: "var(--faint)", fontSize: 13, cursor: "pointer" }}>
                     Nothing logged — tap to add a {meal.toLowerCase()} item
                 </button>
             )}
@@ -597,7 +597,7 @@ export default function NutritionPage() {
             <style>{`
                 .rdp-logged { position: relative; }
                 .rdp-logged::after { content: ""; position: absolute; left: 50%; bottom: 5px; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 99px; background: var(--teal); }
-                .rdp-logged.rdp-selected::after { background: #04130d; }
+                .rdp-logged.rdp-selected::after { background: var(--primary-foreground); }
 
                 /* Summary: two columns on wide, stacked on narrow */
                 .nut-summary { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 22px; align-items: stretch; }
@@ -627,7 +627,7 @@ export default function NutritionPage() {
                             </p>
                         </div>
                         <button className="nut-tap" onClick={() => { setSyncMsg(null); syncMutation.mutate(); }} disabled={syncMutation.isPending}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 15px", borderRadius: 999, border: "1px solid var(--border)", background: "rgba(255,255,255,.03)", color: "var(--dim)", fontWeight: 600, fontSize: 13.5, cursor: "pointer", opacity: syncMutation.isPending ? 0.6 : 1 }}>
+                            style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 15px", borderRadius: 999, border: "1px solid var(--border)", background: "oklch(1 0 0 / .03)", color: "var(--dim)", fontWeight: 600, fontSize: 13, cursor: "pointer", opacity: syncMutation.isPending ? 0.6 : 1 }}>
                             <Icon name="sync" size={15} style={syncMutation.isPending ? { animation: "spin 1s linear infinite" } : undefined} />
                             {syncMutation.isPending ? "Syncing…" : "Sync catalog"}
                         </button>
@@ -636,7 +636,7 @@ export default function NutritionPage() {
                 </div>
 
                 {error && (
-                    <div style={{ padding: 12, borderRadius: 12, fontSize: 14, background: "rgba(239,111,94,.1)", border: "1px solid rgba(239,111,94,.3)", color: "#f4a89c" }}>{error}</div>
+                    <div style={{ padding: 12, borderRadius: 12, fontSize: 14, background: "oklch(0.55 0.2 25 / 0.1)", border: "1px solid oklch(0.55 0.2 25 / 0.3)", color: "oklch(0.75 0.12 25)" }}>{error}</div>
                 )}
 
                 <DateStrip selected={selectedDate} onSelect={setSelectedDate} loggedDates={loggedDates} />
@@ -649,12 +649,12 @@ export default function NutritionPage() {
                             <div style={{ display: "flex", gap: 22 }}>
                                 <div style={{ textAlign: "center" }}>
                                     <div style={{ fontSize: 19, fontWeight: 800, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{r0(summary.totalCalories)}</div>
-                                    <div style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 2 }}>Consumed</div>
+                                    <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>Consumed</div>
                                 </div>
                                 <div style={{ width: 1, background: "var(--border)" }} />
                                 <div style={{ textAlign: "center" }}>
                                     <div style={{ fontSize: 19, fontWeight: 800, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{calorieGoal > 0 ? r0(calorieGoal) : "—"}</div>
-                                    <div style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 2 }}>Goal</div>
+                                    <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>Goal</div>
                                 </div>
                             </div>
                         </div>
@@ -682,7 +682,7 @@ export default function NutritionPage() {
                     <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text)" }}>Food log</h2>
                     {items.length > 0 && (
                         <button onClick={() => { if (window.confirm("Clear all nutrition entries for this date?")) { deleteDay(); flash("Day cleared"); } }}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "none", border: "none", color: "var(--faint)", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>
+                            style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "none", border: "none", color: "var(--faint)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                             <Icon name="close" size={14} /> Clear day
                         </button>
                     )}

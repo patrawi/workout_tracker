@@ -76,7 +76,7 @@ export function KnowledgeEditorDrawer({ open, onClose }: Props) {
               <Loader2 className="w-4 h-4 animate-spin" /> Loading…
             </div>
           )}
-          {list.isError && <p className="text-red-400 text-sm">Failed to load.</p>}
+          {list.isError && <p className="text-[oklch(0.72_0.14_25)] text-sm">Failed to load.</p>}
 
           {sections.map((row, idx) =>
             editingId === row.id ? (
@@ -106,7 +106,7 @@ export function KnowledgeEditorDrawer({ open, onClose }: Props) {
                     type="button"
                     onClick={saveEdit}
                     disabled={update.isPending}
-                    className="px-4 py-1.5 rounded-xl bg-[var(--primary)] text-[#04130d] font-bold text-[13px] cursor-pointer hover:brightness-110 disabled:opacity-50"
+                    className="px-4 py-1.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-[13px] cursor-pointer hover:brightness-110 disabled:opacity-50"
                   >
                     {update.isPending ? "Saving…" : "Save"}
                   </button>
@@ -150,7 +150,7 @@ export function KnowledgeEditorDrawer({ open, onClose }: Props) {
                     <button
                       type="button"
                       onClick={() => remove.mutate(row.id)}
-                      className="grid place-items-center w-7 h-7 rounded-lg text-red-400 hover:text-red-300 cursor-pointer"
+                      className="grid place-items-center w-7 h-7 rounded-lg text-[oklch(0.66_0.18_25)] hover:text-[oklch(0.75_0.16_25)] cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
