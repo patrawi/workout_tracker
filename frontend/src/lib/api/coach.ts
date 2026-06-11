@@ -34,4 +34,36 @@ export const coachApi = {
 
     reorderKnowledge: (ids: number[]) =>
         api.put("/coach/knowledge/reorder", { ids }),
+
+    chatStream: async (
+        messages: CoachMessage[],
+        onEvent: (evt: { type: "reasoning" | "content"; text: string }) => void,
+    ): Promise<void> => {
+        const res = await fetch("/api/coach/chat/stream", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages }),
+        });
+        if (!res.ok || !res.body) throw new Error(`Stream failed: ${res.status}`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const frames = buffer.split("\n\n");
+            buffer = frames.pop() ?? "";
+            for (const frame of frames) {
+                const line = frame.trim();
+                if (!line.startsWith("data:")) continue;
+                const evt = JSON.parse(line.slice(5).trim());
+                if (evt.error) throw new Error(evt.error);
+                if (evt.done) return;
+                if (evt.type && evt.text) onEvent({ type: evt.type, text: evt.text });
+            }
+        }
+    },
 };

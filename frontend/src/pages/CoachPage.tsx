@@ -35,6 +35,10 @@ export default function CoachPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const started = messages.length > 0;
+  // While streaming, the last coach bubble is empty until the first token —
+  // show the typing dots in its place, not alongside it.
+  const last = messages[messages.length - 1];
+  const waiting = typing && last?.role === "coach" && !last.text && !last.reasoning;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -177,10 +181,12 @@ export default function CoachPage() {
                       New chat
                     </button>
                   </div>
-                  {messages.map((m, i) => (
-                    <Bubble key={i} m={m} />
-                  ))}
-                  {typing && <TypingDots />}
+                  {messages.map((m, i) =>
+                    m.role === "coach" && !m.text && !m.reasoning ? null : (
+                      <Bubble key={i} m={m} />
+                    )
+                  )}
+                  {waiting && <TypingDots />}
                   <div ref={bottomRef} />
                 </div>
               )}

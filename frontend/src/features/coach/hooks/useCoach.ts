@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { coachApi } from "@/lib/api/coach";
 import type { CoachMessage } from "../coach.types";
 
 const LS_KEY = "coach:msgs";
 const LS_CAP = 50;
 
-// Last N messages sent as context.
 const MAX_TURNS = 12;
 
 function loadMessages(): CoachMessage[] {
@@ -22,34 +20,50 @@ function loadMessages(): CoachMessage[] {
 
 export function useCoach() {
     const [messages, setMessages] = useState<CoachMessage[]>(loadMessages);
+    const [streaming, setStreaming] = useState(false);
 
     useEffect(() => {
         localStorage.setItem(LS_KEY, JSON.stringify(messages.slice(-LS_CAP)));
     }, [messages]);
 
-    const mutation = useMutation({
-        mutationFn: async (history: CoachMessage[]) => {
-            const res = await coachApi.chat(history.slice(-MAX_TURNS));
-            if (res.success && res.data) return res.data;
-            throw new Error(res.error || "Coach failed to reply");
-        },
-    });
-
     const send = useCallback(
         (text: string) => {
             const clean = text.trim();
-            if (!clean || mutation.isPending) return;
+            if (!clean || streaming) return;
 
-            const next: CoachMessage[] = [...messages, { role: "user", text: clean }];
+            const history = messages.slice(-MAX_TURNS);
+            const next: CoachMessage[] = [...messages, { role: "user", text: clean }, { role: "coach", text: "" }];
             setMessages(next);
-            mutation.mutate(next, {
-                onSuccess: (data) =>
-                    setMessages((m) => [...m, { role: "coach", text: data.reply, reasoning: data.reasoning }]),
-                onError: (err: Error) =>
-                    setMessages((m) => [...m, { role: "coach", text: `⚠️ ${err.message}` }]),
-            });
+            setStreaming(true);
+
+            coachApi
+                .chatStream([...history, { role: "user", text: clean }], (evt) => {
+                    setMessages((m) => {
+                        const updated = [...m];
+                        const last = updated[updated.length - 1];
+                        if (last && last.role === "coach") {
+                            updated[updated.length - 1] =
+                                evt.type === "reasoning"
+                                    ? { ...last, reasoning: (last.reasoning ?? "") + evt.text }
+                                    : { ...last, text: last.text + evt.text };
+                        }
+                        return updated;
+                    });
+                })
+                .then(() => setStreaming(false))
+                .catch((err: Error) => {
+                    setMessages((m) => {
+                        const updated = [...m];
+                        const last = updated[updated.length - 1];
+                        if (last && last.role === "coach") {
+                            updated[updated.length - 1] = { ...last, text: `⚠️ ${err.message}` };
+                        }
+                        return updated;
+                    });
+                    setStreaming(false);
+                });
         },
-        [messages, mutation],
+        [messages, streaming],
     );
 
     const reset = useCallback(() => {
@@ -57,5 +71,5 @@ export function useCoach() {
         localStorage.removeItem(LS_KEY);
     }, []);
 
-    return { messages, send, reset, typing: mutation.isPending };
+    return { messages, send, reset, typing: streaming };
 }

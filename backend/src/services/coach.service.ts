@@ -8,6 +8,7 @@ import type { ProfileService } from "./profile.service";
 import { createCoachClient, createDeepSeekCoachClient, type CoachClient, type CoachMessage } from "../coach/client";
 import { buildCoachSystemPrompt, buildPlanSystemPrompt } from "../coach/prompts";
 import { buildCoachTools } from "../coach/tools";
+import { deepseekChatStream, type StreamDelta } from "../llm/deepseek";
 import { ExternalServiceError, ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
 import { getLocalDateString } from "../lib/date";
@@ -38,6 +39,7 @@ export type CoachPlanGrouped = Record<PlanDayType, CoachPlanRow[]>;
 
 export interface CoachService {
   chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string }>;
+  chatStream(messages: CoachMessage[]): AsyncGenerator<StreamDelta>;
   getPlan(): Promise<CoachPlanGrouped>;
   proposeNextSession(dayType: string): Promise<PlanProposal>;
   savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
@@ -271,6 +273,42 @@ export function createCoachService(
       } catch (error) {
         logger.error("Coach chat failed", { error: String(error) });
         throw new ExternalServiceError(provider, String(error));
+      }
+    },
+
+    async *chatStream(messages: CoachMessage[]): AsyncGenerator<StreamDelta> {
+      if (!config.deepseekApiKey) {
+        throw new ExternalServiceError("DeepSeek", "DEEPSEEK_API_KEY is not set");
+      }
+      if (!messages.length) {
+        throw new ExternalServiceError("Coach", "No messages provided");
+      }
+      try {
+        const [contextSummary, knowledge] = await Promise.all([
+          buildContext(deps),
+          loadCoachKnowledgeFromDB(deps.coachKnowledgeRepo),
+        ]);
+        const systemPrompt = buildCoachSystemPrompt({
+          contextSummary,
+          knowledge,
+          today: getLocalDateString(),
+        });
+        const history: { role: "system" | "user" | "assistant"; content: string }[] = [
+          { role: "system", content: systemPrompt },
+          ...messages.map((m) => ({
+            role: (m.role === "coach" ? "assistant" : "user") as "assistant" | "user",
+            content: m.text,
+          })),
+        ];
+        yield* deepseekChatStream({
+          apiKey: config.deepseekApiKey,
+          model: DEEPSEEK_COACH_MODEL,
+          thinking: true,
+          messages: history,
+        });
+      } catch (error) {
+        logger.error("Coach chat stream failed", { error: String(error) });
+        throw new ExternalServiceError("DeepSeek", String(error));
       }
     },
 

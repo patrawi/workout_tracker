@@ -37,6 +37,45 @@ export function registerCoachRoutes(app: any, ctx: AppContext): void {
         }),
       }
     )
+    .post(
+      "/coach/chat/stream",
+      ({ body }: { body: { messages: { role: "user" | "coach"; text: string }[] } }) => {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(controller) {
+            const send = (obj: unknown) =>
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+            try {
+              for await (const delta of coachService.chatStream(body.messages)) {
+                send(delta);
+              }
+              send({ done: true });
+            } catch (err) {
+              send({ error: String(err) });
+            } finally {
+              controller.close();
+            }
+          },
+        });
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+          },
+        });
+      },
+      {
+        body: t.Object({
+          messages: t.Array(
+            t.Object({
+              role: t.Union([t.Literal("user"), t.Literal("coach")]),
+              text: t.String(),
+            })
+          ),
+        }),
+      }
+    )
     .get(
       "/coach/plan",
       routeHandler(async () => {

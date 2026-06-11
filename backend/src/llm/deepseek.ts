@@ -82,3 +82,64 @@ export async function deepseekChat(options: DeepSeekChatOptions): Promise<string
 export async function deepseekChatRaw(options: DeepSeekChatOptions): Promise<DeepSeekAssistantMessage> {
     return doChat(options);
 }
+
+/** A streamed delta: either reasoning (thinking) text or final answer text. */
+export interface StreamDelta {
+    type: "reasoning" | "content";
+    text: string;
+}
+
+/**
+ * Streaming chat via DeepSeek's OpenAI-compatible endpoint.
+ * Yields tagged deltas (reasoning_content + content) as they arrive; no tools.
+ */
+export async function* deepseekChatStream(
+    options: Omit<DeepSeekChatOptions, "tools">,
+): AsyncGenerator<StreamDelta> {
+    const { apiKey, model, messages, thinking = false, temperature } = options;
+
+    const body: Record<string, unknown> = {
+        model,
+        messages,
+        stream: true,
+        thinking: { type: thinking ? "enabled" : "disabled" },
+    };
+    if (!thinking && temperature !== undefined) {
+        body.temperature = temperature;
+    }
+
+    const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(`DeepSeek API ${res.status}: ${detail.slice(0, 300)}`);
+    }
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+            const line = frame.trim();
+            if (!line.startsWith("data:")) continue;
+            const payload = line.slice(5).trim();
+            if (payload === "[DONE]") return;
+            const json = JSON.parse(payload);
+            const d = json.choices?.[0]?.delta;
+            if (d?.reasoning_content) yield { type: "reasoning", text: d.reasoning_content };
+            if (d?.content) yield { type: "content", text: d.content };
+        }
+    }
+}
