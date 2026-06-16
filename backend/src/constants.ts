@@ -36,7 +36,7 @@ export const DEEPSEEK_TEMPERATURE = 0.1;
 export const GEMINI_MODEL_EMBEDDING = "gemini-embedding-001"; // free tier; dim requested below
 export const EMBEDDING_DIM = 768; // gemini-embedding-001 defaults to 3072 — we request 768
 export const CATALOG_TOPK = 3; // candidates per item
-export const CATALOG_UNCERTAIN_DISTANCE = 0.5; // cosine distance above this → flag uncertain
+export const CATALOG_UNCERTAIN_DISTANCE = 0.35; // cosine distance above this → flag uncertain
 
 // Database
 export const PROFILE_DEFAULT_ID = 1;

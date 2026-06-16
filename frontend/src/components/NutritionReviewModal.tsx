@@ -212,7 +212,6 @@ export default function NutritionReviewModal({
                                                     className="glass-input w-16 px-2 py-1.5 text-xs text-white tabular-nums text-right"
                                                     aria-label={`Amount for item ${originalIndex + 1}`}
                                                 />
-                                                <span className="text-xs text-surface-500">{item.unit}</span>
                                             </div>
                                             <select
                                                 value={item.meal}

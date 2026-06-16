@@ -15,7 +15,10 @@ export function extractJsonItems(
 
     try {
         const parsed = JSON.parse(cleaned);
-        return Array.isArray(parsed) ? parsed : [parsed];
+        if (Array.isArray(parsed)) return parsed;
+        // JSON-object mode returns a wrapper object, e.g. { "exercises": [...] }.
+        if (parsed && Array.isArray(parsed.exercises)) return parsed.exercises;
+        return [parsed];
     } catch {
         throw new Error(
             `Failed to parse ${label} LLM response as JSON. Raw response: ${cleaned.slice(0, 500)}`,

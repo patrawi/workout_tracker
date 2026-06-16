@@ -40,8 +40,14 @@ export default function CoachPage() {
   const last = messages[messages.length - 1];
   const waiting = typing && last?.role === "coach" && !last.text && !last.reasoning;
 
+  // Auto-follow the stream only when the user is already near the bottom.
+  // Otherwise every streamed token would yank the viewport down and fight a
+  // user who scrolled up to read the thinking panel.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const root = document.scrollingElement || document.documentElement;
+    const nearBottom =
+      root.scrollHeight - root.scrollTop - root.clientHeight < 120;
+    if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, typing]);
 
   return (

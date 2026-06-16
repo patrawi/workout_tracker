@@ -59,7 +59,7 @@ describe("groundNutritionItems", () => {
   test("fills + scales macros from a confident catalog match", async () => {
     const catalog = catalogWith([{ ...EGG, distance: 0.02 }]);
     // ate 200g of a per-100g food → ×2
-    const out = await groundOne(item({ amount: 200 }), catalog);
+    const out = await groundOne(item({ food_name: "eggs", amount: 200 }), catalog);
     expect(out.has_missing_macros).toBe(false);
     expect(out.uncertain).toBe(false);
     expect(out.protein).toBeCloseTo(25.2, 1);
@@ -87,7 +87,7 @@ describe("groundNutritionItems", () => {
   test("flags unit_mismatch (not uncertain) on discrete unit, seeds 1 unit = 1 serving", async () => {
     const catalog = catalogWith([{ ...EGG, distance: 0.02 }]);
     // ate "1 piece" of a per-100g food → seed scale = count = 1 → per-100g macros.
-    const out = await groundOne(item({ unit: "piece", amount: 1 }), catalog);
+    const out = await groundOne(item({ food_name: "eggs", unit: "piece", amount: 1 }), catalog);
     expect(out.uncertain).toBe(false);
     expect(out.unit_mismatch).toBe(true);
     expect(out.protein).toBeCloseTo(12.6, 1); // not zero, not 0.1
@@ -98,9 +98,21 @@ describe("groundNutritionItems", () => {
   test("treats g and ml as compatible — no unit_mismatch, correct scale", async () => {
     // catalog stored per 200 ml; logged 200 g → scale 1, no flag.
     const catalog = catalogWith([{ ...EGG, per_amount: 200, per_unit: "ml", distance: 0.02 }]);
-    const out = await groundOne(item({ unit: "g", amount: 200 }), catalog);
+    const out = await groundOne(item({ food_name: "eggs", unit: "g", amount: 200 }), catalog);
     expect(out.unit_mismatch).toBe(false);
     expect(out.uncertain).toBe(false);
     expect(out.protein).toBeCloseTo(12.6, 1); // 200/200 × 12.6
+  });
+
+  test("flags uncertain when a near vector shares no name token (Honey → onion)", async () => {
+    // Distance is within threshold but the names have zero lexical overlap —
+    // the embedding-only collision that mismatched "Honey" to "onion".
+    const onion = { ...EGG, name: "Onion", product_type: "vegetable", distance: 0.2 };
+    const catalog = catalogWith([onion]);
+    const out = await groundOne(item({ food_name: "Honey" }), catalog);
+    expect(out.uncertain).toBe(true);
+    expect(out.has_missing_macros).toBe(true); // macros not invented
+    expect(out.protein).toBe(0);
+    expect(out.matched_food_name).toBe("Onion"); // still surfaced as a hint
   });
 });

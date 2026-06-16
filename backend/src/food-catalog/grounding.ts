@@ -26,6 +26,23 @@ function metricGrams(amount: number, unit: string): number | null {
   return factor === undefined ? null : amount * factor;
 }
 
+// Split a food name into normalized tokens (latin + thai), dropping 1-char noise.
+function nameTokens(s: string): Set<string> {
+  return new Set(
+    s.toLowerCase().split(/[^a-z0-9฀-๿]+/).filter((t) => t.length >= 2),
+  );
+}
+
+// Embeddings alone matched "Honey" → "onion" (close vectors, zero shared words).
+// Require at least one shared name token so a confident match also makes lexical
+// sense. Cross-language matches (Thai query vs English catalog) share no token and
+// fall back to the uncertain flag for manual review.
+function lexicalOverlap(query: string, match: string): boolean {
+  const q = nameTokens(query);
+  for (const t of nameTokens(match)) if (q.has(t)) return true;
+  return false;
+}
+
 /**
  * Fill in macros for items the LLM couldn't extract, using the embedded food
  * catalog. For each missing-macro item we vector-search the catalog and, if the
@@ -65,14 +82,22 @@ export async function groundNutritionItems(
         distance: best ? Number(best.distance.toFixed(4)) : null,
         threshold: CATALOG_UNCERTAIN_DISTANCE,
         verdict:
-          !best || best.distance > CATALOG_UNCERTAIN_DISTANCE ? "uncertain" : "matched",
+          !best ||
+          best.distance > CATALOG_UNCERTAIN_DISTANCE ||
+          !lexicalOverlap(item.food_name, best.name)
+            ? "uncertain"
+            : "matched",
         runnersUp: candidates.slice(1).map((c) => ({
           name: c.name,
           distance: Number(c.distance.toFixed(4)),
         })),
       });
 
-      if (!best || best.distance > CATALOG_UNCERTAIN_DISTANCE) {
+      if (
+        !best ||
+        best.distance > CATALOG_UNCERTAIN_DISTANCE ||
+        !lexicalOverlap(item.food_name, best.name)
+      ) {
         // No confident match — surface the nearest name as a hint, flag for review.
         return {
           ...item,

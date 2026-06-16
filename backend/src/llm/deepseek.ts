@@ -20,6 +20,7 @@ export interface DeepSeekChatOptions {
     thinking?: boolean;
     temperature?: number;
     tools?: { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }[];
+    responseFormat?: { type: "json_object" };
 }
 
 export interface DeepSeekAssistantMessage {
@@ -29,7 +30,7 @@ export interface DeepSeekAssistantMessage {
 }
 
 async function doChat(options: DeepSeekChatOptions): Promise<DeepSeekAssistantMessage> {
-    const { apiKey, model, messages, thinking = false, temperature, tools } = options;
+    const { apiKey, model, messages, thinking = false, temperature, tools, responseFormat } = options;
 
     const body: Record<string, unknown> = {
         model,
@@ -42,6 +43,9 @@ async function doChat(options: DeepSeekChatOptions): Promise<DeepSeekAssistantMe
     }
     if (tools?.length) {
         body.tools = tools;
+    }
+    if (responseFormat) {
+        body.response_format = responseFormat;
     }
 
     const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
@@ -89,14 +93,32 @@ export interface StreamDelta {
     text: string;
 }
 
+/** Fold a streamed `delta.tool_calls` fragment into the accumulator (keyed by index). */
+function accumulateToolCalls(acc: DeepSeekToolCall[], deltas: unknown): void {
+    if (!Array.isArray(deltas)) return;
+    for (const d of deltas as Array<{
+        index?: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+    }>) {
+        const i = d.index ?? 0;
+        if (!acc[i]) acc[i] = { id: "", type: "function", function: { name: "", arguments: "" } };
+        if (d.id) acc[i].id = d.id;
+        if (d.function?.name) acc[i].function.name += d.function.name;
+        if (d.function?.arguments) acc[i].function.arguments += d.function.arguments;
+    }
+}
+
 /**
  * Streaming chat via DeepSeek's OpenAI-compatible endpoint.
- * Yields tagged deltas (reasoning_content + content) as they arrive; no tools.
+ * Yields tagged deltas (reasoning_content + content) as they arrive, and returns
+ * the assembled assistant message — including any accumulated `tool_calls` — so
+ * the caller can run an agentic tool loop across multiple streamed rounds.
  */
 export async function* deepseekChatStream(
-    options: Omit<DeepSeekChatOptions, "tools">,
-): AsyncGenerator<StreamDelta> {
-    const { apiKey, model, messages, thinking = false, temperature } = options;
+    options: DeepSeekChatOptions,
+): AsyncGenerator<StreamDelta, DeepSeekAssistantMessage> {
+    const { apiKey, model, messages, thinking = false, temperature, tools } = options;
 
     const body: Record<string, unknown> = {
         model,
@@ -106,6 +128,9 @@ export async function* deepseekChatStream(
     };
     if (!thinking && temperature !== undefined) {
         body.temperature = temperature;
+    }
+    if (tools?.length) {
+        body.tools = tools;
     }
 
     const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
@@ -125,6 +150,8 @@ export async function* deepseekChatStream(
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let content = "";
+    const toolCalls: DeepSeekToolCall[] = [];
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -135,11 +162,18 @@ export async function* deepseekChatStream(
             const line = frame.trim();
             if (!line.startsWith("data:")) continue;
             const payload = line.slice(5).trim();
-            if (payload === "[DONE]") return;
+            if (payload === "[DONE]") {
+                return { content, tool_calls: toolCalls.length ? toolCalls : undefined };
+            }
             const json = JSON.parse(payload);
             const d = json.choices?.[0]?.delta;
             if (d?.reasoning_content) yield { type: "reasoning", text: d.reasoning_content };
-            if (d?.content) yield { type: "content", text: d.content };
+            if (d?.content) {
+                content += d.content;
+                yield { type: "content", text: d.content };
+            }
+            if (d?.tool_calls) accumulateToolCalls(toolCalls, d.tool_calls);
         }
     }
+    return { content, tool_calls: toolCalls.length ? toolCalls : undefined };
 }

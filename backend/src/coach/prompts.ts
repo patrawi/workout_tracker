@@ -73,8 +73,8 @@ ${args.planText || "(empty — build a sensible starting plan from the doc)"}
 ${args.historyText || "(no logged session of this type yet — keep current targets)"}
 --- END RECENT HISTORY ---
 
-Return ONLY a JSON array — no prose, no markdown fences. One object per exercise, in order:
-[{
+Return ONLY a JSON object — no prose, no markdown fences. It has a single key "exercises" whose value is an array with one object per exercise, in order:
+{ "exercises": [{
   "position": number,
   "exercise_name": string,
   "is_bodyweight": boolean,
@@ -87,6 +87,6 @@ Return ONLY a JSON array — no prose, no markdown fences. One object per exerci
   "notes": string,
   "change": "increase" | "hold" | "decrease",
   "rationale": string
-}]
+}] }
 Write "notes" and "rationale" in the user's language (Thai if the plan/notes are Thai). "rationale" must cite the actual-vs-target comparison. Set "target_weight" to null when "is_bodyweight" is true.`;
 }

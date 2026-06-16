@@ -14,8 +14,17 @@ export interface CoachReply {
   reasoning?: string;
 }
 
+export interface CoachChatOptions {
+  /** Force a strict JSON object reply (DeepSeek response_format / Gemini mimeType). */
+  jsonObject?: boolean;
+}
+
 export interface CoachClient {
-  chat(systemPrompt: string, messages: CoachMessage[]): Promise<CoachReply>;
+  chat(
+    systemPrompt: string,
+    messages: CoachMessage[],
+    opts?: CoachChatOptions,
+  ): Promise<CoachReply>;
 }
 
 export interface CoachTools {
@@ -36,7 +45,11 @@ export function createCoachClient(
   const ai = new GoogleGenAI({ apiKey });
 
   return {
-    async chat(systemPrompt: string, messages: CoachMessage[]): Promise<CoachReply> {
+    async chat(
+      systemPrompt: string,
+      messages: CoachMessage[],
+      opts?: CoachChatOptions,
+    ): Promise<CoachReply> {
       const contents = messages.map((m) => ({
         role: m.role === "coach" ? "model" : "user",
         parts: [{ text: m.text }],
@@ -48,6 +61,7 @@ export function createCoachClient(
         config: {
           systemInstruction: systemPrompt,
           temperature: COACH_TEMPERATURE,
+          ...(opts?.jsonObject ? { responseMimeType: "application/json" } : {}),
         },
       });
 
@@ -68,7 +82,11 @@ export function createDeepSeekCoachClient(
   tools?: CoachTools
 ): CoachClient {
   return {
-    async chat(systemPrompt: string, messages: CoachMessage[]): Promise<CoachReply> {
+    async chat(
+      systemPrompt: string,
+      messages: CoachMessage[],
+      opts?: CoachChatOptions,
+    ): Promise<CoachReply> {
       const history: DeepSeekMessage[] = [
         { role: "system", content: systemPrompt },
         ...messages.map((m) => ({
@@ -76,6 +94,20 @@ export function createDeepSeekCoachClient(
           content: m.text,
         })),
       ];
+
+      // Structured plan call: force a JSON object, skip thinking + tools. JSON
+      // mode is reliable on the plain chat path; the plan prompt is fully
+      // structured so it doesn't need the thinking channel.
+      if (opts?.jsonObject) {
+        const r = await deepseekChatRaw({
+          apiKey,
+          model,
+          thinking: false,
+          messages: history,
+          responseFormat: { type: "json_object" },
+        });
+        return { text: r.content, reasoning: r.reasoning };
+      }
 
       if (!tools) {
         const r = await deepseekChatRaw({ apiKey, model, thinking: true, messages: history });

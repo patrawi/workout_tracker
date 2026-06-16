@@ -8,7 +8,7 @@ import type { ProfileService } from "./profile.service";
 import { createCoachClient, createDeepSeekCoachClient, type CoachClient, type CoachMessage } from "../coach/client";
 import { buildCoachSystemPrompt, buildPlanSystemPrompt } from "../coach/prompts";
 import { buildCoachTools } from "../coach/tools";
-import { deepseekChatStream, type StreamDelta } from "../llm/deepseek";
+import { deepseekChatStream, type StreamDelta, type DeepSeekMessage } from "../llm/deepseek";
 import { ExternalServiceError, ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
 import { getLocalDateString } from "../lib/date";
@@ -20,6 +20,8 @@ import type { createWorkoutRepository, SessionWithWorkouts } from "../repositori
 import { COACH_CONTEXT_DAYS, COACH_NUTRITION_DAYS, DEEPSEEK_COACH_MODEL } from "../constants";
 
 const logger = createChildLogger("coach-service");
+
+const MAX_TOOL_ITERS = 5;
 
 export const PLAN_DAY_TYPES = ["Push", "Pull", "Legs"] as const;
 export type PlanDayType = (typeof PLAN_DAY_TYPES)[number];
@@ -293,19 +295,42 @@ export function createCoachService(
           knowledge,
           today: getLocalDateString(),
         });
-        const history: { role: "system" | "user" | "assistant"; content: string }[] = [
+        const history: DeepSeekMessage[] = [
           { role: "system", content: systemPrompt },
           ...messages.map((m) => ({
             role: (m.role === "coach" ? "assistant" : "user") as "assistant" | "user",
             content: m.text,
           })),
         ];
-        yield* deepseekChatStream({
-          apiKey: config.deepseekApiKey,
-          model: DEEPSEEK_COACH_MODEL,
-          thinking: true,
-          messages: history,
-        });
+        // Agentic streaming loop: stream a round, and if it ends in tool_calls,
+        // run the tools, append the results, and stream the next round. Without
+        // this the model's tool-call turn produced no answer and the UI hung.
+        const tools = buildCoachTools(deps);
+        for (let i = 0; i < MAX_TOOL_ITERS; i++) {
+          const result = yield* deepseekChatStream({
+            apiKey: config.deepseekApiKey,
+            model: DEEPSEEK_COACH_MODEL,
+            thinking: true,
+            messages: history,
+            tools: tools.schemas,
+          });
+          if (!result.tool_calls?.length) return;
+
+          history.push({
+            role: "assistant",
+            content: result.content ?? "",
+            tool_calls: result.tool_calls,
+          });
+          for (const tc of result.tool_calls) {
+            let toolResult: string;
+            try {
+              toolResult = await tools.run(tc.function.name, JSON.parse(tc.function.arguments));
+            } catch (err) {
+              toolResult = JSON.stringify({ error: String(err) });
+            }
+            history.push({ role: "tool", content: toolResult, tool_call_id: tc.id });
+          }
+        }
       } catch (error) {
         logger.error("Coach chat stream failed", { error: String(error) });
         throw new ExternalServiceError("DeepSeek", String(error));
@@ -351,9 +376,11 @@ export function createCoachService(
           today: getLocalDateString(),
         });
 
-        const { text } = await client.chat(systemPrompt, [
-          { role: "user", text: `Generate the next ${day} session as a JSON array.` },
-        ]);
+        const { text } = await client.chat(
+          systemPrompt,
+          [{ role: "user", text: `Generate the next ${day} session as a JSON object.` }],
+          { jsonObject: true },
+        );
         const exercises = extractJsonItems(text, "coach plan")
           .map(coerceProposed)
           .sort((a, b) => a.position - b.position);
