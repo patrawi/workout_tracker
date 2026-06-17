@@ -32,7 +32,7 @@ export default function RestDayForm({ onSubmit, isLoading }: RestDayFormProps) {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="glass-card p-4 lg:p-5 mt-4 animate-slide-up" aria-label="Rest day input">
+        <form onSubmit={handleSubmit} className="glass-card p-4 lg:p-5" aria-label="Rest day input">
             <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-2">

@@ -262,6 +262,17 @@
   .animate-fade-in {
     animation: fade-in 0.3s ease both;
   }
+
+  /* Shuffle swap — log input <-> rest day card. Direction encodes which way the deck moves. */
+  .shuffle-in-right {
+    animation: shuffle-in-right 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+    will-change: transform, opacity;
+  }
+
+  .shuffle-in-left {
+    animation: shuffle-in-left 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+    will-change: transform, opacity;
+  }
 }
 
 @keyframes shimmer {
@@ -302,10 +313,44 @@
   }
 }
 
+@keyframes shuffle-in-right {
+  0% {
+    opacity: 0;
+    transform: translateX(34px) rotate(2.5deg) scale(0.965);
+  }
+
+  60% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(0) rotate(0) scale(1);
+  }
+}
+
+@keyframes shuffle-in-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-34px) rotate(-2.5deg) scale(0.965);
+  }
+
+  60% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(0) rotate(0) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
 
   .animate-slide-up,
-  .animate-fade-in {
+  .animate-fade-in,
+  .shuffle-in-right,
+  .shuffle-in-left {
     animation: none !important;
   }
 
