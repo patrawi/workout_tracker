@@ -111,7 +111,9 @@ function DateStrip({ selected, onSelect, loggedDates }: { selected: string; onSe
     } as React.CSSProperties;
 
     return (
-        <Card style={{ padding: "16px 18px" }}>
+        // Lift this card's stacking context above sibling glass-cards (each makes
+        // its own context via backdrop-filter) so the date popover isn't painted over.
+        <Card style={{ padding: "16px 18px", position: "relative", zIndex: pickerOpen ? 40 : undefined }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>{monthLbl}</span>
@@ -337,14 +339,32 @@ function WaterCard({ glasses, goal, onSave, isSaving }: { glasses: number; goal:
 function AIInput({ dateLabel, value, setValue, onParse, onManual, isParsing }: {
     dateLabel: string; value: string; setValue: (s: string) => void; onParse: () => void; onManual: () => void; isParsing: boolean;
 }) {
+    const taRef = useRef<HTMLTextAreaElement>(null);
+    const [focused, setFocused] = useState(false);
     const onKey = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onParse(); } };
+
+    // Auto-grow with content (matches the home WorkoutInput), so the box is
+    // never a tall empty void at rest and never clips long pastes.
+    useEffect(() => {
+        const ta = taRef.current;
+        if (!ta) return;
+        ta.style.height = "auto";
+        ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`;
+    }, [value]);
+
     return (
         <div style={{ display: "grid", gap: 12 }}>
-            <div style={{ position: "relative", border: "1px solid var(--accent-line)", borderRadius: 18, background: "var(--card)", boxShadow: "0 0 26px var(--accent-glow)" }}>
-                <textarea value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={onKey}
+            <div style={{
+                position: "relative", borderRadius: 18, background: "var(--card)",
+                border: `1px solid ${focused ? "var(--accent)" : "var(--accent-line)"}`,
+                boxShadow: focused ? "0 0 0 3px var(--accent-glow), 0 0 26px var(--accent-glow)" : "0 0 20px var(--accent-glow)",
+                transition: "border-color .18s ease, box-shadow .18s ease",
+            }}>
+                <textarea ref={taRef} value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={onKey}
+                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
                     placeholder="Paste your food log… e.g. 'Breakfast: 2 eggs, 50g cereal for 40g serving…'"
-                    rows={3} disabled={isParsing}
-                    style={{ width: "100%", resize: "vertical", minHeight: 92, padding: "18px 70px 14px 20px", border: "none", background: "transparent", color: "var(--text)", fontSize: 16, lineHeight: 1.5, fontFamily: "inherit" }} />
+                    rows={1} disabled={isParsing}
+                    style={{ width: "100%", resize: "none", minHeight: 52, maxHeight: 240, overflowY: "auto", padding: "16px 70px 6px 20px", border: "none", outline: "none", background: "transparent", color: "var(--text)", fontSize: 16, lineHeight: 1.5, fontFamily: "inherit" }} />
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px 14px 20px" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "var(--faint)" }}>
                         <Icon name="calendar" size={14} /> {dateLabel}
@@ -447,7 +467,6 @@ function ColHead() {
             <span className="nut-pcf" style={{ textAlign: "right" }}>C</span>
             <span className="nut-pcf" style={{ textAlign: "right" }}>F</span>
             <span style={{ textAlign: "right" }}>kcal</span>
-            <span />
         </div>
     );
 }
@@ -603,12 +622,16 @@ export default function NutritionPage() {
                 .nut-summary { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 22px; align-items: stretch; }
                 @media (max-width: 760px) { .nut-summary { grid-template-columns: 1fr; } }
 
-                /* Food rows: full macro columns on wide, name+kcal+actions on narrow */
-                .nut-row { display: grid; grid-template-columns: 1fr 54px 54px 54px 74px auto; align-items: center; }
-                @media (max-width: 560px) { .nut-row { grid-template-columns: 1fr auto auto; column-gap: 12px; } .nut-pcf { display: none; } }
+                /* Food rows: full macro columns on wide, name+kcal on narrow.
+                   The trailing action track is a FIXED width (var --act) shared by
+                   header and rows, so every macro column lines up. Buttons are
+                   absolutely positioned within that reserved track, out of flow. */
+                .nut-row { display: grid; grid-template-columns: 1fr 54px 54px 54px 74px var(--act, 64px); align-items: center; position: relative; }
+                @media (max-width: 560px) { .nut-row { grid-template-columns: 1fr auto var(--act, 64px); column-gap: 12px; } .nut-pcf { display: none; } }
+                @media (pointer: coarse) { .nut-row { --act: 96px; } }
 
                 /* Row actions: always visible on touch, hover-revealed on pointer-fine */
-                .nut-actions { display: flex; justify-content: flex-end; gap: 4px; transition: opacity .15s; }
+                .nut-actions { position: absolute; right: 4px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 4px; transition: opacity .15s; }
                 @media (hover: hover) and (pointer: fine) { .nut-actions { opacity: 0; } .nut-row:hover .nut-actions { opacity: 1; } }
 
                 /* Comfortable tap targets on touch devices (WCAG 2.5.8 / mobile) */
