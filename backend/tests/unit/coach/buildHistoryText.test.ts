@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { buildHistoryText } from "../../../src/services/coach.service";
+import { buildHistoryText, buildLoggedHistoryText } from "../../../src/services/coach.service";
 
 const today = "2026-06-04";
 
@@ -111,4 +111,26 @@ test("multiple exercises in plan → each gets its own block", () => {
   );
   expect(result).toContain("Squat — target 100kg:");
   expect(result).toContain("Leg Curl — target 45kg:");
+});
+
+test("buildLoggedHistoryText: dumps every logged exercise with muscle group", () => {
+  const sessions = [
+    s("2026-06-01", [
+      { exercise_name: "Converging Chest Press", weight: 60, reps: 10, rpe: 7, is_bodyweight: false, muscle_group: "Chest" },
+      { exercise_name: "Dumbbell Incline Press", weight: 30, reps: 8, rpe: 8, is_bodyweight: false, muscle_group: "Chest" },
+    ]),
+  ];
+  const result = buildLoggedHistoryText(sessions, today);
+  expect(result).toContain("3d ago:");
+  expect(result).toContain("Converging Chest Press [Chest]: 60kg x10@7");
+  expect(result).toContain("Dumbbell Incline Press [Chest]: 30kg x8@8");
+});
+
+test("buildLoggedHistoryText: bodyweight → BW, no sessions → placeholder", () => {
+  const bw = buildLoggedHistoryText(
+    [s("2026-06-04", [{ exercise_name: "Pull Up", weight: 0, reps: 8, rpe: 8, is_bodyweight: true, muscle_group: "Back" }])],
+    today,
+  );
+  expect(bw).toContain("Pull Up [Back]: BW x8@8");
+  expect(buildLoggedHistoryText([], today)).toBe("(no recent sessions)");
 });

@@ -215,6 +215,27 @@ export function buildHistoryText(
     .join("\n");
 }
 
+/**
+ * Render every exercise actually logged across the matching sessions, with its
+ * muscle group, so the model can substitute when a plan exercise has no
+ * exact-name match (e.g. the gym lacks that machine and the user logged an
+ * equivalent one). sessions must be pre-filtered to the day-type, newest first.
+ */
+export function buildLoggedHistoryText(
+  sessions: SessionWithWorkouts[],
+  today: string,
+): string {
+  const blocks = sessions.map((s) => {
+    const when = daysAgo(s.created_at, today) || "session";
+    const lines = s.workouts.map((w) => {
+      const load = w.is_bodyweight ? "BW" : `${w.weight}kg`;
+      return `  ${w.exercise_name} [${w.muscle_group}]: ${load} x${w.reps}@${w.rpe}`;
+    });
+    return `${when}:\n${lines.join("\n")}`;
+  });
+  return blocks.length ? blocks.join("\n") : "(no recent sessions)";
+}
+
 function coerceProposed(raw: Record<string, unknown>, index: number): ProposedExercise {
   const change = toStr(raw.change);
   const is_bodyweight = raw.is_bodyweight === true;
@@ -367,12 +388,14 @@ export function createCoachService(
           .slice(0, 3);
 
         const historyText = buildHistoryText(matching, plan, getLocalDateString());
+        const loggedText = buildLoggedHistoryText(matching, getLocalDateString());
 
         const systemPrompt = buildPlanSystemPrompt({
           knowledge,
           dayType: day,
           planText: planToText(plan),
           historyText,
+          loggedText,
           today: getLocalDateString(),
         });
 

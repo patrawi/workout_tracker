@@ -53,6 +53,7 @@ export function buildPlanSystemPrompt(args: {
   dayType: string;
   planText: string;
   historyText: string;
+  loggedText: string;
   today: string;
 }): string {
   return `You are the user's strength coach. Produce the next ${args.dayType} session by adjusting the current plan based on the user's recent ${args.dayType} history and the rules in the KNOWLEDGE BASE.
@@ -72,6 +73,12 @@ ${args.planText || "(empty — build a sensible starting plan from the doc)"}
 --- RECENT HISTORY (last 3 ${args.dayType} sessions, per exercise) ---
 ${args.historyText || "(no logged session of this type yet — keep current targets)"}
 --- END RECENT HISTORY ---
+
+--- ALL LOGGED EXERCISES (last 3 ${args.dayType} sessions, raw, with muscle group) ---
+${args.loggedText || "(none)"}
+--- END ALL LOGGED EXERCISES ---
+
+Substitution: if a plan exercise shows "(no recent data)" it often means the gym lacks that machine and the user trained an equivalent one. For each such exercise, find the closest logged exercise in ALL LOGGED EXERCISES by muscle group and movement pattern (e.g. any incline/upper-chest press variant — machine, dumbbell, converging — is interchangeable) and base its progression on that. State the substitution in "rationale" (e.g. "progressed from Converging Chest Press since the gym has no Machine Incline Press"). Only hold the current target if nothing comparable was logged.
 
 Return ONLY a JSON object — no prose, no markdown fences. It has a single key "exercises" whose value is an array with one object per exercise, in order:
 { "exercises": [{
