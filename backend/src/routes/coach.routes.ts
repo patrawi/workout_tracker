@@ -82,15 +82,6 @@ export function registerCoachRoutes(app: any, ctx: AppContext): void {
         return await coachService.getPlan();
       })
     )
-    .post(
-      "/coach/plan/next",
-      routeHandlerCtx(async ({ body }) => {
-        return await coachService.proposeNextSession(body.day_type);
-      }),
-      {
-        body: t.Object({ day_type: t.String() }),
-      }
-    )
     .put(
       "/coach/plan",
       routeHandlerCtx(async ({ body }) => {

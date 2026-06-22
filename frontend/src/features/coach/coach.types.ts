@@ -29,17 +29,6 @@ export interface PlanRow extends PlanExercise {
   updated_at: string | null;
 }
 
-export interface ProposedExercise extends PlanExercise {
-  change: "increase" | "hold" | "decrease";
-  rationale: string;
-}
-
-export interface PlanProposal {
-  day_type: PlanDayType;
-  based_on_date: string | null;
-  exercises: ProposedExercise[];
-}
-
 export type CoachPlanGrouped = Record<PlanDayType, PlanRow[]>;
 
 export interface CoachKnowledgeRow {

@@ -6,17 +6,15 @@ import type { NutritionService } from "./nutrition.service";
 import type { BodyweightService } from "./bodyweight.service";
 import type { ProfileService } from "./profile.service";
 import { createCoachClient, createDeepSeekCoachClient, type CoachClient, type CoachMessage } from "../coach/client";
-import { buildCoachSystemPrompt, buildPlanSystemPrompt } from "../coach/prompts";
+import { buildCoachSystemPrompt } from "../coach/prompts";
 import { buildCoachTools } from "../coach/tools";
 import { deepseekChatStream, type StreamDelta, type DeepSeekMessage } from "../llm/deepseek";
 import { ExternalServiceError, ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
 import { getLocalDateString } from "../lib/date";
-import { classifySession } from "../coach/classify";
-import { extractJsonItems } from "../llm/extract-json";
 import type { createCoachPlanRepository, CoachPlanRow, CoachPlanInput } from "../repositories/coach-plan.repository";
 import type { createCoachKnowledgeRepository, CoachKnowledgeRow } from "../repositories/coach-knowledge.repository";
-import type { createWorkoutRepository, SessionWithWorkouts } from "../repositories/workout.repository";
+import type { createWorkoutRepository } from "../repositories/workout.repository";
 import { COACH_CONTEXT_DAYS, COACH_NUTRITION_DAYS, DEEPSEEK_COACH_MODEL } from "../constants";
 
 const logger = createChildLogger("coach-service");
@@ -26,24 +24,12 @@ const MAX_TOOL_ITERS = 5;
 export const PLAN_DAY_TYPES = ["Push", "Pull", "Legs"] as const;
 export type PlanDayType = (typeof PLAN_DAY_TYPES)[number];
 
-export interface ProposedExercise extends CoachPlanInput {
-  change: "increase" | "hold" | "decrease";
-  rationale: string;
-}
-
-export interface PlanProposal {
-  day_type: PlanDayType;
-  based_on_date: string | null;
-  exercises: ProposedExercise[];
-}
-
 export type CoachPlanGrouped = Record<PlanDayType, CoachPlanRow[]>;
 
 export interface CoachService {
   chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string }>;
   chatStream(messages: CoachMessage[]): AsyncGenerator<StreamDelta>;
   getPlan(): Promise<CoachPlanGrouped>;
-  proposeNextSession(dayType: string): Promise<PlanProposal>;
   savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
   listKnowledge(): Promise<CoachKnowledgeRow[]>;
   addKnowledge(title: string, body: string): Promise<CoachKnowledgeRow>;
@@ -162,99 +148,6 @@ function assertDayType(dayType: string): PlanDayType {
   return dayType as PlanDayType;
 }
 
-const toNum = (v: unknown, fallback = 0): number => {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-};
-const toStr = (v: unknown): string => (typeof v === "string" ? v : "");
-
-function planToText(rows: CoachPlanRow[]): string {
-  return rows
-    .map((p) => {
-      const w = p.is_bodyweight ? "Bodyweight" : `${p.target_weight ?? "?"}kg`;
-      const note = p.notes ? ` — ${p.notes}` : "";
-      return `${p.position}. ${p.exercise_name} — ${w} ${p.sets}x${p.rep_low}-${p.rep_high} RPE ${p.rpe_low}-${p.rpe_high}${note}`;
-    })
-    .join("\n");
-}
-
-function daysAgo(createdAt: string | null, today: string): string {
-  if (!createdAt) return "";
-  const then = new Date(`${createdAt.slice(0, 10)}T00:00:00.000Z`).getTime();
-  const now = new Date(`${today}T00:00:00.000Z`).getTime();
-  const d = Math.round((now - then) / 86_400_000);
-  return d <= 0 ? "today" : `${d}d ago`;
-}
-
-/**
- * Render last-3 matching sessions as per-exercise history lines for the plan prompt.
- * sessions must be pre-filtered to the target day-type, newest first, max 3.
- */
-export function buildHistoryText(
-  sessions: SessionWithWorkouts[],
-  plan: CoachPlanRow[],
-  today: string,
-): string {
-  const norm = (s: string) => s.trim().toLowerCase();
-  return plan
-    .map((p) => {
-      const lines = sessions
-        .map((s) => {
-          const sets = s.workouts.filter((w) => norm(w.exercise_name) === norm(p.exercise_name));
-          if (!sets.length) return null;
-          const setStr = sets
-            .map((w) => `${w.is_bodyweight ? "BW" : `${w.weight}kg`} x${w.reps}@${w.rpe}`)
-            .join(", ");
-          return `  ${daysAgo(s.created_at, today)}: ${setStr}`;
-        })
-        .filter(Boolean);
-      const target = p.is_bodyweight ? "BW" : `${p.target_weight ?? "?"}kg`;
-      const body = lines.length ? lines.join("\n") : "  (no recent data)";
-      return `${p.exercise_name} — target ${target}:\n${body}`;
-    })
-    .join("\n");
-}
-
-/**
- * Render every exercise actually logged across the matching sessions, with its
- * muscle group, so the model can substitute when a plan exercise has no
- * exact-name match (e.g. the gym lacks that machine and the user logged an
- * equivalent one). sessions must be pre-filtered to the day-type, newest first.
- */
-export function buildLoggedHistoryText(
-  sessions: SessionWithWorkouts[],
-  today: string,
-): string {
-  const blocks = sessions.map((s) => {
-    const when = daysAgo(s.created_at, today) || "session";
-    const lines = s.workouts.map((w) => {
-      const load = w.is_bodyweight ? "BW" : `${w.weight}kg`;
-      return `  ${w.exercise_name} [${w.muscle_group}]: ${load} x${w.reps}@${w.rpe}`;
-    });
-    return `${when}:\n${lines.join("\n")}`;
-  });
-  return blocks.length ? blocks.join("\n") : "(no recent sessions)";
-}
-
-function coerceProposed(raw: Record<string, unknown>, index: number): ProposedExercise {
-  const change = toStr(raw.change);
-  const is_bodyweight = raw.is_bodyweight === true;
-  return {
-    position: toNum(raw.position, index + 1),
-    exercise_name: toStr(raw.exercise_name) || `Exercise ${index + 1}`,
-    is_bodyweight,
-    target_weight: is_bodyweight ? null : (raw.target_weight == null ? null : toNum(raw.target_weight)),
-    sets: toNum(raw.sets, 3),
-    rep_low: toNum(raw.rep_low),
-    rep_high: toNum(raw.rep_high),
-    rpe_low: toNum(raw.rpe_low),
-    rpe_high: toNum(raw.rpe_high),
-    notes: toStr(raw.notes),
-    change: change === "increase" || change === "decrease" ? change : "hold",
-    rationale: toStr(raw.rationale),
-  };
-}
-
 /**
  * Create the AI coach service. Mirrors ai.service's apiKey guard.
  */
@@ -365,55 +258,6 @@ export function createCoachService(
         if (row.day_type in grouped) grouped[row.day_type as PlanDayType].push(row);
       }
       return grouped;
-    },
-
-    async proposeNextSession(dayType: string): Promise<PlanProposal> {
-      const day = assertDayType(dayType);
-      if (!client) {
-        throw new ExternalServiceError(provider, "No LLM API key is set");
-      }
-      try {
-        const [plan, knowledge, sessions] = await Promise.all([
-          deps.coachPlanRepo.getByDayType(day),
-          loadCoachKnowledgeFromDB(deps.coachKnowledgeRepo),
-          deps.workoutRepo.getRecentSessionsWithWorkouts(40),
-        ]);
-
-        // Last 3 sessions classified as this day type, newest first.
-        const matching = sessions
-          .filter(
-            (s) =>
-              classifySession(s.workouts.map((w) => w.muscle_group)) === day,
-          )
-          .slice(0, 3);
-
-        const historyText = buildHistoryText(matching, plan, getLocalDateString());
-        const loggedText = buildLoggedHistoryText(matching, getLocalDateString());
-
-        const systemPrompt = buildPlanSystemPrompt({
-          knowledge,
-          dayType: day,
-          planText: planToText(plan),
-          historyText,
-          loggedText,
-          today: getLocalDateString(),
-        });
-
-        const { text } = await client.chat(
-          systemPrompt,
-          [{ role: "user", text: `Generate the next ${day} session as a JSON object.` }],
-          { jsonObject: true },
-        );
-        const exercises = extractJsonItems(text, "coach plan")
-          .map(coerceProposed)
-          .sort((a, b) => a.position - b.position);
-
-        return { day_type: day, based_on_date: matching[0]?.created_at ?? null, exercises };
-      } catch (error) {
-        if (error instanceof ValidationError) throw error;
-        logger.error("Coach plan proposal failed", { error: String(error) });
-        throw new ExternalServiceError(provider, String(error));
-      }
     },
 
     async savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]> {

@@ -1,8 +1,11 @@
 import type { CoachServiceDeps } from "../services/coach.service";
 import { isValidDateString } from "../lib/date";
+import { classifySession } from "./classify";
+import type { CoachPlanInput } from "../repositories/coach-plan.repository";
 
 const MAX_DAYS = 31;
 const MAX_LIMIT = 20;
+const PLAN_DAY_TYPES = ["Push", "Pull", "Legs"] as const;
 
 type ToolSchemas = {
     type: "function";
@@ -27,6 +30,52 @@ function parseDate(raw: unknown): string | null {
     if (typeof raw !== "string" || !isValidDateString(raw)) return null;
     return raw;
 }
+
+function parseDayType(raw: unknown): "Push" | "Pull" | "Legs" | null {
+    return (PLAN_DAY_TYPES as readonly string[]).includes(raw as string)
+        ? (raw as "Push" | "Pull" | "Legs")
+        : null;
+}
+
+const num = (v: unknown, fallback = 0): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : fallback;
+};
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+// Coerce one LLM-supplied exercise into a storable plan row.
+function coercePlanRow(raw: Record<string, unknown>, index: number): CoachPlanInput {
+    const is_bodyweight = raw.is_bodyweight === true;
+    return {
+        position: num(raw.position, index + 1),
+        exercise_name: str(raw.exercise_name) || `Exercise ${index + 1}`,
+        is_bodyweight,
+        target_weight: is_bodyweight ? null : raw.target_weight == null ? null : num(raw.target_weight),
+        sets: num(raw.sets, 3),
+        rep_low: num(raw.rep_low),
+        rep_high: num(raw.rep_high),
+        rpe_low: num(raw.rpe_low),
+        rpe_high: num(raw.rpe_high),
+        notes: str(raw.notes),
+    };
+}
+
+const planExerciseSchema = {
+    type: "object",
+    properties: {
+        position: { type: "number" },
+        exercise_name: { type: "string" },
+        is_bodyweight: { type: "boolean" },
+        target_weight: { type: ["number", "null"] },
+        sets: { type: "number" },
+        rep_low: { type: "number" },
+        rep_high: { type: "number" },
+        rpe_low: { type: "number" },
+        rpe_high: { type: "number" },
+        notes: { type: "string" },
+    },
+    required: ["position", "exercise_name", "is_bodyweight", "sets", "rep_low", "rep_high", "rpe_low", "rpe_high"],
+};
 
 export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas; run: ToolRunner } {
     const schemas: ToolSchemas = [
@@ -87,6 +136,47 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                     type: "object",
                     properties: { daysBack: { type: "number", description: "Number of days back (max " + MAX_DAYS + ")" } },
                     required: ["daysBack"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "get_plan",
+                description: "Get the user's current saved training plan. Omit day_type for all days, or pass one (Push/Pull/Legs) to get just that day.",
+                parameters: {
+                    type: "object",
+                    properties: { day_type: { type: "string", enum: ["Push", "Pull", "Legs"], description: "Optional day type filter" } },
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "get_day_type_history",
+                description: "Get the N most recent logged sessions that classify as a given day type (Push/Pull/Legs), with per-exercise sets and muscle group. Use this to analyze past performance before proposing the next session of that day.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        day_type: { type: "string", enum: ["Push", "Pull", "Legs"], description: "Day type to look up" },
+                        limit: { type: "number", description: "Number of matching sessions (default 3, max " + MAX_LIMIT + ")" },
+                    },
+                    required: ["day_type"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "save_plan",
+                description: "Save (replace) the plan for one day type. Call this ONLY after the user has explicitly confirmed they want to save. Replaces the whole day's plan with the given exercises.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        day_type: { type: "string", enum: ["Push", "Pull", "Legs"] },
+                        exercises: { type: "array", items: planExerciseSchema },
+                    },
+                    required: ["day_type", "exercises"],
                 },
             },
         },
@@ -155,6 +245,58 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                 const daysBack = parseDays(args.daysBack, 7);
                 const volume = await deps.analyticsService.getVolume(daysBack);
                 return JSON.stringify(volume);
+            }
+            case "get_plan": {
+                const day = parseDayType(args.day_type);
+                const rows = day
+                    ? await deps.coachPlanRepo.getByDayType(day)
+                    : await deps.coachPlanRepo.getAll();
+                return JSON.stringify(
+                    rows.map((r) => ({
+                        day_type: r.day_type,
+                        position: r.position,
+                        exercise_name: r.exercise_name,
+                        is_bodyweight: r.is_bodyweight,
+                        target_weight: r.target_weight,
+                        sets: r.sets,
+                        rep_low: r.rep_low,
+                        rep_high: r.rep_high,
+                        rpe_low: r.rpe_low,
+                        rpe_high: r.rpe_high,
+                        notes: r.notes,
+                        updated_at: r.updated_at,
+                    })),
+                );
+            }
+            case "get_day_type_history": {
+                const day = parseDayType(args.day_type);
+                if (!day) return JSON.stringify({ error: "day_type must be Push, Pull, or Legs" });
+                const limit = parseLimit(args.limit, 3);
+                const sessions = await deps.workoutRepo.getRecentSessionsWithWorkouts(40);
+                const matching = sessions
+                    .filter((s) => classifySession(s.workouts.map((w) => w.muscle_group)) === day)
+                    .slice(0, limit);
+                return JSON.stringify(
+                    matching.map((s) => ({
+                        created_at: s.created_at,
+                        exercises: s.workouts.map((w) => ({
+                            exercise_name: w.exercise_name,
+                            muscle_group: w.muscle_group,
+                            weight: w.is_bodyweight ? null : w.weight,
+                            is_bodyweight: w.is_bodyweight,
+                            reps: w.reps,
+                            rpe: w.rpe,
+                        })),
+                    })),
+                );
+            }
+            case "save_plan": {
+                const day = parseDayType(args.day_type);
+                if (!day) return JSON.stringify({ error: "day_type must be Push, Pull, or Legs" });
+                if (!Array.isArray(args.exercises)) return JSON.stringify({ error: "exercises must be an array" });
+                const rows = (args.exercises as Record<string, unknown>[]).map(coercePlanRow);
+                const saved = await deps.coachPlanRepo.replaceDayType(day, rows);
+                return JSON.stringify({ ok: true, day_type: day, saved_count: saved.length });
             }
             default:
                 return JSON.stringify({ error: `Unknown tool: ${name}` });
