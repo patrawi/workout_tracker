@@ -60,7 +60,7 @@ export function buildPlanSystemPrompt(args: {
 
 Today's date: ${args.today}
 
-Progression rules (from the doc, in a deficit): strength (working weight) matters more than reps. A 1–2 rep drop is fine — hold the weight. A 3+ rep drop or a forced weight drop is a watch signal. If a lift clearly beat its target (hit top reps at/under target RPE), increase the weight. Keep the same exercises as the current plan unless the doc calls for a swap.
+Progression rules (from the doc, in a deficit): strength (working weight) matters more than reps. A 1–2 rep drop is fine — hold the weight. A 3+ rep drop or a forced weight drop is a watch signal. If a lift clearly beat its target (hit top reps at/under target RPE), increase the weight. Keep the same exercises as the current plan unless the doc calls for a swap or you are substituting an unavailable machine (see Substitution below).
 
 --- KNOWLEDGE BASE ---
 ${args.knowledge || "(none)"}
@@ -78,7 +78,7 @@ ${args.historyText || "(no logged session of this type yet — keep current targ
 ${args.loggedText || "(none)"}
 --- END ALL LOGGED EXERCISES ---
 
-Substitution: if a plan exercise shows "(no recent data)" it often means the gym lacks that machine and the user trained an equivalent one. For each such exercise, find the closest logged exercise in ALL LOGGED EXERCISES by muscle group and movement pattern (e.g. any incline/upper-chest press variant — machine, dumbbell, converging — is interchangeable) and base its progression on that. State the substitution in "rationale" (e.g. "progressed from Converging Chest Press since the gym has no Machine Incline Press"). Only hold the current target if nothing comparable was logged.
+Substitution: plan exercise names are placeholder base machines — the gym may not have them, so the user trains an equivalent (that is why an exercise can show "(no recent data)"). For each plan exercise with no recent data, find the closest logged exercise in ALL LOGGED EXERCISES by muscle group and movement pattern (e.g. any incline/upper-chest press variant — machine, dumbbell, converging — is interchangeable). When you find one, REPLACE "exercise_name" with that actually-logged exercise (the real one the user performs, not the placeholder), set "is_bodyweight" to match it, base progression on its history, and note the swap in "rationale" (e.g. "swapped Machine Incline Press → Converging Chest Press, the variant you actually log"). Only keep the placeholder name and hold the target if nothing comparable was logged.
 
 Return ONLY a JSON object — no prose, no markdown fences. It has a single key "exercises" whose value is an array with one object per exercise, in order:
 { "exercises": [{
