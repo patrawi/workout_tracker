@@ -51,7 +51,7 @@ describe("createWorkoutService", () => {
     const service = createWorkoutService(mockRepo as any, mockAI);
 
     await expect(
-      service.create({ exercise_name: "", weight: 0, reps: 0, rpe: 0, is_bodyweight: false, is_assisted: false, variant_details: "", notes_thai: "", notes_english: "", tags: [], muscle_group: "Other" })
+      service.create({ exercise_name: "", weight: 0, reps: 0, rpe: 0, is_bodyweight: false, is_assisted: false, pain: false, variant_details: "", notes_thai: "", notes_english: "", tags: [], muscle_group: "Other" })
     ).rejects.toThrow(ValidationError);
   });
 
@@ -85,6 +85,7 @@ describe("createWorkoutService", () => {
       rpe: 8,
       is_bodyweight: false,
       is_assisted: false,
+      pain: false,
       variant_details: "",
       notes_thai: "",
       notes_english: "",

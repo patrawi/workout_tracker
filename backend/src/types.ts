@@ -1,3 +1,5 @@
+import type { SessionType } from "./constants";
+
 export interface WorkoutData {
   exercise_name: string;
   weight: number;
@@ -5,6 +7,7 @@ export interface WorkoutData {
   rpe: number;
   is_bodyweight: boolean;
   is_assisted: boolean;
+  pain: boolean;
   variant_details: string;
   notes_thai: string;
   notes_english: string;
@@ -25,6 +28,8 @@ export interface SessionRow {
   did_liss: boolean;
   did_stretch: boolean;
   notes: string;
+  session_type: SessionType;
+  gym_profile: string;
   created_at: string;
 }
 
@@ -105,6 +110,8 @@ export interface SessionActivityData {
   did_liss: boolean;
   did_stretch: boolean;
   notes: string;
+  session_type?: SessionType;   // spec §3.3; defaults to "working"
+  gym_profile?: string;         // spec §3.4; defaults to DEFAULT_GYM_PROFILE
 }
 
 export interface ApiResponse<T> {

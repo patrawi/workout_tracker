@@ -4,7 +4,7 @@ import { t } from "elysia";
 import { routeHandler, routeHandlerCtx } from "../lib/route-handler";
 import { ValidationError } from "../lib/errors";
 import { isValidDateString, parseNumericId, isNonEmptyString } from "../lib/validation";
-import { DEFAULT_WORKOUT_LIMIT } from "../constants";
+import { DEFAULT_WORKOUT_LIMIT, SESSION_TYPES } from "../constants";
 import type { AppContext } from "../context";
 
 export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
@@ -15,8 +15,8 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
       return await workoutService.getRecent(DEFAULT_WORKOUT_LIMIT);
     }))
     .post("/workouts", routeHandlerCtx(async ({ body }) => {
-      const { exercise_name, created_at, session_id, ...rest } = body;
-      return await workoutService.create(rest, created_at, session_id);
+      const { created_at, session_id, ...item } = body;
+      return await workoutService.create(item, created_at, session_id);
     }), {
       body: t.Object({
         exercise_name: t.String(),
@@ -25,6 +25,7 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
         rpe: t.Optional(t.Number()),
         is_bodyweight: t.Optional(t.Boolean()),
         is_assisted: t.Optional(t.Boolean()),
+        pain: t.Optional(t.Boolean()),
         variant_details: t.Optional(t.String()),
         notes_thai: t.Optional(t.String()),
         notes_english: t.Optional(t.String()),
@@ -69,6 +70,7 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
           rpe: t.Number(),
           is_bodyweight: t.Boolean(),
           is_assisted: t.Boolean(),
+          pain: t.Optional(t.Boolean()),
           variant_details: t.String(),
           notes_thai: t.String(),
           notes_english: t.String(),
@@ -80,6 +82,8 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
           did_liss: t.Boolean(),
           did_stretch: t.Boolean(),
           notes: t.String(),
+          session_type: t.Optional(t.Union(SESSION_TYPES.map((s) => t.Literal(s)))),
+          gym_profile: t.Optional(t.String()),
         })),
       }),
     })
@@ -101,6 +105,7 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
         rpe: t.Optional(t.Number()),
         is_bodyweight: t.Optional(t.Boolean()),
         is_assisted: t.Optional(t.Boolean()),
+        pain: t.Optional(t.Boolean()),
         variant_details: t.Optional(t.String()),
         notes_thai: t.Optional(t.String()),
         notes_english: t.Optional(t.String()),

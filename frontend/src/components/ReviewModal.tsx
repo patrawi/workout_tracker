@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
-import type { WorkoutData, SessionActivityData } from "../types";
+import type { WorkoutData, SessionActivityData, SessionType } from "../types";
+import { SESSION_TYPES, SESSION_TYPE_LABELS, DEFAULT_GYM_PROFILE } from "../types";
 import DialogBase from "./DialogBase";
 
 interface ReviewModalProps {
@@ -24,6 +25,8 @@ export default function ReviewModal({
     const [didLiss, setDidLiss] = useState(false);
     const [didStretch, setDidStretch] = useState(false);
     const [notes, setNotes] = useState("");
+    const [sessionType, setSessionType] = useState<SessionType>("working");
+    const [gymProfile, setGymProfile] = useState(DEFAULT_GYM_PROFILE);
 
     const updateItem = useCallback(
         (index: number, field: keyof WorkoutData, value: string | number | boolean) => {
@@ -49,8 +52,10 @@ export default function ReviewModal({
             did_liss: didLiss,
             did_stretch: didStretch,
             notes,
+            session_type: sessionType,
+            gym_profile: gymProfile.trim() || DEFAULT_GYM_PROFILE,
         });
-    }, [items, rawText, workoutDate, isSubmitting, onConfirm, walked10k, didLiss, didStretch, notes]);
+    }, [items, rawText, workoutDate, isSubmitting, onConfirm, walked10k, didLiss, didStretch, notes, sessionType, gymProfile]);
 
     // Format the selected date for display — memoized
     const displayDate = useMemo(
@@ -183,20 +188,35 @@ export default function ReviewModal({
                                 </div>
                             </div>
 
-                            {/* Bodyweight toggle */}
-                            <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={item.is_bodyweight}
-                                    onChange={(e) =>
-                                        updateItem(i, "is_bodyweight", e.target.checked)
-                                    }
-                                    className="w-4 h-4 rounded bg-surface-200 border-surface-300 accent-accent-400"
-                                />
-                                <span className="text-xs text-surface-400">
-                                    🏋️ Bodyweight exercise {item.is_bodyweight ? "(uses your profile weight)" : ""}
-                                </span>
-                            </label>
+                            {/* Bodyweight + pain toggles */}
+                            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-3">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={item.is_bodyweight}
+                                        onChange={(e) =>
+                                            updateItem(i, "is_bodyweight", e.target.checked)
+                                        }
+                                        className="w-4 h-4 rounded bg-surface-200 border-surface-300 accent-accent-400"
+                                    />
+                                    <span className="text-xs text-surface-400">
+                                        🏋️ Bodyweight exercise {item.is_bodyweight ? "(uses your profile weight)" : ""}
+                                    </span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={item.pain}
+                                        onChange={(e) =>
+                                            updateItem(i, "pain", e.target.checked)
+                                        }
+                                        className="w-4 h-4 rounded bg-surface-200 border-surface-300 accent-red-400"
+                                    />
+                                    <span className="text-xs text-surface-400">
+                                        ⚠️ Pain on this set
+                                    </span>
+                                </label>
+                            </div>
 
                             {/* Row 3: Variant + Notes */}
                             {(item.variant_details || item.notes_thai || item.notes_english) ? (
@@ -247,8 +267,47 @@ export default function ReviewModal({
                     ) : null}
                 </div>
 
-                {/* Activity checkboxes */}
+                {/* Session context (progressive overload — spec §3.3 / §3.4) */}
                 <div className="px-6 pb-4 border-t border-surface-300/30 pt-4">
+                    <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-3">
+                        Session Context
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-xs text-surface-400 block mb-1" htmlFor="session-type">
+                                Session type
+                            </label>
+                            <select
+                                id="session-type"
+                                value={sessionType}
+                                onChange={(e) => setSessionType(e.target.value as SessionType)}
+                                className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
+                            >
+                                {SESSION_TYPES.map((t) => (
+                                    <option key={t} value={t}>
+                                        {SESSION_TYPE_LABELS[t]}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs text-surface-400 block mb-1" htmlFor="gym-profile">
+                                Gym
+                            </label>
+                            <input
+                                id="gym-profile"
+                                type="text"
+                                value={gymProfile}
+                                onChange={(e) => setGymProfile(e.target.value)}
+                                className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
+                                placeholder={DEFAULT_GYM_PROFILE}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Activity checkboxes */}
+                <div className="px-6 pb-4 border-t border-surface-300/30 pt-0">
                     <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-3">
                         Additional Activities
                     </h3>

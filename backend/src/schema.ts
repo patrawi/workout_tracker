@@ -23,6 +23,15 @@ export const mealTypeEnum = pgEnum("meal_type", [
     "Snack",
 ]);
 
+// Progressive Overload — session_type (spec §3.3). Drives go-signal guardrails.
+export const sessionTypeEnum = pgEnum("session_type", [
+    "working",
+    "working_compromised",
+    "form_check",
+    "return_from_layoff",
+    "return_from_injury",
+]);
+
 // ——— Sessions Table ———
 export const sessions = pgTable("sessions", {
     id: serial("id").primaryKey(),
@@ -31,6 +40,9 @@ export const sessions = pgTable("sessions", {
     did_liss: boolean("did_liss").default(false),
     did_stretch: boolean("did_stretch").default(false),
     notes: text("notes").default(""),
+    // Progressive Overload (spec §3.3 / §3.4) — session-level training context.
+    session_type: sessionTypeEnum("session_type").default("working").notNull(),
+    gym_profile: text("gym_profile").default("").notNull(),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
 });
 
@@ -46,6 +58,8 @@ export const workouts = pgTable("workouts", {
     rpe: integer("rpe").default(0),
     is_bodyweight: boolean("is_bodyweight").default(false),
     is_assisted: boolean("is_assisted").default(false),
+    // Progressive Overload (spec §3.2) — per-set pain flag. Free-text comment = notes_*.
+    pain: boolean("pain").default(false).notNull(),
     variant_details: text("variant_details").default(""),
     notes_thai: text("notes_thai").default(""),
     notes_english: text("notes_english").default(""),

@@ -1,9 +1,29 @@
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { withWorkoutDefaults } from "../lib/defaults";
+import { withWorkoutDefaults, defaultString } from "../lib/defaults";
 import { mapWorkoutRow } from "../db/mappers";
+import { DEFAULT_GYM_PROFILE, DEFAULT_SESSION_TYPE } from "../constants";
+import type { SessionType } from "../constants";
 import { sessions, workouts } from "../schema";
 import type { WorkoutData, WorkoutRow, SessionActivityData } from "../types";
+
+// One set's row inside an exercise-history session (spec §4 overload assessment).
+export interface ExerciseContextSet {
+  weight: number;
+  reps: number;
+  rpe: number;
+  pain: boolean;
+  notes_thai: string;
+  notes_english: string;
+}
+
+export interface ExerciseSessionContext {
+  session_id: number;
+  created_at: string;
+  session_type: SessionType;
+  gym_profile: string;
+  sets: ExerciseContextSet[];
+}
 
 export interface SessionExercise {
   exercise_name: string;
@@ -27,6 +47,7 @@ export interface WorkoutUpdateData {
   rpe?: number;
   is_bodyweight?: boolean;
   is_assisted?: boolean;
+  pain?: boolean;
   variant_details?: string;
   notes_thai?: string;
   notes_english?: string;
@@ -89,7 +110,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         } else {
           const [session] = await tx
             .insert(sessions)
-            .values({ raw_input: "[manual entry]", created_at: createdAt })
+            .values({ raw_input: "[manual entry]", created_at: createdAt, gym_profile: DEFAULT_GYM_PROFILE })
             .returning({ id: sessions.id });
 
           if (!session) {
@@ -138,6 +159,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       if (data.is_bodyweight !== undefined)
         updateObj.is_bodyweight = data.is_bodyweight;
       if (data.is_assisted !== undefined) updateObj.is_assisted = data.is_assisted;
+      if (data.pain !== undefined) updateObj.pain = data.pain;
       if (data.variant_details !== undefined)
         updateObj.variant_details = data.variant_details;
       if (data.notes_thai !== undefined) updateObj.notes_thai = data.notes_thai;
@@ -180,6 +202,8 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
             did_liss: activity?.did_liss ?? false,
             did_stretch: activity?.did_stretch ?? false,
             notes: activity?.notes ?? "",
+            session_type: activity?.session_type ?? DEFAULT_SESSION_TYPE,
+            gym_profile: activity?.gym_profile || DEFAULT_GYM_PROFILE,
           })
           .returning({ id: sessions.id });
 
@@ -202,6 +226,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
               rpe: defaulted.rpe,
               is_bodyweight: defaulted.is_bodyweight,
               is_assisted: defaulted.is_assisted,
+              pain: defaulted.pain,
               variant_details: defaulted.variant_details,
               notes_thai: defaulted.notes_thai,
               notes_english: defaulted.notes_english,
@@ -284,6 +309,60 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         created_at: s.created_at,
         workouts: grouped.get(s.id) ?? [],
       }));
+    },
+
+    // Progressive overload (spec §4): one exercise's sets grouped by session with
+    // session-level context (session_type, gym_profile). Most-recent session first.
+    async getExerciseSetsWithContext(
+      exercise: string,
+      sessionLimit = 12,
+    ): Promise<ExerciseSessionContext[]> {
+      const rows = await dbInstance
+        .select({
+          session_id: workouts.session_id,
+          created_at: sessions.created_at,
+          session_type: sessions.session_type,
+          gym_profile: sessions.gym_profile,
+          weight: workouts.weight,
+          reps: workouts.reps,
+          rpe: workouts.rpe,
+          pain: workouts.pain,
+          notes_thai: workouts.notes_thai,
+          notes_english: workouts.notes_english,
+          id: workouts.id,
+        })
+        .from(workouts)
+        .innerJoin(sessions, eq(workouts.session_id, sessions.id))
+        .where(eq(workouts.exercise_name, exercise))
+        .orderBy(desc(sessions.created_at), asc(workouts.id));
+
+      // Group into sessions, preserving most-recent-first order, then cap.
+      const order: number[] = [];
+      const grouped = new Map<number, ExerciseSessionContext>();
+      for (const r of rows) {
+        let g = grouped.get(r.session_id);
+        if (!g) {
+          g = {
+            session_id: r.session_id,
+            created_at: defaultString(r.created_at),
+            session_type: r.session_type,
+            gym_profile: r.gym_profile,
+            sets: [],
+          };
+          grouped.set(r.session_id, g);
+          order.push(r.session_id);
+        }
+        g.sets.push({
+          weight: r.weight ?? 0,
+          reps: r.reps ?? 0,
+          rpe: r.rpe ?? 0,
+          pain: r.pain ?? false,
+          notes_thai: r.notes_thai ?? "",
+          notes_english: r.notes_english ?? "",
+        });
+      }
+
+      return order.slice(0, sessionLimit).map((id) => grouped.get(id)!);
     },
 
     async getRecentNotes(exercise: string, limit = 5): Promise<WorkoutRow[]> {

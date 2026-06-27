@@ -21,6 +21,7 @@ export function withWorkoutDefaults<T extends Record<string, unknown>>(
   rpe: number;
   is_bodyweight: boolean;
   is_assisted: boolean;
+  pain: boolean;
   variant_details: string;
   notes_thai: string;
   notes_english: string;
@@ -36,6 +37,7 @@ export function withWorkoutDefaults<T extends Record<string, unknown>>(
     rpe: (item.rpe as number) ?? DEFAULT_NUMBER,
     is_bodyweight: (item.is_bodyweight as boolean) ?? DEFAULT_BOOLEAN_FALSE,
     is_assisted: (item.is_assisted as boolean) ?? DEFAULT_BOOLEAN_FALSE,
+    pain: (item.pain as boolean) ?? DEFAULT_BOOLEAN_FALSE,
     variant_details: (item.variant_details as string) ?? DEFAULT_EMPTY_STRING,
     notes_thai: (item.notes_thai as string) ?? DEFAULT_EMPTY_STRING,
     notes_english: (item.notes_english as string) ?? DEFAULT_EMPTY_STRING,
