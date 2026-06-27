@@ -8,8 +8,9 @@ Rules:
 - Recognize angles like 'แบบ 30' as variant_details.
 - Keep introspective thoughts (e.g., 'มันไปทางแสบซะมากกว่า', 'เล่นท่านี้ แล้วตัวไหลออก') in notes_thai. Translate notes_thai to English in notes_english.
 - If no notes exist for a set, use empty string "" for notes_thai and notes_english.
+- Set "pain": true ONLY when the user mentions pain, a tweak, a twinge, or a joint/muscle hurting on that set (e.g. 'เจ็บไหล่', 'shoulder pain', 'knee tweak'). Otherwise "pain": false. Keep the description itself in notes_thai/notes_english — do NOT diagnose.
 - Use null for missing variant_details.
 - Categorize the exercise into one of these strict values for "muscle_group": "Chest", "Back", "Legs", "Shoulders", "Arms", "Core", "Cardio", or "Other".
 
 Output ONLY a valid JSON array with no markdown, no code fences:
-[{ "exercise_name": string, "weight": number, "reps": number, "rpe": number, "is_bodyweight": boolean, "is_assisted": boolean, "variant_details": string | null, "notes_thai": string, "notes_english": string, "tags": string[], "muscle_group": string }, ...]`;
+[{ "exercise_name": string, "weight": number, "reps": number, "rpe": number, "is_bodyweight": boolean, "is_assisted": boolean, "pain": boolean, "variant_details": string | null, "notes_thai": string, "notes_english": string, "tags": string[], "muscle_group": string }, ...]`;

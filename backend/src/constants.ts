@@ -41,6 +41,19 @@ export const CATALOG_UNCERTAIN_DISTANCE = 0.35; // cosine distance above this �
 // Database
 export const PROFILE_DEFAULT_ID = 1;
 
+// Progressive Overload — session context (spec §3.3 / §3.4)
+// session_type enum drives the go-signal guardrails; gym_profile gates continuity.
+export const SESSION_TYPES = [
+  "working",
+  "working_compromised",
+  "form_check",
+  "return_from_layoff",
+  "return_from_injury",
+] as const;
+export type SessionType = (typeof SESSION_TYPES)[number];
+export const DEFAULT_SESSION_TYPE: SessionType = "working";
+export const DEFAULT_GYM_PROFILE = "The Gym Group Edinburgh Meadowbank Branch";
+
 // API Defaults (for ?? fallbacks)
 export const DEFAULT_EXERCISE_NAME = "Unknown Exercise";
 export const DEFAULT_MUSCLE_GROUP = "Other";

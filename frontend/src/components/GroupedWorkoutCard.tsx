@@ -160,6 +160,7 @@ export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEd
                                 </div>
 
                                 <div className="col-span-3 flex items-center pl-2 overflow-hidden">
+                                    {set.pain && <span className="text-[11px] mr-1 shrink-0" title="Pain flagged on this set">⚠️</span>}
                                     <div className="text-[13px] truncate text-[var(--muted-foreground)] group-hover:text-zinc-300 pr-2 transition-colors duration-300" title={set.notes_english || set.notes_thai || set.variant_details}>
                                         {set.variant_details && <span className="text-white mr-1.5 font-medium">{set.variant_details}</span>}
                                         {set.notes_english || set.notes_thai}

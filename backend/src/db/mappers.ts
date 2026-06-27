@@ -34,6 +34,7 @@ export function mapWorkoutRow(row: typeof workouts.$inferSelect): WorkoutRow {
     rpe: defaultNumber(row.rpe),
     is_bodyweight: defaultBoolean(row.is_bodyweight),
     is_assisted: defaultBoolean(row.is_assisted),
+    pain: defaultBoolean(row.pain),
     variant_details: defaultString(row.variant_details),
     notes_thai: defaultString(row.notes_thai),
     notes_english: defaultString(row.notes_english),

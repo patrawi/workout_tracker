@@ -15,6 +15,7 @@ export function normalizeWorkoutItem(item: Record<string, unknown>): WorkoutData
     rpe: Number(item.rpe) || undefined,
     is_bodyweight: item.is_bodyweight !== undefined ? Boolean(item.is_bodyweight) : undefined,
     is_assisted: item.is_assisted !== undefined ? Boolean(item.is_assisted) : undefined,
+    pain: item.pain !== undefined ? Boolean(item.pain) : undefined,
     variant_details: item.variant_details ? String(item.variant_details) : undefined,
     notes_thai: item.notes_thai ? String(item.notes_thai) : undefined,
     notes_english: item.notes_english ? String(item.notes_english) : undefined,

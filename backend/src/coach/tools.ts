@@ -1,6 +1,7 @@
 import type { CoachServiceDeps } from "../services/coach.service";
 import { isValidDateString } from "../lib/date";
 import { classifySession } from "./classify";
+import { assessExercise } from "./overload";
 import type { CoachPlanInput } from "../repositories/coach-plan.repository";
 
 const MAX_DAYS = 31;
@@ -168,6 +169,18 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
         {
             type: "function",
             function: {
+                name: "get_overload_assessment",
+                description: "Deterministic progressive-overload assessment for ONE exercise (spec §4). Computes data sufficiency, gym-profile continuity, the go-signal (top of rep range across all working sets), and a +4% increment recommendation. Use this BEFORE proposing a weight change — never compute the math yourself. Returns hold/increase/add_weight_optional plus any pain-flagged set comments for you to hand back (§5.2). The exercise must exist in the saved plan (provides the rep range).",
+                parameters: {
+                    type: "object",
+                    properties: { exercise_name: { type: "string", description: "Exact exercise name as saved in the plan" } },
+                    required: ["exercise_name"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
                 name: "save_plan",
                 description: "Save (replace) the plan for one day type. Call this ONLY after the user has explicitly confirmed they want to save. Replaces the whole day's plan with the given exercises.",
                 parameters: {
@@ -289,6 +302,42 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                         })),
                     })),
                 );
+            }
+            case "get_overload_assessment": {
+                const exercise = str(args.exercise_name).trim();
+                if (!exercise) return JSON.stringify({ error: "exercise_name is required" });
+
+                // Plan target supplies the rep range that defines "top of range" (§4.3).
+                const plan = await deps.coachPlanRepo.getAll();
+                const target = plan.find((p) => p.exercise_name.toLowerCase() === exercise.toLowerCase());
+                if (!target) {
+                    return JSON.stringify({ error: `"${exercise}" is not in the saved plan — cannot assess without a rep range.` });
+                }
+
+                const history = await deps.workoutRepo.getExerciseSetsWithContext(exercise);
+                const isDumbbell = exercise.toLowerCase().includes("dumbbell");
+                const assessment = assessExercise(
+                    history.map((s) => ({
+                        session_id: s.session_id,
+                        date: s.created_at,
+                        session_type: s.session_type,
+                        gym_profile: s.gym_profile,
+                        sets: s.sets.map((set) => ({ weight: set.weight, reps: set.reps, rpe: set.rpe, pain: set.pain })),
+                    })),
+                    { rep_high: target.rep_high, sets: target.sets, rpe_high: target.rpe_high, is_bodyweight: target.is_bodyweight },
+                    { isDumbbell },
+                );
+
+                // Surface pain-flagged set comments so the LLM can hand back (§5.2) —
+                // it reads the free text; this tool never classifies severity.
+                const painComments = history
+                    .flatMap((s) => s.sets.filter((set) => set.pain).map((set) => ({
+                        date: s.created_at,
+                        notes_thai: set.notes_thai,
+                        notes_english: set.notes_english,
+                    })));
+
+                return JSON.stringify({ exercise_name: exercise, ...assessment, painComments });
             }
             case "save_plan": {
                 const day = parseDayType(args.day_type);

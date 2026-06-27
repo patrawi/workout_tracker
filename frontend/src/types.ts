@@ -1,3 +1,24 @@
+// Progressive Overload — session-level training context (spec §3.3 / §3.4).
+export const SESSION_TYPES = [
+    "working",
+    "working_compromised",
+    "form_check",
+    "return_from_layoff",
+    "return_from_injury",
+] as const;
+export type SessionType = (typeof SESSION_TYPES)[number];
+
+// Human labels for the session_type dropdown.
+export const SESSION_TYPE_LABELS: Record<SessionType, string> = {
+    working: "Working set (prime)",
+    working_compromised: "Compromised (low sleep / heavy meal / low water)",
+    form_check: "Form check (backing off weight)",
+    return_from_layoff: "Return from layoff",
+    return_from_injury: "Return from injury",
+};
+
+export const DEFAULT_GYM_PROFILE = "The Gym Group Edinburgh Meadowbank Branch";
+
 export interface WorkoutData {
     exercise_name: string;
     weight: number;
@@ -5,6 +26,7 @@ export interface WorkoutData {
     rpe: number;
     is_bodyweight: boolean;
     is_assisted: boolean;
+    pain: boolean;
     variant_details: string | null;
     notes_thai: string;
     notes_english: string;
@@ -16,6 +38,8 @@ export interface SessionActivityData {
     did_liss: boolean;
     did_stretch: boolean;
     notes: string;
+    session_type?: SessionType;
+    gym_profile?: string;
 }
 
 export interface WorkoutRow {
@@ -27,6 +51,7 @@ export interface WorkoutRow {
     rpe: number;
     is_bodyweight: boolean;
     is_assisted: boolean;
+    pain: boolean;
     variant_details: string;
     notes_thai: string;
     notes_english: string;
