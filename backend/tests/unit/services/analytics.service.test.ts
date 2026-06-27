@@ -5,6 +5,7 @@ function createMockAnalyticsRepo() {
   return {
     getHeatmap: mock(async () => []),
     getVolume: mock(async (daysBack: number) => []),
+    getVolumeTrend: mock(async (daysBack: number) => []),
   };
 }
 
@@ -25,6 +26,7 @@ describe("createAnalyticsService", () => {
     expect(typeof service.getExercises).toBe("function");
     expect(typeof service.getAnalytics).toBe("function");
     expect(typeof service.getVolume).toBe("function");
+    expect(typeof service.getVolumeTrend).toBe("function");
     expect(typeof service.getNotes).toBe("function");
     expect(typeof service.getHeatmap).toBe("function");
   });

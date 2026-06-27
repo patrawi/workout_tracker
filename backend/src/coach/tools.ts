@@ -132,10 +132,22 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
             type: "function",
             function: {
                 name: "get_volume",
-                description: "Get training volume by muscle group for the last N days.",
+                description: "Get the number of SETS logged per muscle group for the last N days. This is a set COUNT, NOT volume load. For a volume-load trend (weight × reps, spec §4.2) use get_volume_trend instead.",
                 parameters: {
                     type: "object",
                     properties: { daysBack: { type: "number", description: "Number of days back (max " + MAX_DAYS + ")" } },
+                    required: ["daysBack"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "get_volume_trend",
+                description: "Volume-load trend per muscle group (spec §4.2: Volume Load = weight × reps × sets). Compares two adjacent equal windows — current [last N days] vs previous [N to 2N days ago] — and returns current/previous volume load, set counts, and the delta %, all computed deterministically. Use this for any 'volume load trend' question; never subtract windows yourself (spec §6.2). Note: bodyweight sets with weight 0 contribute 0 to volume load — read set counts for those.",
+                parameters: {
+                    type: "object",
+                    properties: { daysBack: { type: "number", description: "Length of each window in days (max " + MAX_DAYS + "). Default 14." } },
                     required: ["daysBack"],
                 },
             },
@@ -258,6 +270,11 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                 const daysBack = parseDays(args.daysBack, 7);
                 const volume = await deps.analyticsService.getVolume(daysBack);
                 return JSON.stringify(volume);
+            }
+            case "get_volume_trend": {
+                const daysBack = parseDays(args.daysBack, 14);
+                const trend = await deps.analyticsService.getVolumeTrend(daysBack);
+                return JSON.stringify(trend);
             }
             case "get_plan": {
                 const day = parseDayType(args.day_type);

@@ -69,4 +69,35 @@ describe("createAnalyticsRepository", () => {
     const result = await repo.getVolume(7);
     expect(result).toEqual([]);
   });
+
+  test("getVolumeTrend computes delta_pct from the two windows", async () => {
+    const mockDb = {
+      select: mock(() => ({
+        from: mock(() => ({
+          where: mock(() => ({
+            groupBy: mock(() => ({
+              orderBy: mock(async () => [
+                { muscle_group: "Chest", current_volume_load: 9000, previous_volume_load: 12000, current_sets: 30, previous_sets: 38 },
+                { muscle_group: "Back", current_volume_load: 8000, previous_volume_load: 0, current_sets: 33, previous_sets: 0 },
+              ]),
+            })),
+          })),
+        })),
+      })),
+    };
+
+    const repo = createAnalyticsRepository(mockDb as any);
+    const result = await repo.getVolumeTrend(14);
+
+    expect(result[0]).toEqual({
+      muscle_group: "Chest",
+      current_volume_load: 9000,
+      previous_volume_load: 12000,
+      current_sets: 30,
+      previous_sets: 38,
+      delta_pct: -25,
+    });
+    // previous window empty → delta_pct null, not Infinity
+    expect(result[1]?.delta_pct).toBeNull();
+  });
 });
