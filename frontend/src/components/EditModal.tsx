@@ -18,6 +18,7 @@ export default function EditModal({ workout, onSave, onCancel }: EditModalProps)
     const [rpe, setRpe] = useState(workout.rpe);
     const [isBodyweight, setIsBodyweight] = useState(workout.is_bodyweight);
     const [isAssisted, setIsAssisted] = useState(workout.is_assisted);
+    const [pain, setPain] = useState(workout.pain);
     const [variantDetails, setVariantDetails] = useState(workout.variant_details ?? "");
     const [notesThai, setNotesThai] = useState(workout.notes_thai ?? "");
     const [notesEnglish, setNotesEnglish] = useState(workout.notes_english ?? "");
@@ -34,6 +35,7 @@ export default function EditModal({ workout, onSave, onCancel }: EditModalProps)
                 rpe,
                 is_bodyweight: isBodyweight,
                 is_assisted: isAssisted,
+                pain,
                 variant_details: variantDetails,
                 notes_thai: notesThai,
                 notes_english: notesEnglish,
@@ -178,6 +180,15 @@ export default function EditModal({ workout, onSave, onCancel }: EditModalProps)
                                 className="w-4 h-4 rounded bg-surface-200 border-surface-300 accent-accent-400"
                             />
                             <span className="text-xs text-surface-400">🤖 Assisted machine</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={pain}
+                                onChange={(e) => setPain(e.target.checked)}
+                                className="w-4 h-4 rounded bg-surface-200 border-surface-300 accent-red-400"
+                            />
+                            <span className="text-xs text-surface-400">⚠️ Pain on this set</span>
                         </label>
                     </div>
 

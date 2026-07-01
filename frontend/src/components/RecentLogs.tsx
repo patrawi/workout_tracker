@@ -208,6 +208,7 @@ export default function RecentLogs({ workouts, isLoading, onEdit, onDelete, onAd
                                 rpe: newWorkout.rpe,
                                 is_bodyweight: newWorkout.is_bodyweight,
                                 is_assisted: newWorkout.is_assisted,
+                                pain: newWorkout.pain,
                             }
                         );
                         handleCloseAddModal();
@@ -218,4 +219,3 @@ export default function RecentLogs({ workouts, isLoading, onEdit, onDelete, onAd
         </section>
     );
 }
-

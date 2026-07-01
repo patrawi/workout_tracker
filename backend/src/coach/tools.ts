@@ -6,6 +6,7 @@ import type { CoachPlanInput } from "../repositories/coach-plan.repository";
 
 const MAX_DAYS = 31;
 const MAX_LIMIT = 20;
+const DAY_TYPE_HISTORY_LIMIT = 3;
 const PLAN_DAY_TYPES = ["Push", "Pull", "Legs"] as const;
 
 type ToolSchemas = {
@@ -167,12 +168,11 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
             type: "function",
             function: {
                 name: "get_day_type_history",
-                description: "Get the N most recent logged sessions that classify as a given day type (Push/Pull/Legs), with per-exercise sets and muscle group. Use this to analyze past performance before proposing the next session of that day.",
+                description: "Get the 3 most recent logged sessions that classify as a given day type (Push/Pull/Legs), with per-exercise sets and muscle group. Use this to analyze past performance before proposing the next session of that day.",
                 parameters: {
                     type: "object",
                     properties: {
                         day_type: { type: "string", enum: ["Push", "Pull", "Legs"], description: "Day type to look up" },
-                        limit: { type: "number", description: "Number of matching sessions (default 3, max " + MAX_LIMIT + ")" },
                     },
                     required: ["day_type"],
                 },
@@ -301,11 +301,10 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
             case "get_day_type_history": {
                 const day = parseDayType(args.day_type);
                 if (!day) return JSON.stringify({ error: "day_type must be Push, Pull, or Legs" });
-                const limit = parseLimit(args.limit, 3);
                 const sessions = await deps.workoutRepo.getRecentSessionsWithWorkouts(40);
                 const matching = sessions
                     .filter((s) => classifySession(s.workouts.map((w) => w.muscle_group)) === day)
-                    .slice(0, limit);
+                    .slice(0, DAY_TYPE_HISTORY_LIMIT);
                 return JSON.stringify(
                     matching.map((s) => ({
                         created_at: s.created_at,

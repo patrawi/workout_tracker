@@ -45,6 +45,8 @@ export interface SessionActivityData {
 export interface WorkoutRow {
     id: number;
     session_id: number;
+    session_type?: SessionType;
+    gym_profile?: string;
     exercise_name: string;
     weight: number;
     reps: number;

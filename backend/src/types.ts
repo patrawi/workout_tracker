@@ -18,6 +18,8 @@ export interface WorkoutData {
 export interface WorkoutRow extends WorkoutData {
   id: number;
   session_id: number;
+  session_type?: SessionType;
+  gym_profile?: string;
   created_at: string;
 }
 

@@ -8,6 +8,7 @@ export interface AddWorkoutInput {
   rpe?: number;
   is_bodyweight?: boolean;
   is_assisted?: boolean;
+  pain?: boolean;
   variant_details?: string;
   notes_thai?: string;
   notes_english?: string;
@@ -43,6 +44,7 @@ export const workoutsApi = {
       rpe: number;
       is_bodyweight: boolean;
       is_assisted: boolean;
+      pain: boolean;
       variant_details: string;
       notes_thai: string;
       notes_english: string;

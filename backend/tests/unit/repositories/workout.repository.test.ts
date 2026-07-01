@@ -2,17 +2,27 @@ import { test, expect, describe, mock } from "bun:test";
 import { createWorkoutRepository } from "../../../src/repositories/workout.repository";
 
 function createMockDb() {
+  const createSelectChain = () => ({
+    orderBy: mock(() => ({
+      limit: mock(async () => []),
+    })),
+    where: mock(() => ({
+      orderBy: mock(async () => []),
+    })),
+    innerJoin: mock(() => ({
+      orderBy: mock(() => ({
+        limit: mock(async () => []),
+      })),
+      where: mock(() => ({
+        orderBy: mock(async () => []),
+      })),
+    })),
+    $dynamic: mock(() => ({})),
+  });
+
   return {
     select: mock(() => ({
-      from: mock(() => ({
-        orderBy: mock(() => ({
-          limit: mock(async () => []),
-        })),
-        where: mock(() => ({
-          orderBy: mock(async () => []),
-        })),
-        $dynamic: mock(() => ({})),
-      })),
+      from: mock(createSelectChain),
     })),
     insert: mock(() => ({
       values: mock(() => ({

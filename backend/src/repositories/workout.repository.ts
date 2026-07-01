@@ -62,28 +62,59 @@ function daysBackCondition(daysBack: number) {
   );
 }
 
+function mapWorkoutRowWithSession(
+  row: typeof workouts.$inferSelect,
+  session: { session_type: SessionType; gym_profile: string },
+): WorkoutRow {
+  return {
+    ...mapWorkoutRow(row),
+    session_type: session.session_type,
+    gym_profile: session.gym_profile || DEFAULT_GYM_PROFILE,
+  };
+}
+
 // ─── Factory Pattern ─────────────────────────────────────────────────────────
 
 export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
   return {
     async getRecent(limit = 50): Promise<WorkoutRow[]> {
       const rows = await dbInstance
-        .select()
+        .select({
+          workout: workouts,
+          session_type: sessions.session_type,
+          gym_profile: sessions.gym_profile,
+        })
         .from(workouts)
+        .innerJoin(sessions, eq(workouts.session_id, sessions.id))
         .orderBy(desc(workouts.created_at), desc(workouts.id))
         .limit(limit);
 
-      return rows.map(mapWorkoutRow);
+      return rows.map((row) =>
+        mapWorkoutRowWithSession(row.workout, {
+          session_type: row.session_type,
+          gym_profile: row.gym_profile,
+        }),
+      );
     },
 
     async getByDate(date: string): Promise<WorkoutRow[]> {
       const rows = await dbInstance
-        .select()
+        .select({
+          workout: workouts,
+          session_type: sessions.session_type,
+          gym_profile: sessions.gym_profile,
+        })
         .from(workouts)
+        .innerJoin(sessions, eq(workouts.session_id, sessions.id))
         .where(eq(sql`DATE(${workouts.created_at})`, date))
         .orderBy(asc(workouts.id));
 
-      return rows.map(mapWorkoutRow);
+      return rows.map((row) =>
+        mapWorkoutRowWithSession(row.workout, {
+          session_type: row.session_type,
+          gym_profile: row.gym_profile,
+        }),
+      );
     },
 
     async getDates(): Promise<string[]> {
@@ -131,6 +162,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
             rpe: defaulted.rpe,
             is_bodyweight: defaulted.is_bodyweight,
             is_assisted: defaulted.is_assisted,
+            pain: defaulted.pain,
             variant_details: defaulted.variant_details,
             notes_thai: defaulted.notes_thai,
             notes_english: defaulted.notes_english,

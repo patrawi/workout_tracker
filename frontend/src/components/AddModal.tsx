@@ -12,6 +12,7 @@ interface AddModalProps {
         rpe: number;
         is_bodyweight: boolean;
         is_assisted: boolean;
+        pain: boolean;
     }) => void;
     onCancel: () => void;
 }
@@ -22,6 +23,7 @@ export default function AddModal({ exerciseName, defaultValues, onSave, onCancel
     const [rpe, setRpe] = useState(defaultValues?.rpe ?? 7);
     const [isBodyweight, setIsBodyweight] = useState(defaultValues?.is_bodyweight ?? false);
     const [isAssisted, setIsAssisted] = useState(defaultValues?.is_assisted ?? false);
+    const [pain, setPain] = useState(defaultValues?.pain ?? false);
 
     const handleSave = useCallback(() => {
         onSave({
@@ -30,8 +32,9 @@ export default function AddModal({ exerciseName, defaultValues, onSave, onCancel
             rpe,
             is_bodyweight: isBodyweight,
             is_assisted: isAssisted,
+            pain,
         });
-    }, [weight, reps, rpe, isBodyweight, isAssisted, onSave]);
+    }, [weight, reps, rpe, isBodyweight, isAssisted, pain, onSave]);
 
     return (
         <DialogBase
@@ -142,6 +145,15 @@ export default function AddModal({ exerciseName, defaultValues, onSave, onCancel
                                     className="w-4 h-4 rounded bg-surface-200 border-surface-300 accent-accent-400"
                                 />
                                 <span className="text-xs text-surface-400">Assisted</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={pain}
+                                    onChange={(e) => setPain(e.target.checked)}
+                                    className="w-4 h-4 rounded bg-surface-200 border-surface-300 accent-red-400"
+                                />
+                                <span className="text-xs text-surface-400">Pain on this set</span>
                             </label>
                         </div>
                     </div>

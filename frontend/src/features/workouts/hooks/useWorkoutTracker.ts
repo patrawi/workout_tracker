@@ -25,6 +25,7 @@ interface UseWorkoutTrackerReturn {
         rpe?: number;
         is_bodyweight?: boolean;
         is_assisted?: boolean;
+        pain?: boolean;
         muscle_group?: string;
         created_at?: string;
         session_id?: number;
@@ -93,6 +94,7 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
             rpe?: number;
             is_bodyweight?: boolean;
             is_assisted?: boolean;
+            pain?: boolean;
             muscle_group?: string;
             created_at?: string;
             session_id?: number;
@@ -159,6 +161,7 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
         rpe?: number;
         is_bodyweight?: boolean;
         is_assisted?: boolean;
+        pain?: boolean;
         muscle_group?: string;
         created_at?: string;
         session_id?: number;

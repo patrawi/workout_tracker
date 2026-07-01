@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import type { WorkoutRow } from "../types";
+import { SESSION_TYPE_LABELS, type WorkoutRow } from "../types";
 
 interface GroupedWorkoutCardProps {
     dateLabel: string;
@@ -57,6 +57,9 @@ export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEd
         () => Array.from(new Set(sets.flatMap((s) => s.tags || []))).slice(0, 3),
         [sets],
     );
+    const firstSet = sortedSets[0];
+    const sessionTypeLabel = firstSet?.session_type ? SESSION_TYPE_LABELS[firstSet.session_type] : null;
+    const gymProfile = firstSet?.gym_profile?.trim() || null;
 
     const handleDeleteClick = (id: number) => {
         setConfirmingDeleteId(id);
@@ -75,11 +78,25 @@ export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEd
         <article className="relative overflow-hidden bg-white/[0.02] border border-white/5 rounded-2xl backdrop-blur-md shadow-sm transition-all duration-300">
             {/* Header: Date & Exercise */}
             <div className="relative px-5 py-4 border-b border-white/5 bg-gradient-to-r from-white/[0.03] to-transparent flex items-start sm:items-center justify-between gap-4">
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-white text-lg tracking-tight">{exerciseName}</h3>
                     <p className="text-xs text-[var(--muted-foreground)] font-medium mt-0.5">
                         {formatDate(dateLabel)}
                     </p>
+                    {(sessionTypeLabel || gymProfile) && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                            {sessionTypeLabel && (
+                                <span className="max-w-full truncate rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5">
+                                    {sessionTypeLabel}
+                                </span>
+                            )}
+                            {gymProfile && (
+                                <span className="max-w-full truncate rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5" title={gymProfile}>
+                                    {gymProfile}
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Add Button */}
@@ -94,6 +111,7 @@ export default function GroupedWorkoutCard({ dateLabel, exerciseName, sets, onEd
                                 rpe: lastSet.rpe,
                                 is_bodyweight: lastSet.is_bodyweight,
                                 is_assisted: lastSet.is_assisted,
+                                pain: lastSet.pain,
                             });
                         }}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--chart-2)] hover:text-[var(--chart-1)] hover:bg-[var(--chart-2)]/20 rounded-lg transition-colors"
