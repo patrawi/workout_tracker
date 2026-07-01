@@ -149,6 +149,8 @@ export default function HistoryPage() {
                                             <span style={{ color: "oklch(0.65 0.22 55 / 0.8)" }}>C: {entry.carbs.toFixed(0)}</span>
                                             <span className="opacity-30">|</span>
                                             <span style={{ color: "oklch(0.65 0.2 330 / 0.8)" }}>F: {entry.fat.toFixed(0)}</span>
+                                            <span className="opacity-30">|</span>
+                                            <span style={{ color: "oklch(0.74 0.13 225 / 0.8)" }}>A: {entry.alcohol.toFixed(0)}</span>
                                             <span className="opacity-30">•</span>
                                             <span className="text-[var(--muted-foreground)] font-medium tabular-nums">{entry.calories.toFixed(0)} kcal</span>
                                         </div>

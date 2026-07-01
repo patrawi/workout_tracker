@@ -148,7 +148,8 @@ export const nutritionLogs = pgTable(
         protein: real("protein").default(0),                   // grams, after scaling
         carbs: real("carbs").default(0),                       // grams, after scaling
         fat: real("fat").default(0),                           // grams, after scaling
-        calories: real("calories").default(0),                 // computed: P×4 + C×4 + F×9
+        alcohol: real("alcohol").default(0),                   // grams, after scaling
+        calories: real("calories").default(0),                 // label kcal, or computed: P×4 + C×4 + F×9 + alcohol×7
         created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
     },
     (table) => [
@@ -204,4 +205,3 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   auth: text('auth').notNull(),
   created_at: timestamp('created_at').defaultNow().notNull(),
 });
-

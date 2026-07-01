@@ -93,6 +93,7 @@ export function mapNutritionLogRow(
     protein: defaultNumber(row.protein),
     carbs: defaultNumber(row.carbs),
     fat: defaultNumber(row.fat),
+    alcohol: defaultNumber(row.alcohol),
     calories: defaultNumber(row.calories),
     created_at: defaultString(row.created_at),
   };

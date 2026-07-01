@@ -14,7 +14,7 @@ export const nutritionApi = {
     getDates: () =>
         api.get<string[]>("/nutrition/dates"),
 
-    updateItem: (id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "calories">>) =>
+    updateItem: (id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>) =>
         api.put<NutritionRow>(`/nutrition/${id}`, updates),
 
     deleteItem: (id: number) =>
@@ -23,4 +23,3 @@ export const nutritionApi = {
     deleteByDate: (date: string) =>
         api.del<{ deleted: boolean }>(`/nutrition/date/${date}`),
 };
-

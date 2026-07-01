@@ -21,6 +21,7 @@ interface DailySummary {
     totalProtein: number;
     totalCarbs: number;
     totalFat: number;
+    totalAlcohol: number;
     totalCalories: number;
 }
 
@@ -46,7 +47,7 @@ interface UseNutritionReturn {
     confirmItems: (items: NutritionItem[]) => Promise<void>;
     cancelReview: () => void;
     deleteItem: (id: number) => Promise<void>;
-    updateItem: (id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "calories">>) => Promise<void>;
+    updateItem: (id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>) => Promise<void>;
     deleteDay: () => Promise<void>;
 
     // Error
@@ -104,14 +105,16 @@ export function useNutrition(initialDate?: string): UseNutritionReturn {
         let totalProtein = 0;
         let totalCarbs = 0;
         let totalFat = 0;
+        let totalAlcohol = 0;
         let totalCalories = 0;
         for (const item of items) {
             totalProtein += item.protein;
             totalCarbs += item.carbs;
             totalFat += item.fat;
+            totalAlcohol += item.alcohol;
             totalCalories += item.calories;
         }
-        return { totalProtein, totalCarbs, totalFat, totalCalories };
+        return { totalProtein, totalCarbs, totalFat, totalAlcohol, totalCalories };
     }, [items]);
 
     const parseMutation = useMutation({
@@ -151,7 +154,7 @@ export function useNutrition(initialDate?: string): UseNutritionReturn {
     });
 
     const updateItemMutation = useMutation({
-        mutationFn: async ({ id, updates }: { id: number; updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "calories">> }) => {
+        mutationFn: async ({ id, updates }: { id: number; updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">> }) => {
             const res = await nutritionApi.updateItem(id, updates);
             if (res.success && res.data) return res.data;
             throw new Error("Failed to update item");
@@ -209,7 +212,7 @@ export function useNutrition(initialDate?: string): UseNutritionReturn {
         await deleteItemRef.current(id).catch(() => {});
     }, []);
 
-    const updateItem = useCallback(async (id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "calories">>) => {
+    const updateItem = useCallback(async (id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>) => {
         await updateItemRef.current({ id, updates }).catch(() => {});
     }, []);
 

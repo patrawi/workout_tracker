@@ -95,14 +95,16 @@ export default function DailyWorkoutPage() {
         let protein = 0;
         let carbs = 0;
         let fat = 0;
+        let alcohol = 0;
         let calories = 0;
         for (const i of nutritionItems) {
             protein += i.protein;
             carbs += i.carbs;
             fat += i.fat;
+            alcohol += i.alcohol;
             calories += i.calories;
         }
-        return { protein, carbs, fat, calories };
+        return { protein, carbs, fat, alcohol, calories };
     }, [nutritionItems]);
 
     if (isLoading) {
@@ -206,6 +208,14 @@ export default function DailyWorkoutPage() {
                                 color="oklch(0.65 0.2 330)"
                                 bgColor="oklch(0.65 0.2 330 / 0.1)"
                             />
+                            <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: "oklch(0.74 0.13 225 / 0.08)", border: "1px solid oklch(0.74 0.13 225 / 0.18)" }}>
+                                <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">
+                                    Alcohol
+                                </span>
+                                <span className="text-sm font-semibold tabular-nums" style={{ color: "oklch(0.74 0.13 225)" }}>
+                                    {nutritionSummary.alcohol.toFixed(1)}g consumed
+                                </span>
+                            </div>
                         </div>
 
                         {/* Total Calories */}

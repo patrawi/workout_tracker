@@ -1,0 +1,1 @@
+ALTER TABLE "nutrition_logs" ADD COLUMN "alcohol" real DEFAULT 0;

@@ -109,3 +109,13 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## Nutrition Alcohol Calories
+
+Alcohol is a first-class nutrition macro in this app. Store alcohol as grams and include it in calories at 7 kcal/g:
+
+```text
+calories = protein_g * 4 + carbs_g * 4 + fat_g * 9 + alcohol_g * 7
+```
+
+When a clearly alcoholic item has label calories but no alcohol grams, extract the printed calories and known macros, then infer alcohol deterministically from the calorie gap. Do not ask the LLM to infer alcohol. See `../docs/nutrition-alcohol-domain.md`.

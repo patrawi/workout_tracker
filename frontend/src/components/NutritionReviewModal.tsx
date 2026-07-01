@@ -11,8 +11,8 @@ interface NutritionReviewModalProps {
 
 const MEAL_ORDER = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
-function computeCalories(p: number, c: number, f: number): number {
-    return Math.round((p * 4 + c * 4 + f * 9) * 10) / 10;
+function computeCalories(p: number, c: number, f: number, a: number): number {
+    return Math.round((p * 4 + c * 4 + f * 9 + a * 7) * 10) / 10;
 }
 
 export default function NutritionReviewModal({
@@ -30,11 +30,12 @@ export default function NutritionReviewModal({
                 const updated = { ...copy[index], [field]: value };
 
                 // Auto-recompute calories when macros change
-                if (field === "protein" || field === "carbs" || field === "fat") {
+                if (field === "protein" || field === "carbs" || field === "fat" || field === "alcohol") {
                     updated.calories = computeCalories(
                         field === "protein" ? (value as number) : updated.protein,
                         field === "carbs" ? (value as number) : updated.carbs,
                         field === "fat" ? (value as number) : updated.fat,
+                        field === "alcohol" ? (value as number) : updated.alcohol,
                     );
                 }
 
@@ -45,7 +46,8 @@ export default function NutritionReviewModal({
                     updated.protein = Math.round(updated.catalog.protein * scale * 10) / 10;
                     updated.carbs = Math.round(updated.catalog.carbs * scale * 10) / 10;
                     updated.fat = Math.round(updated.catalog.fat * scale * 10) / 10;
-                    updated.calories = computeCalories(updated.protein, updated.carbs, updated.fat);
+                    updated.alcohol = Math.round((updated.catalog.alcohol ?? 0) * scale * 10) / 10;
+                    updated.calories = computeCalories(updated.protein, updated.carbs, updated.fat, updated.alcohol);
                 }
 
                 copy[index] = updated;
@@ -81,16 +83,18 @@ export default function NutritionReviewModal({
         let totalProtein = 0;
         let totalCarbs = 0;
         let totalFat = 0;
+        let totalAlcohol = 0;
         let totalCalories = 0;
         for (const i of items) {
             totalProtein += i.protein;
             totalCarbs += i.carbs;
             totalFat += i.fat;
+            totalAlcohol += i.alcohol;
             totalCalories += i.calories;
         }
-        return { totalProtein, totalCarbs, totalFat, totalCalories };
+        return { totalProtein, totalCarbs, totalFat, totalAlcohol, totalCalories };
     }, [items]);
-    const { totalProtein, totalCarbs, totalFat, totalCalories } = totals;
+    const { totalProtein, totalCarbs, totalFat, totalAlcohol, totalCalories } = totals;
 
     const mealIcon: Record<string, string> = {
         Breakfast: "B",
@@ -139,6 +143,9 @@ export default function NutritionReviewModal({
                         </span>
                         <span className="text-rose-400 font-medium">
                             F: {totalFat.toFixed(1)}g
+                        </span>
+                        <span className="text-sky-400 font-medium">
+                            A: {totalAlcohol.toFixed(1)}g
                         </span>
                         <span className="text-surface-300">|</span>
                         <span className="text-white font-semibold">
@@ -254,7 +261,7 @@ export default function NutritionReviewModal({
                                         ) : null}
 
                                         {/* Macros grid */}
-                                        <div className="grid grid-cols-4 gap-3">
+                                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                             <div>
                                                 <label className="text-xs text-emerald-400/70 block mb-1">
                                                     Protein (g)
@@ -296,6 +303,22 @@ export default function NutritionReviewModal({
                                                     value={item.fat}
                                                     onChange={(e) =>
                                                         updateItem(originalIndex, "fat", Number(e.target.value))
+                                                    }
+                                                    className="glass-input w-full px-3 py-1.5 text-sm text-white font-variant-numeric tabular-nums"
+                                                    step="0.1"
+                                                    min="0"
+                                                    inputMode="decimal"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-sky-400/70 block mb-1">
+                                                    Alcohol (g)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    value={item.alcohol}
+                                                    onChange={(e) =>
+                                                        updateItem(originalIndex, "alcohol", Number(e.target.value))
                                                     }
                                                     className="glass-input w-full px-3 py-1.5 text-sm text-white font-variant-numeric tabular-nums"
                                                     step="0.1"

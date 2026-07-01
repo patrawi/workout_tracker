@@ -30,6 +30,7 @@ export function registerNutritionRoutes(app: any, ctx: AppContext): void {
             protein: t.Number(),
             carbs: t.Number(),
             fat: t.Number(),
+            alcohol: t.Optional(t.Number()),
             calories: t.Number(),
             has_missing_macros: t.Boolean(),
             amount: t.Optional(t.Number()),
@@ -61,6 +62,7 @@ export function registerNutritionRoutes(app: any, ctx: AppContext): void {
         protein: t.Optional(t.Number()),
         carbs: t.Optional(t.Number()),
         fat: t.Optional(t.Number()),
+        alcohol: t.Optional(t.Number()),
         calories: t.Optional(t.Number()),
       }),
     })

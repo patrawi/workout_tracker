@@ -19,6 +19,7 @@ const PAGE_VARS = {
     "--accent-glow": "oklch(0.72 0.19 160 / 0.18)",
     "--carb": "var(--chart-4)",
     "--fat": "var(--chart-5)",
+    "--alcohol": "oklch(0.74 0.13 225)",
     "--teal": "var(--color-glow-cyan)",
     "--card-2": "var(--color-surface-200)",
     "--text": "var(--foreground)",
@@ -36,7 +37,7 @@ const MEALS: { id: MealType; emoji: string }[] = [
 
 const r0 = (n: number) => Math.round(n);
 const r1 = (n: number) => Math.round(n * 10) / 10;
-const calcKcal = (p: number, c: number, f: number) => Math.round((p * 4 + c * 4 + f * 9) * 10) / 10;
+const calcKcal = (p: number, c: number, f: number, a: number) => Math.round((p * 4 + c * 4 + f * 9 + a * 7) * 10) / 10;
 
 // ——— Date helpers (YYYY-MM-DD strings) ———
 const fromYMD = (s: string) => new Date(s + "T00:00:00");
@@ -225,18 +226,18 @@ function DeltaBadge({ current, previous }: { current: number; previous: number }
 
 // ——— Macro bars ———
 function MacroBars({ totals, goals, prev }: {
-    totals: { p: number; c: number; f: number };
+    totals: { p: number; c: number; f: number; a: number };
     goals: { protein: number; carbs: number; fat: number };
-    prev: { p: number; c: number; f: number };
+    prev: { p: number; c: number; f: number; a: number };
 }) {
-    const rows = [
+    const goalRows = [
         { k: "Protein", v: totals.p, g: goals.protein, color: "var(--accent)", pv: prev.p },
         { k: "Carbs", v: totals.c, g: goals.carbs, color: "var(--carb)", pv: prev.c },
         { k: "Fat", v: totals.f, g: goals.fat, color: "var(--fat)", pv: prev.f },
     ];
     return (
         <div style={{ display: "grid", gap: 15 }}>
-            {rows.map((row) => {
+            {goalRows.map((row) => {
                 const pct = row.g > 0 ? Math.min(row.v / row.g, 1) : 0;
                 const remain = row.g - row.v;
                 return (
@@ -260,6 +261,16 @@ function MacroBars({ totals, goals, prev }: {
                     </div>
                 );
             })}
+            <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".04em" }}>Alcohol</span>
+                    <span style={{ fontSize: 13, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>
+                        <b style={{ color: "var(--alcohol)" }}>{r1(totals.a)}</b>
+                        <span style={{ color: "var(--faint)" }}> g consumed</span>
+                        <DeltaBadge current={totals.a} previous={prev.a} />
+                    </span>
+                </div>
+            </div>
         </div>
     );
 }
@@ -393,18 +404,18 @@ function AIInput({ dateLabel, value, setValue, onParse, onManual, isParsing }: {
 // ——— Add / edit food modal ———
 function AddFoodModal({ open, meal, initial, onClose, onSave, isSaving }: {
     open: boolean; meal: MealType; initial?: NutritionRow | null;
-    onClose: () => void; onSave: (meal: MealType, f: { name: string; p: number; c: number; f: number; kcal: number }) => void; isSaving: boolean;
+    onClose: () => void; onSave: (meal: MealType, f: { name: string; p: number; c: number; f: number; a: number; kcal: number }) => void; isSaving: boolean;
 }) {
     // Fresh state each open — parent remounts via `key`, so init lazily from props.
     const [f, setF] = useState(() => initial
-        ? { name: initial.food_name, meal: initial.meal, p: String(initial.protein), c: String(initial.carbs), f: String(initial.fat), kcal: String(initial.calories) }
-        : { name: "", meal, p: "", c: "", f: "", kcal: "" });
+        ? { name: initial.food_name, meal: initial.meal, p: String(initial.protein), c: String(initial.carbs), f: String(initial.fat), a: String(initial.alcohol), kcal: String(initial.calories) }
+        : { name: "", meal, p: "", c: "", f: "", a: "", kcal: "" });
     if (!open) return null;
     const num = (x: string) => (x === "" ? 0 : +x || 0);
-    const autoKcal = calcKcal(num(f.p), num(f.c), num(f.f));
+    const autoKcal = calcKcal(num(f.p), num(f.c), num(f.f), num(f.a));
     const save = () => {
         if (!f.name.trim()) return;
-        onSave(f.meal, { name: f.name.trim(), p: num(f.p), c: num(f.c), f: num(f.f), kcal: f.kcal === "" ? autoKcal : num(f.kcal) });
+        onSave(f.meal, { name: f.name.trim(), p: num(f.p), c: num(f.c), f: num(f.f), a: num(f.a), kcal: f.kcal === "" ? autoKcal : num(f.kcal) });
     };
     const fld: React.CSSProperties = { width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-2)", color: "var(--text)", fontSize: 16, fontFamily: "inherit" };
     const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 5, display: "block" };
@@ -427,10 +438,11 @@ function AddFoodModal({ open, meal, initial, onClose, onSave, isSaving }: {
                             {MEALS.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
                         </select>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
                         <div><label style={lbl}>Protein</label><input inputMode="decimal" value={f.p} onChange={(e) => setF({ ...f, p: e.target.value })} placeholder="g" style={fld} /></div>
                         <div><label style={lbl}>Carbs</label><input inputMode="decimal" value={f.c} onChange={(e) => setF({ ...f, c: e.target.value })} placeholder="g" style={fld} /></div>
                         <div><label style={lbl}>Fat</label><input inputMode="decimal" value={f.f} onChange={(e) => setF({ ...f, f: e.target.value })} placeholder="g" style={fld} /></div>
+                        <div><label style={lbl}>Alcohol</label><input inputMode="decimal" value={f.a} onChange={(e) => setF({ ...f, a: e.target.value })} placeholder="g" style={fld} /></div>
                     </div>
                     <div>
                         <label style={lbl}>Calories <span style={{ textTransform: "none", color: "var(--faint)" }}>(auto: {r0(autoKcal)} kcal)</span></label>
@@ -466,6 +478,7 @@ function ColHead() {
             <span className="nut-pcf" style={{ textAlign: "right" }}>P</span>
             <span className="nut-pcf" style={{ textAlign: "right" }}>C</span>
             <span className="nut-pcf" style={{ textAlign: "right" }}>F</span>
+            <span className="nut-pcf" style={{ textAlign: "right" }}>A</span>
             <span style={{ textAlign: "right" }}>kcal</span>
         </div>
     );
@@ -479,6 +492,7 @@ function FoodRow({ it, onRemove, onEdit }: { it: NutritionRow; onRemove: () => v
             <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.protein)}</span>
             <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.carbs)}</span>
             <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.fat)}</span>
+            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.alcohol)}</span>
             <span style={{ textAlign: "right", fontSize: 14, color: "var(--text)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{r0(it.calories)}</span>
             <div className="nut-actions">
                 <button className="nut-tap" onClick={onEdit} title="Edit" aria-label={`Edit ${it.food_name}`} style={actBtn}><Icon name="edit" size={13} /></button>
@@ -492,7 +506,7 @@ function MealSection({ meal, emoji, items, onAdd, onRemove, onEdit }: {
     meal: MealType; emoji: string; items: NutritionRow[];
     onAdd: (m: MealType) => void; onRemove: (id: number) => void; onEdit: (it: NutritionRow) => void;
 }) {
-    const s = useMemo(() => items.reduce((a, i) => ({ p: a.p + i.protein, c: a.c + i.carbs, f: a.f + i.fat, kcal: a.kcal + i.calories }), { p: 0, c: 0, f: 0, kcal: 0 }), [items]);
+    const s = useMemo(() => items.reduce((a, i) => ({ p: a.p + i.protein, c: a.c + i.carbs, f: a.f + i.fat, alc: a.alc + i.alcohol, kcal: a.kcal + i.calories }), { p: 0, c: 0, f: 0, alc: 0, kcal: 0 }), [items]);
     const has = items.length > 0;
     const addMealBtn: React.CSSProperties = { width: 32, height: 32, borderRadius: 9, border: "1px solid var(--accent-line)", background: "var(--accent-soft)", color: "var(--accent)", fontSize: 19, fontWeight: 600, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 };
     return (
@@ -502,7 +516,7 @@ function MealSection({ meal, emoji, items, onAdd, onRemove, onEdit }: {
                     <span style={{ fontSize: 22 }}>{emoji}</span>
                     <div>
                         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{meal}</div>
-                        {has && <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 1, whiteSpace: "nowrap" }}>P {r1(s.p)} · C {r1(s.c)} · F {r1(s.f)}</div>}
+                        {has && <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 1, whiteSpace: "nowrap" }}>P {r1(s.p)} · C {r1(s.c)} · F {r1(s.f)} · A {r1(s.alc)}</div>}
                     </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -567,7 +581,7 @@ export default function NutritionPage() {
         },
         staleTime: 1000 * 60 * 5,
     });
-    const prevTotals = useMemo(() => prevItems.reduce((a, i) => ({ p: a.p + i.protein, c: a.c + i.carbs, f: a.f + i.fat }), { p: 0, c: 0, f: 0 }), [prevItems]);
+    const prevTotals = useMemo(() => prevItems.reduce((a, i) => ({ p: a.p + i.protein, c: a.c + i.carbs, f: a.f + i.fat, a: a.a + i.alcohol }), { p: 0, c: 0, f: 0, a: 0 }), [prevItems]);
 
     // Add / edit modal
     const [modal, setModal] = useState<{ open: boolean; meal: MealType; editing: NutritionRow | null; nonce: number }>({ open: false, meal: "Breakfast", editing: null, nonce: 0 });
@@ -586,15 +600,15 @@ export default function NutritionPage() {
         flash("Saved to log");
     }, [confirmItems, flash]);
 
-    const handleModalSave = useCallback(async (meal: MealType, f: { name: string; p: number; c: number; f: number; kcal: number }) => {
+    const handleModalSave = useCallback(async (meal: MealType, f: { name: string; p: number; c: number; f: number; a: number; kcal: number }) => {
         if (modal.editing) {
             await updateItem(modal.editing.id, {
-                food_name: f.name, meal, protein: r1(f.p), carbs: r1(f.c), fat: r1(f.f), calories: r1(f.kcal),
+                food_name: f.name, meal, protein: r1(f.p), carbs: r1(f.c), fat: r1(f.f), alcohol: r1(f.a), calories: r1(f.kcal),
             });
             flash("Updated");
         } else {
             const item: NutritionItem = {
-                food_name: f.name, meal, protein: r1(f.p), carbs: r1(f.c), fat: r1(f.f), calories: r1(f.kcal),
+                food_name: f.name, meal, protein: r1(f.p), carbs: r1(f.c), fat: r1(f.f), alcohol: r1(f.a), calories: r1(f.kcal),
                 amount: 1, unit: "serving", has_missing_macros: false,
             };
             await confirmItems([item]);
@@ -626,7 +640,7 @@ export default function NutritionPage() {
                    The trailing action track is a FIXED width (var --act) shared by
                    header and rows, so every macro column lines up. Buttons are
                    absolutely positioned within that reserved track, out of flow. */
-                .nut-row { display: grid; grid-template-columns: 1fr 54px 54px 54px 74px var(--act, 64px); align-items: center; position: relative; }
+                .nut-row { display: grid; grid-template-columns: 1fr 48px 48px 48px 48px 74px var(--act, 64px); align-items: center; position: relative; }
                 @media (max-width: 560px) { .nut-row { grid-template-columns: 1fr auto var(--act, 64px); column-gap: 12px; } .nut-pcf { display: none; } }
                 @media (pointer: coarse) { .nut-row { --act: 96px; } }
 
@@ -683,7 +697,7 @@ export default function NutritionPage() {
                         </div>
                         <div style={{ flex: 1, minWidth: 220 }}>
                             <MacroBars
-                                totals={{ p: summary.totalProtein, c: summary.totalCarbs, f: summary.totalFat }}
+                                totals={{ p: summary.totalProtein, c: summary.totalCarbs, f: summary.totalFat, a: summary.totalAlcohol }}
                                 goals={{ protein: targets.protein_target, carbs: targets.carbs_target, fat: targets.fat_target }}
                                 prev={prevTotals}
                             />

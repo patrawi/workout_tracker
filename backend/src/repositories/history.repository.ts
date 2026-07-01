@@ -10,6 +10,7 @@ export interface HistoryDate {
   protein: number;
   carbs: number;
   fat: number;
+  alcohol: number;
   calories: number;
 }
 
@@ -28,6 +29,7 @@ export function createHistoryRepository(dbInstance: PostgresJsDatabase) {
         total_protein: number;
         total_carbs: number;
         total_fat: number;
+        total_alcohol: number;
         total_calories: number;
       }>(sql`
         SELECT
@@ -38,6 +40,7 @@ export function createHistoryRepository(dbInstance: PostgresJsDatabase) {
           COALESCE(n.total_protein, 0) AS total_protein,
           COALESCE(n.total_carbs, 0) AS total_carbs,
           COALESCE(n.total_fat, 0) AS total_fat,
+          COALESCE(n.total_alcohol, 0) AS total_alcohol,
           COALESCE(n.total_calories, 0) AS total_calories
         FROM (
           SELECT DISTINCT DATE(${workouts.created_at})::text AS date FROM ${workouts}
@@ -64,6 +67,7 @@ export function createHistoryRepository(dbInstance: PostgresJsDatabase) {
             SUM(${nutritionLogs.protein})::real AS total_protein,
             SUM(${nutritionLogs.carbs})::real AS total_carbs,
             SUM(${nutritionLogs.fat})::real AS total_fat,
+            SUM(${nutritionLogs.alcohol})::real AS total_alcohol,
             SUM(${nutritionLogs.calories})::real AS total_calories
           FROM ${nutritionLogs}
           WHERE ${nutritionLogs.date} = d.date
@@ -80,6 +84,7 @@ export function createHistoryRepository(dbInstance: PostgresJsDatabase) {
         protein: Number(row.total_protein) || 0,
         carbs: Number(row.total_carbs) || 0,
         fat: Number(row.total_fat) || 0,
+        alcohol: Number(row.total_alcohol) || 0,
         calories: Number(row.total_calories) || 0,
       }));
     },

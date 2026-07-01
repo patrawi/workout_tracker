@@ -14,7 +14,7 @@ export interface NutritionService {
   log(items: NutritionItem[], date: string): Promise<NutritionRow[]>;
   getByDate(date: string): Promise<NutritionRow[]>;
   getDates(): Promise<string[]>;
-  update(id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "calories">>): Promise<NutritionRow | null>;
+  update(id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>): Promise<NutritionRow | null>;
   deleteItem(id: number): Promise<void>;
   deleteByDate(date: string): Promise<void>;
 }
@@ -63,7 +63,7 @@ export function createNutritionService(
       return repo.getDates();
     },
 
-    async update(id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "calories">>): Promise<NutritionRow | null> {
+    async update(id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>): Promise<NutritionRow | null> {
       return repo.update(id, updates);
     },
 

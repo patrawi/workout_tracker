@@ -8,6 +8,7 @@ export interface HistoryDate {
     protein: number;
     carbs: number;
     fat: number;
+    alcohol: number;
     calories: number;
 }
 

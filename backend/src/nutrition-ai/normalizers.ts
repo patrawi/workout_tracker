@@ -2,11 +2,43 @@
 
 import type { NutritionItem, MealType, RawLLMItem } from "../types";
 
+const ALCOHOL_TERMS = [
+  "beer",
+  "lager",
+  "ale",
+  "cider",
+  "stout",
+  "ipa",
+  "wine",
+  "prosecco",
+  "champagne",
+  "vodka",
+  "gin",
+  "whisky",
+  "whiskey",
+  "rum",
+  "tequila",
+  "cocktail",
+  "เบียร์",
+  "ไวน์",
+  "เหล้า",
+];
+
 /**
  * Round a number to 1 decimal place.
  */
 export function roundTo1(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+export function isAlcoholicItemName(foodName: string): boolean {
+  const normalized = foodName.toLowerCase();
+  return ALCOHOL_TERMS.some((term) => normalized.includes(term));
+}
+
+function traceAwareMacro(value: number | null | undefined, isTrace: boolean | undefined, isAlcoholic: boolean): number {
+  if (isAlcoholic && isTrace) return 0;
+  return Number(value ?? 0);
 }
 
 /**
@@ -31,23 +63,36 @@ export function normalizeNutritionItem(item: RawLLMItem): NutritionItem {
   const amountEaten = Number(item.amount_eaten_value) || 1;
 
   const scaleFactor = servingSize > 0 ? (amountEaten / servingSize) : 1;
+  const foodName = String(item.food_name || "Unknown Food");
+  const isAlcoholic = isAlcoholicItemName(foodName);
 
-  const baseProtein = Number(item.protein ?? 0);
-  const baseCarbs = Number(item.carbs ?? 0);
-  const baseFat = Number(item.fat ?? 0);
+  const baseProtein = traceAwareMacro(item.protein, item.protein_is_trace, isAlcoholic);
+  const baseCarbs = traceAwareMacro(item.carbs, item.carbs_is_trace, isAlcoholic);
+  const baseFat = traceAwareMacro(item.fat, item.fat_is_trace, isAlcoholic);
+  const baseAlcohol = Number(item.alcohol ?? 0);
+  const rawCalories = item.calories === null || item.calories === undefined ? null : Number(item.calories);
+  const baseCalories = rawCalories !== null && Number.isFinite(rawCalories) ? rawCalories : null;
 
   const protein = roundTo1(baseProtein * scaleFactor);
   const carbs = roundTo1(baseCarbs * scaleFactor);
   const fat = roundTo1(baseFat * scaleFactor);
-  const calories = roundTo1((protein * 4) + (carbs * 4) + (fat * 9));
-  const hasMissingMacros = baseProtein === 0 && baseCarbs === 0 && baseFat === 0;
+  const explicitAlcohol = roundTo1(baseAlcohol * scaleFactor);
+  const labelCalories = baseCalories === null ? null : roundTo1(baseCalories * scaleFactor);
+  const knownCalories = (protein * 4) + (carbs * 4) + (fat * 9);
+  const inferredAlcohol = isAlcoholic && labelCalories !== null && explicitAlcohol === 0
+    ? roundTo1(Math.max(0, (labelCalories - knownCalories) / 7))
+    : 0;
+  const alcohol = explicitAlcohol || inferredAlcohol;
+  const calories = labelCalories ?? roundTo1(knownCalories + (alcohol * 7));
+  const hasMissingMacros = baseProtein === 0 && baseCarbs === 0 && baseFat === 0 && alcohol === 0;
 
   return {
-    food_name: String(item.food_name || "Unknown Food"),
+    food_name: foodName,
     meal: normalizeMeal(String(item.meal || "Snack")),
     protein,
     carbs,
     fat,
+    alcohol,
     calories,
     amount: amountEaten,
     unit: String(item.amount_eaten_unit || "g"),

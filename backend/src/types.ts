@@ -57,6 +57,11 @@ export interface RawLLMItem {
   protein?: number | null;
   carbs?: number | null;
   fat?: number | null;
+  alcohol?: number | null;
+  calories?: number | null;
+  protein_is_trace?: boolean;
+  carbs_is_trace?: boolean;
+  fat_is_trace?: boolean;
   serving_size_value?: number;
   serving_size_unit?: string;
   amount_eaten_value?: number;
@@ -69,7 +74,8 @@ export interface NutritionItem {
   protein: number;       // grams (after scaling)
   carbs: number;
   fat: number;
-  calories: number;      // computed in code: Px4 + Cx4 + Fx9
+  alcohol: number;
+  calories: number;      // label kcal, or computed in code: P*4 + C*4 + F*9 + alcohol*7
   amount: number;        // how much was eaten
   unit: string;          // "g" | "ml" | "serving" | "piece"
   has_missing_macros: boolean;  // true when LLM couldn't extract macros
@@ -86,6 +92,7 @@ export interface NutritionItem {
     protein: number;
     carbs: number;
     fat: number;
+    alcohol?: number;
   };
 }
 
@@ -97,6 +104,7 @@ export interface NutritionRow {
   protein: number;
   carbs: number;
   fat: number;
+  alcohol: number;
   calories: number;
   created_at: string;
 }

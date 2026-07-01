@@ -89,7 +89,8 @@ export interface NutritionItem {
     protein: number;       // grams (after scaling)
     carbs: number;
     fat: number;
-    calories: number;      // computed: Px4 + Cx4 + Fx9
+    alcohol: number;
+    calories: number;      // label kcal, or computed: P*4 + C*4 + F*9 + alcohol*7
     amount: number;        // how much was eaten
     unit: string;          // "g" | "ml" | "serving" | "piece"
     has_missing_macros: boolean;  // true when LLM couldn't extract macros
@@ -105,6 +106,7 @@ export interface NutritionItem {
         protein: number;
         carbs: number;
         fat: number;
+        alcohol?: number;
     };
 }
 
@@ -116,6 +118,7 @@ export interface NutritionRow {
     protein: number;
     carbs: number;
     fat: number;
+    alcohol: number;
     calories: number;
     created_at: string;
 }

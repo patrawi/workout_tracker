@@ -1,5 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import {
+  isAlcoholicItemName,
   normalizeNutritionItem,
   normalizeMeal,
   roundTo1,
@@ -38,6 +39,14 @@ describe("normalizeMeal", () => {
   });
 });
 
+describe("isAlcoholicItemName", () => {
+  test("recognizes English and Thai alcohol terms", () => {
+    expect(isAlcoholicItemName("เบียร์ Birra Moretti Premium Lager")).toBe(true);
+    expect(isAlcoholicItemName("House red wine")).toBe(true);
+    expect(isAlcoholicItemName("Greek yogurt")).toBe(false);
+  });
+});
+
 describe("normalizeNutritionItem", () => {
   test("applies defaults to empty object", () => {
     const result = normalizeNutritionItem({});
@@ -47,6 +56,7 @@ describe("normalizeNutritionItem", () => {
     expect(result.protein).toBe(0);
     expect(result.carbs).toBe(0);
     expect(result.fat).toBe(0);
+    expect(result.alcohol).toBe(0);
     expect(result.calories).toBe(0);
     expect(result.amount).toBe(1);
     expect(result.unit).toBe("g");
@@ -71,6 +81,7 @@ describe("normalizeNutritionItem", () => {
     expect(result.protein).toBe(62);   // 31 * 2
     expect(result.carbs).toBe(0);
     expect(result.fat).toBe(7.2);      // 3.6 * 2
+    expect(result.alcohol).toBe(0);
     expect(result.calories).toBe(312.8); // 62*4 + 0*4 + 7.2*9 = 248 + 64.8
     expect(result.amount).toBe(200);
     expect(result.unit).toBe("g");
@@ -127,6 +138,7 @@ describe("normalizeNutritionItem", () => {
     expect(result.protein).toBe(0);
     expect(result.carbs).toBe(0);
     expect(result.fat).toBe(0);
+    expect(result.alcohol).toBe(0);
     expect(result.calories).toBe(0);
     expect(result.has_missing_macros).toBe(true);
   });
@@ -143,5 +155,43 @@ describe("normalizeNutritionItem", () => {
 
     expect(result.amount).toBe(250);
     expect(result.unit).toBe("ml");
+  });
+
+  test("preserves scaled label calories and infers alcohol from beer calorie gap", () => {
+    const result = normalizeNutritionItem({
+      food_name: "เบียร์ Birra Moretti Premium Lager",
+      meal: "Snack",
+      calories: 38,
+      protein: 0.3,
+      carbs: 3.2,
+      fat: 0.1,
+      fat_is_trace: true,
+      serving_size_value: 100,
+      serving_size_unit: "ml",
+      amount_eaten_value: 440,
+      amount_eaten_unit: "ml",
+    });
+
+    expect(result.protein).toBe(1.3);
+    expect(result.carbs).toBe(14.1);
+    expect(result.fat).toBe(0);
+    expect(result.alcohol).toBe(15.1);
+    expect(result.calories).toBe(167.2);
+    expect(result.has_missing_macros).toBe(false);
+  });
+
+  test("does not infer alcohol from calorie gap for normal food", () => {
+    const result = normalizeNutritionItem({
+      food_name: "Granola Bar",
+      calories: 200,
+      protein: 5,
+      carbs: 20,
+      fat: 5,
+      serving_size_value: 1,
+      amount_eaten_value: 1,
+    });
+
+    expect(result.alcohol).toBe(0);
+    expect(result.calories).toBe(200);
   });
 });

@@ -9,6 +9,7 @@ function item(overrides: Partial<NutritionItem>): NutritionItem {
     protein: 0,
     carbs: 0,
     fat: 0,
+    alcohol: 0,
     calories: 0,
     amount: 100,
     unit: "g",

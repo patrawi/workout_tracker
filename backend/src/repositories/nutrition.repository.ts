@@ -16,6 +16,7 @@ export function createNutritionRepository(dbInstance: PostgresJsDatabase) {
         protein: item.protein,
         carbs: item.carbs,
         fat: item.fat,
+        alcohol: item.alcohol ?? 0,
         calories: item.calories,
       }));
 
@@ -29,7 +30,7 @@ export function createNutritionRepository(dbInstance: PostgresJsDatabase) {
 
     async update(
       id: number,
-      updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "calories">>,
+      updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>,
     ): Promise<NutritionRow | null> {
       const [updated] = await dbInstance
         .update(nutritionLogs)
