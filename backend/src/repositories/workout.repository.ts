@@ -37,6 +37,8 @@ export interface SessionExercise {
 export interface SessionWithWorkouts {
   session_id: number;
   created_at: string | null;
+  session_type: SessionType;
+  gym_profile: string;
   workouts: SessionExercise[];
 }
 
@@ -76,6 +78,41 @@ function mapWorkoutRowWithSession(
 // ─── Factory Pattern ─────────────────────────────────────────────────────────
 
 export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
+  async function hydrateSessions(
+    sess: { id: number; created_at: string | null; session_type: SessionType; gym_profile: string }[],
+  ): Promise<SessionWithWorkouts[]> {
+    if (sess.length === 0) return [];
+
+    const ids = sess.map((s) => s.id);
+    const rows = await dbInstance
+      .select()
+      .from(workouts)
+      .where(inArray(workouts.session_id, ids))
+      .orderBy(asc(workouts.session_id), asc(workouts.id));
+
+    const grouped = new Map<number, SessionExercise[]>();
+    for (const r of rows) {
+      const list = grouped.get(r.session_id) ?? [];
+      list.push({
+        exercise_name: r.exercise_name,
+        weight: r.weight ?? 0,
+        reps: r.reps ?? 0,
+        rpe: r.rpe ?? 0,
+        is_bodyweight: r.is_bodyweight ?? false,
+        muscle_group: r.muscle_group,
+      });
+      grouped.set(r.session_id, list);
+    }
+
+    return sess.map((s) => ({
+      session_id: s.id,
+      created_at: s.created_at,
+      session_type: s.session_type,
+      gym_profile: s.gym_profile,
+      workouts: grouped.get(s.id) ?? [],
+    }));
+  }
+
   return {
     async getRecent(limit = 50): Promise<WorkoutRow[]> {
       const rows = await dbInstance
@@ -308,39 +345,56 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
     // pull the latest actual sets for a given Push/Pull/Legs session.
     async getRecentSessionsWithWorkouts(limit = 30): Promise<SessionWithWorkouts[]> {
       const sess = await dbInstance
-        .select({ id: sessions.id, created_at: sessions.created_at })
+        .select({
+          id: sessions.id,
+          created_at: sessions.created_at,
+          session_type: sessions.session_type,
+          gym_profile: sessions.gym_profile,
+        })
         .from(sessions)
-        .orderBy(desc(sessions.created_at))
+        .orderBy(desc(sessions.created_at), desc(sessions.id))
         .limit(limit);
 
-      if (sess.length === 0) return [];
+      return hydrateSessions(sess);
+    },
 
-      const ids = sess.map((s) => s.id);
-      const rows = await dbInstance
-        .select()
-        .from(workouts)
-        .where(inArray(workouts.session_id, ids))
-        .orderBy(asc(workouts.id));
+    async getSessionWithWorkouts(sessionId: number): Promise<SessionWithWorkouts | null> {
+      const sess = await dbInstance
+        .select({
+          id: sessions.id,
+          created_at: sessions.created_at,
+          session_type: sessions.session_type,
+          gym_profile: sessions.gym_profile,
+        })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .limit(1);
 
-      const grouped = new Map<number, SessionExercise[]>();
-      for (const r of rows) {
-        const list = grouped.get(r.session_id) ?? [];
-        list.push({
-          exercise_name: r.exercise_name,
-          weight: r.weight ?? 0,
-          reps: r.reps ?? 0,
-          rpe: r.rpe ?? 0,
-          is_bodyweight: r.is_bodyweight ?? false,
-          muscle_group: r.muscle_group,
-        });
-        grouped.set(r.session_id, list);
-      }
+      return (await hydrateSessions(sess))[0] ?? null;
+    },
 
-      return sess.map((s) => ({
-        session_id: s.id,
-        created_at: s.created_at,
-        workouts: grouped.get(s.id) ?? [],
-      }));
+    async getSessionsBefore(sessionId: number, scanLimit = 80): Promise<SessionWithWorkouts[]> {
+      const [boundary] = await dbInstance
+        .select({ id: sessions.id, created_at: sessions.created_at })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .limit(1);
+
+      if (!boundary) return [];
+
+      const sess = await dbInstance
+        .select({
+          id: sessions.id,
+          created_at: sessions.created_at,
+          session_type: sessions.session_type,
+          gym_profile: sessions.gym_profile,
+        })
+        .from(sessions)
+        .where(sql`(${sessions.created_at}, ${sessions.id}) < (${boundary.created_at}, ${boundary.id})`)
+        .orderBy(desc(sessions.created_at), desc(sessions.id))
+        .limit(scanLimit);
+
+      return hydrateSessions(sess);
     },
 
     // Progressive overload (spec §4): one exercise's sets grouped by session with
@@ -348,7 +402,21 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
     async getExerciseSetsWithContext(
       exercise: string,
       sessionLimit = 12,
+      asOfSessionId?: number,
     ): Promise<ExerciseSessionContext[]> {
+      const conditions = [eq(workouts.exercise_name, exercise)];
+
+      if (asOfSessionId !== undefined) {
+        const [boundary] = await dbInstance
+          .select({ id: sessions.id, created_at: sessions.created_at })
+          .from(sessions)
+          .where(eq(sessions.id, asOfSessionId))
+          .limit(1);
+
+        if (!boundary) return [];
+        conditions.push(sql`(${sessions.created_at}, ${sessions.id}) <= (${boundary.created_at}, ${boundary.id})`);
+      }
+
       const rows = await dbInstance
         .select({
           session_id: workouts.session_id,
@@ -365,8 +433,8 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         })
         .from(workouts)
         .innerJoin(sessions, eq(workouts.session_id, sessions.id))
-        .where(eq(workouts.exercise_name, exercise))
-        .orderBy(desc(sessions.created_at), asc(workouts.id));
+        .where(and(...conditions))
+        .orderBy(desc(sessions.created_at), desc(sessions.id), asc(workouts.id));
 
       // Group into sessions, preserving most-recent-first order, then cap.
       const order: number[] = [];

@@ -28,6 +28,13 @@ function parseLimit(raw: unknown, fallback: number): number {
     return Math.max(1, Math.min(clean, MAX_LIMIT));
 }
 
+function parseSessionId(raw: unknown): number | null {
+    const n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n)) return null;
+    const clean = Math.trunc(n);
+    return clean > 0 ? clean : null;
+}
+
 function parseDate(raw: unknown): string | null {
     if (typeof raw !== "string" || !isValidDateString(raw)) return null;
     return raw;
@@ -59,6 +66,36 @@ function coercePlanRow(raw: Record<string, unknown>, index: number): CoachPlanIn
         rpe_low: num(raw.rpe_low),
         rpe_high: num(raw.rpe_high),
         notes: str(raw.notes),
+    };
+}
+
+function formatWorkoutSession(s: {
+    session_id: number;
+    created_at: string | null;
+    session_type?: string;
+    gym_profile?: string;
+    workouts: {
+        exercise_name: string;
+        muscle_group: string;
+        weight: number;
+        is_bodyweight: boolean;
+        reps: number;
+        rpe: number;
+    }[];
+}) {
+    return {
+        session_id: s.session_id,
+        created_at: s.created_at,
+        session_type: s.session_type,
+        gym_profile: s.gym_profile,
+        exercises: s.workouts.map((w) => ({
+            exercise_name: w.exercise_name,
+            muscle_group: w.muscle_group,
+            weight: w.is_bodyweight ? null : w.weight,
+            is_bodyweight: w.is_bodyweight,
+            reps: w.reps,
+            rpe: w.rpe,
+        })),
     };
 }
 
@@ -109,7 +146,7 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
             type: "function",
             function: {
                 name: "get_workout_sessions",
-                description: "Get the N most recent workout sessions with exercise-level sets.",
+                description: "Get the N most recent workout sessions with exercise-level sets, including session_id for exact follow-up.",
                 parameters: {
                     type: "object",
                     properties: { limit: { type: "number", description: "Number of sessions (max " + MAX_LIMIT + ")" } },
@@ -168,13 +205,13 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
             type: "function",
             function: {
                 name: "get_day_type_history",
-                description: "Get the 3 most recent logged sessions that classify as a given day type (Push/Pull/Legs), with per-exercise sets and muscle group. Use this to analyze past performance before proposing the next session of that day.",
+                description: "Get workout history for a Push/Pull/Legs day. For normal planning, pass day_type. For post-save feedback, pass session_id: the tool classifies that reviewed session and returns previous matching sessions BEFORE it, excluding the reviewed session.",
                 parameters: {
                     type: "object",
                     properties: {
-                        day_type: { type: "string", enum: ["Push", "Pull", "Legs"], description: "Day type to look up" },
+                        day_type: { type: "string", enum: ["Push", "Pull", "Legs"], description: "Day type to look up for normal planning" },
+                        session_id: { type: "number", description: "Reviewed workout session id for session-anchored feedback" },
                     },
-                    required: ["day_type"],
                 },
             },
         },
@@ -182,10 +219,13 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
             type: "function",
             function: {
                 name: "get_overload_assessment",
-                description: "Deterministic progressive-overload assessment for ONE exercise (spec §4). Computes data sufficiency, gym-profile continuity, the go-signal (top of rep range across all working sets), and a +4% increment recommendation. Use this BEFORE proposing a weight change — never compute the math yourself. Returns hold/increase/add_weight_optional plus any pain-flagged set comments for you to hand back (§5.2). The exercise must exist in the saved plan (provides the rep range).",
+                description: "Deterministic progressive-overload assessment for ONE exercise (spec §4). Computes data sufficiency, gym-profile continuity, the go-signal (top of rep range across all working sets), rep-target promotion, and capped increment recommendation. For post-save feedback, pass as_of_session_id so later sessions are ignored. Use this BEFORE proposing a weight change — never compute the math yourself. Returns hold/promote_reps/increase/add_weight_optional plus any pain-flagged set comments for you to hand back (§5.2). The exercise must exist in the saved plan (provides the rep range).",
                 parameters: {
                     type: "object",
-                    properties: { exercise_name: { type: "string", description: "Exact exercise name as saved in the plan" } },
+                    properties: {
+                        exercise_name: { type: "string", description: "Exact exercise name as saved in the plan" },
+                        as_of_session_id: { type: "number", description: "Optional reviewed session id; assessment includes history up to and including this session only" },
+                    },
                     required: ["exercise_name"],
                 },
             },
@@ -249,7 +289,10 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                 const sessions = await deps.workoutRepo.getRecentSessionsWithWorkouts(limit);
                 return JSON.stringify(
                     sessions.map((s) => ({
+                        session_id: s.session_id,
                         created_at: s.created_at,
+                        session_type: s.session_type,
+                        gym_profile: s.gym_profile,
                         workouts: s.workouts.map((w) => ({
                             exercise_name: w.exercise_name,
                             weight: w.is_bodyweight ? null : w.weight,
@@ -299,29 +342,40 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                 );
             }
             case "get_day_type_history": {
+                const sessionId = parseSessionId(args.session_id);
+                if (sessionId !== null) {
+                    const reviewed = await deps.workoutRepo.getSessionWithWorkouts(sessionId);
+                    if (!reviewed) return JSON.stringify({ error: `session_id ${sessionId} not found` });
+
+                    const day = classifySession(reviewed.workouts.map((w) => w.muscle_group));
+                    const previous = await deps.workoutRepo.getSessionsBefore(sessionId, 80);
+                    const matching = previous
+                        .filter((s) => classifySession(s.workouts.map((w) => w.muscle_group)) === day)
+                        .slice(0, DAY_TYPE_HISTORY_LIMIT);
+
+                    return JSON.stringify({
+                        mode: "session_anchored",
+                        session_id: sessionId,
+                        day_type: day,
+                        reviewed_session: formatWorkoutSession(reviewed),
+                        previous_sessions: matching.map(formatWorkoutSession),
+                    });
+                }
+
                 const day = parseDayType(args.day_type);
-                if (!day) return JSON.stringify({ error: "day_type must be Push, Pull, or Legs" });
+                if (!day) return JSON.stringify({ error: "day_type must be Push, Pull, or Legs, or pass session_id" });
                 const sessions = await deps.workoutRepo.getRecentSessionsWithWorkouts(40);
                 const matching = sessions
                     .filter((s) => classifySession(s.workouts.map((w) => w.muscle_group)) === day)
                     .slice(0, DAY_TYPE_HISTORY_LIMIT);
                 return JSON.stringify(
-                    matching.map((s) => ({
-                        created_at: s.created_at,
-                        exercises: s.workouts.map((w) => ({
-                            exercise_name: w.exercise_name,
-                            muscle_group: w.muscle_group,
-                            weight: w.is_bodyweight ? null : w.weight,
-                            is_bodyweight: w.is_bodyweight,
-                            reps: w.reps,
-                            rpe: w.rpe,
-                        })),
-                    })),
+                    matching.map(formatWorkoutSession),
                 );
             }
             case "get_overload_assessment": {
                 const exercise = str(args.exercise_name).trim();
                 if (!exercise) return JSON.stringify({ error: "exercise_name is required" });
+                const asOfSessionId = parseSessionId(args.as_of_session_id);
 
                 // Plan target supplies the rep range that defines "top of range" (§4.3).
                 const plan = await deps.coachPlanRepo.getAll();
@@ -330,7 +384,11 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                     return JSON.stringify({ error: `"${exercise}" is not in the saved plan — cannot assess without a rep range.` });
                 }
 
-                const history = await deps.workoutRepo.getExerciseSetsWithContext(exercise);
+                const history = await deps.workoutRepo.getExerciseSetsWithContext(
+                    exercise,
+                    12,
+                    asOfSessionId ?? undefined,
+                );
                 const isDumbbell = exercise.toLowerCase().includes("dumbbell");
                 const assessment = assessExercise(
                     history.map((s) => ({
@@ -340,7 +398,7 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                         gym_profile: s.gym_profile,
                         sets: s.sets.map((set) => ({ weight: set.weight, reps: set.reps, rpe: set.rpe, pain: set.pain })),
                     })),
-                    { rep_high: target.rep_high, sets: target.sets, rpe_high: target.rpe_high, is_bodyweight: target.is_bodyweight },
+                    { rep_low: target.rep_low, rep_high: target.rep_high, sets: target.sets, rpe_high: target.rpe_high, is_bodyweight: target.is_bodyweight },
                     { isDumbbell },
                 );
 
@@ -353,7 +411,7 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                         notes_english: set.notes_english,
                     })));
 
-                return JSON.stringify({ exercise_name: exercise, ...assessment, painComments });
+                return JSON.stringify({ exercise_name: exercise, as_of_session_id: asOfSessionId, ...assessment, painComments });
             }
             case "save_plan": {
                 const day = parseDayType(args.day_type);

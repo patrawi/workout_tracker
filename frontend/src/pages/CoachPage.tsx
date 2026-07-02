@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Sparkles,
   BookOpen,
@@ -28,12 +29,19 @@ interface DrawerState {
   cat?: string;
 }
 
+interface CoachLocationState {
+  initialMessage?: string;
+}
+
 export default function CoachPage() {
   const { messages, send, reset, typing } = useCoach();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [drawer, setDrawer] = useState<DrawerState>({ open: false, id: null });
   const [tab, setTab] = useState<CoachTab>("chat");
   const [editorOpen, setEditorOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const initialMessageSentRef = useRef(false);
   const started = messages.length > 0;
   // While streaming, the last coach bubble is empty until the first token —
   // show the typing dots in its place, not alongside it.
@@ -49,6 +57,17 @@ export default function CoachPage() {
       root.scrollHeight - root.scrollTop - root.clientHeight < 120;
     if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, typing]);
+
+  useEffect(() => {
+    const state = location.state as CoachLocationState | null;
+    const initialMessage = state?.initialMessage;
+    if (!initialMessage || initialMessageSentRef.current) return;
+
+    initialMessageSentRef.current = true;
+    setTab("chat");
+    send(initialMessage);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate, send]);
 
   return (
     <div className="relative">

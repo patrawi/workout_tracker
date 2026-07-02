@@ -28,6 +28,7 @@ export interface OverloadSession {
 
 // The plan target for this exercise (from coach_plan), defines "top of range".
 export interface OverloadTarget {
+  rep_low: number;         // bottom of the rep range
   rep_high: number;        // top of the rep range
   sets: number;            // planned number of sets
   rpe_high: number;
@@ -100,7 +101,7 @@ export function nextIncrement(
 
 // ─── Assessment (spec §4.1–§4.4) ─────────────────────────────────────────────
 
-export type OverloadAction = "increase" | "hold" | "add_weight_optional";
+export type OverloadAction = "increase" | "hold" | "promote_reps" | "add_weight_optional";
 
 export interface OverloadAssessment {
   gym_profile: string;             // the profile assessed (most recent session's)
@@ -127,6 +128,8 @@ export interface OverloadAssessment {
     deltaPct: number | null;       // proposed jump as fraction (null for bodyweight/hold)
     fromWeight: number | null;
     toWeight: number | null;
+    nextRepLow: number | null;
+    nextRepHigh: number | null;
     expectedReps: number | null;   // forecast reps at toWeight (§4.4)
     exceededCapByStep: boolean;    // smallest available step forced >4% (§4.4 dumbbell case)
     reason: string;                // short deterministic explanation; LLM rephrases for §7
@@ -141,6 +144,8 @@ function hold(reason: string, base: Omit<OverloadAssessment, "recommendation">):
       deltaPct: null,
       fromWeight: null,
       toWeight: null,
+      nextRepLow: null,
+      nextRepHigh: null,
       expectedReps: null,
       exceededCapByStep: false,
       reason,
@@ -227,6 +232,26 @@ export function assessExercise(
     return hold(`Haven't hit the top of the rep range (${target.rep_high}) across all ${target.sets} sets yet — keep climbing reps (double progression).`, base);
   }
 
+  // Compound rep ladder (handoff / CONTEXT): 8-10 at 10×3 promotes the target
+  // to 10-12 at the SAME weight. Weight only increases after 12×3.
+  if (!target.is_bodyweight && target.rep_low === 8 && target.rep_high === 10) {
+    const lw = latestWorking!;
+    return {
+      ...base,
+      recommendation: {
+        action: "promote_reps",
+        deltaPct: 0,
+        fromWeight: lw.fromWeight,
+        toWeight: lw.fromWeight,
+        nextRepLow: 10,
+        nextRepHigh: 12,
+        expectedReps: null,
+        exceededCapByStep: false,
+        reason: `Hit 10 reps across all ${target.sets} sets. Promote the target to 10-12 at the same ${lw.fromWeight}kg; do not add weight yet.`,
+      },
+    };
+  }
+
   // Go-signal fired. Bodyweight: surface the weighted option, don't force a jump (§4.4).
   if (target.is_bodyweight) {
     return {
@@ -236,6 +261,8 @@ export function assessExercise(
         deltaPct: null,
         fromWeight: null,
         toWeight: null,
+        nextRepLow: target.rep_low,
+        nextRepHigh: target.rep_high,
         expectedReps: null,
         exceededCapByStep: false,
         reason: "Hit top of range across all sets on a bodyweight lift — ready for weighted (belt + plate) whenever you choose. Optional, not forced.",
@@ -248,6 +275,9 @@ export function assessExercise(
   const inc = nextIncrement(lw.fromWeight, { isDumbbell: opts.isDumbbell, tooLight });
   const oneRm = epley1RM(lw.fromWeight, target.rep_high);
   const expectedReps = Math.round(repsAtWeight(inc.toWeight, oneRm));
+  const resetsCompoundLadder = target.rep_low === 10 && target.rep_high === 12;
+  const nextRepLow = resetsCompoundLadder ? 8 : target.rep_low;
+  const nextRepHigh = resetsCompoundLadder ? 10 : target.rep_high;
 
   const reason = tooLight
     ? `Top of range at RPE ${lw.maxRpe} (≤${TOO_LIGHT_RPE}) — it's been too light for a while. Larger-than-4% jump allowed: ${lw.fromWeight}kg → ${inc.toWeight}kg (+${(inc.jumpPct * 100).toFixed(1)}%).`
@@ -262,6 +292,8 @@ export function assessExercise(
       deltaPct: inc.jumpPct,
       fromWeight: lw.fromWeight,
       toWeight: inc.toWeight,
+      nextRepLow,
+      nextRepHigh,
       expectedReps,
       exceededCapByStep: inc.exceededCapByStep,
       reason,

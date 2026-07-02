@@ -16,7 +16,7 @@ interface UseWorkoutTrackerReturn {
         items: WorkoutData[],
         createdAt: string,
         activity?: SessionActivityData,
-    ) => Promise<boolean>;
+    ) => Promise<WorkoutRow[] | null>;
     deleteWorkout: (id: number) => Promise<boolean>;
     addWorkout: (workout: {
         exercise_name: string;
@@ -135,13 +135,12 @@ export function useWorkoutTracker(): UseWorkoutTrackerReturn {
         }
     }, []);
 
-    const confirmWorkout = useCallback(async (rawText: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData): Promise<boolean> => {
+    const confirmWorkout = useCallback(async (rawText: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData): Promise<WorkoutRow[] | null> => {
         setError(null);
         try {
-            await confirmRef.current({ rawText, items, createdAt, activity });
-            return true;
+            return await confirmRef.current({ rawText, items, createdAt, activity });
         } catch {
-            return false;
+            return null;
         }
     }, []);
 

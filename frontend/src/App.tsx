@@ -1,4 +1,6 @@
 import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { MessageSquare, X } from "lucide-react";
 import WorkoutInput from "./components/WorkoutInput";
 import ReviewModal from "./components/ReviewModal";
 import RestDayForm from "./components/RestDayForm";
@@ -11,6 +13,7 @@ import { useRestDay } from "@/features/workouts/hooks/useRestDay";
 import type { WorkoutData, SessionActivityData } from "./types";
 
 export default function App() {
+  const navigate = useNavigate();
   const {
     isParsing,
     isConfirming,
@@ -32,10 +35,12 @@ export default function App() {
   const [reviewItems, setReviewItems] = useState<WorkoutData[] | null>(null);
   const [reviewRawText, setReviewRawText] = useState("");
   const [reviewDate, setReviewDate] = useState("");
+  const [feedbackSessionId, setFeedbackSessionId] = useState<number | null>(null);
 
   // Step 1: Send text + date to AI for parsing → show review modal
   const handleParse = useCallback(
     async (rawText: string, workoutDate: string) => {
+      setFeedbackSessionId(null);
       const result = await parseWorkout(rawText);
       if (result) {
         setReviewItems(result);
@@ -49,15 +54,25 @@ export default function App() {
   // Step 2: User confirmed → save to database
   const handleConfirm = useCallback(
     async (rawText: string, items: WorkoutData[], createdAt: string, activity: SessionActivityData) => {
-      const success = await confirmWorkout(rawText, items, createdAt, activity);
-      if (success) {
+      const savedRows = await confirmWorkout(rawText, items, createdAt, activity);
+      if (savedRows) {
         setReviewItems(null);
         setReviewRawText("");
         setReviewDate("");
+        setFeedbackSessionId(savedRows[0]?.session_id ?? null);
       }
     },
     [confirmWorkout],
   );
+
+  const handleCoachFeedback = useCallback(() => {
+    if (feedbackSessionId === null) return;
+    const initialMessage =
+      `Give feedback for session_id=${feedbackSessionId}. ` +
+      "Compare it against the saved plan and previous matching sessions before this session, then propose the next matching plan if appropriate. Do not save until I confirm.";
+    setFeedbackSessionId(null);
+    navigate("/coach", { state: { initialMessage } });
+  }, [feedbackSessionId, navigate]);
 
   const handleRestDaySubmit = useCallback(
     async (data: {
@@ -135,6 +150,37 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {feedbackSessionId !== null ? (
+        <div className="glass-card px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+          <div>
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              Workout saved
+            </p>
+            <p className="text-xs text-surface-400 mt-1">
+              Ask Coach for feedback on session #{feedbackSessionId}.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCoachFeedback}
+              className="btn-primary text-sm inline-flex items-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Get coach feedback
+            </button>
+            <button
+              type="button"
+              onClick={() => setFeedbackSessionId(null)}
+              className="grid place-items-center w-11 h-11 rounded-xl text-surface-400 hover:text-[var(--foreground)] hover:bg-surface-200/50 transition-colors"
+              aria-label="Dismiss coach feedback prompt"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <StreakCalendar />
 
