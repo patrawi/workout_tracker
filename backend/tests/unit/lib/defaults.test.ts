@@ -47,6 +47,15 @@ describe("withWorkoutDefaults", () => {
     const result = withWorkoutDefaults({ exercise_name: "" });
     expect(result.exercise_name).toBe("Unknown Exercise");
   });
+
+  test("floors decimal RPE values before database insert", () => {
+    const result = withWorkoutDefaults({
+      exercise_name: "One Arm Dumbbell Row",
+      rpe: 9.5,
+    });
+
+    expect(result.rpe).toBe(9);
+  });
 });
 
 describe("generic default helpers", () => {

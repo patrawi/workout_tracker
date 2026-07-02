@@ -53,6 +53,21 @@ function createDeps() {
                     notes: "",
                     updated_at: "2026-07-01",
                 },
+                {
+                    id: 2,
+                    day_type: "Pull",
+                    position: 1,
+                    exercise_name: "Pull Up / Assisted Pull Up",
+                    is_bodyweight: true,
+                    target_weight: null,
+                    sets: 3,
+                    rep_low: 8,
+                    rep_high: 9,
+                    rpe_low: 8,
+                    rpe_high: 9,
+                    notes: "",
+                    updated_at: "2026-07-01",
+                },
             ]),
             getByDayType: mock(async () => []),
             replaceDayType: mock(async () => []),
@@ -133,6 +148,21 @@ describe("buildCoachTools", () => {
 
         await tools.run("get_overload_assessment", { exercise_name: "Bench Press", as_of_session_id: 123 });
 
-        expect(deps.workoutRepo.getExerciseSetsWithContext).toHaveBeenCalledWith("Bench Press", 12, 123);
+        expect(deps.workoutRepo.getExerciseSetsWithContext).toHaveBeenCalledWith(["Bench Press"], 12, 123);
+    });
+
+    test("overload assessment resolves slash-separated plan aliases to logged exercise names", async () => {
+        const deps = createDeps();
+        const tools = buildCoachTools(deps as any);
+
+        const result = JSON.parse(await tools.run("get_overload_assessment", { exercise_name: "Pull Up", as_of_session_id: 96 }));
+
+        expect(result.plan_exercise_name).toBe("Pull Up / Assisted Pull Up");
+        expect(result.history_exercise_names).toEqual(["Pull Up / Assisted Pull Up", "Pull Up", "Assisted Pull Up"]);
+        expect(deps.workoutRepo.getExerciseSetsWithContext).toHaveBeenCalledWith(
+            ["Pull Up / Assisted Pull Up", "Pull Up", "Assisted Pull Up"],
+            12,
+            96,
+        );
     });
 });

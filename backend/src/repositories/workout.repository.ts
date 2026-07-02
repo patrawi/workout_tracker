@@ -400,11 +400,14 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
     // Progressive overload (spec §4): one exercise's sets grouped by session with
     // session-level context (session_type, gym_profile). Most-recent session first.
     async getExerciseSetsWithContext(
-      exercise: string,
+      exercise: string | string[],
       sessionLimit = 12,
       asOfSessionId?: number,
     ): Promise<ExerciseSessionContext[]> {
-      const conditions = [eq(workouts.exercise_name, exercise)];
+      const exercises = Array.isArray(exercise) ? exercise : [exercise];
+      const conditions = exercises.length === 1
+        ? [eq(workouts.exercise_name, exercises[0]!)]
+        : [inArray(workouts.exercise_name, exercises)];
 
       if (asOfSessionId !== undefined) {
         const [boundary] = await dbInstance

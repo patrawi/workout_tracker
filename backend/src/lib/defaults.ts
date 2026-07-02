@@ -34,7 +34,7 @@ export function withWorkoutDefaults<T extends Record<string, unknown>>(
     exercise_name: (item.exercise_name as string) || DEFAULT_EXERCISE_NAME,
     weight: (item.weight as number) ?? DEFAULT_NUMBER,
     reps: (item.reps as number) ?? DEFAULT_NUMBER,
-    rpe: (item.rpe as number) ?? DEFAULT_NUMBER,
+    rpe: Math.floor(Number(item.rpe) || DEFAULT_NUMBER),
     is_bodyweight: (item.is_bodyweight as boolean) ?? DEFAULT_BOOLEAN_FALSE,
     is_assisted: (item.is_assisted as boolean) ?? DEFAULT_BOOLEAN_FALSE,
     pain: (item.pain as boolean) ?? DEFAULT_BOOLEAN_FALSE,

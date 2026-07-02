@@ -52,6 +52,24 @@ const num = (v: unknown, fallback = 0): number => {
 };
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
+function normalizeExerciseName(name: string): string {
+    return name.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function exerciseAliases(name: string): string[] {
+    const pieces = name
+        .split("/")
+        .map((piece) => piece.trim())
+        .filter(Boolean);
+    const aliases = [name.trim(), ...pieces];
+    return [...new Map(aliases.map((alias) => [normalizeExerciseName(alias), alias])).values()];
+}
+
+function namesMatch(savedName: string, requestedName: string): boolean {
+    const requested = normalizeExerciseName(requestedName);
+    return exerciseAliases(savedName).some((alias) => normalizeExerciseName(alias) === requested);
+}
+
 // Coerce one LLM-supplied exercise into a storable plan row.
 function coercePlanRow(raw: Record<string, unknown>, index: number): CoachPlanInput {
     const is_bodyweight = raw.is_bodyweight === true;
@@ -379,13 +397,14 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
 
                 // Plan target supplies the rep range that defines "top of range" (§4.3).
                 const plan = await deps.coachPlanRepo.getAll();
-                const target = plan.find((p) => p.exercise_name.toLowerCase() === exercise.toLowerCase());
+                const target = plan.find((p) => namesMatch(p.exercise_name, exercise));
                 if (!target) {
                     return JSON.stringify({ error: `"${exercise}" is not in the saved plan — cannot assess without a rep range.` });
                 }
 
+                const historyExerciseNames = exerciseAliases(target.exercise_name);
                 const history = await deps.workoutRepo.getExerciseSetsWithContext(
-                    exercise,
+                    historyExerciseNames,
                     12,
                     asOfSessionId ?? undefined,
                 );
@@ -411,7 +430,14 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                         notes_english: set.notes_english,
                     })));
 
-                return JSON.stringify({ exercise_name: exercise, as_of_session_id: asOfSessionId, ...assessment, painComments });
+                return JSON.stringify({
+                    exercise_name: exercise,
+                    plan_exercise_name: target.exercise_name,
+                    history_exercise_names: historyExerciseNames,
+                    as_of_session_id: asOfSessionId,
+                    ...assessment,
+                    painComments,
+                });
             }
             case "save_plan": {
                 const day = parseDayType(args.day_type);
