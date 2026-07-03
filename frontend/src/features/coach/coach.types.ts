@@ -4,6 +4,7 @@ export interface CoachMessage {
   role: CoachRole;
   text: string;
   reasoning?: string;
+  proposal?: PlanProposal;
 }
 
 export type PlanDayType = "Push" | "Pull" | "Legs";
@@ -23,6 +24,11 @@ export interface PlanExercise {
   notes: string;
 }
 
+export interface PlanProposal {
+  day_type: PlanDayType;
+  exercises: PlanExercise[];
+}
+
 export interface PlanRow extends PlanExercise {
   id: number;
   day_type: string;
@@ -30,6 +36,10 @@ export interface PlanRow extends PlanExercise {
 }
 
 export type CoachPlanGrouped = Record<PlanDayType, PlanRow[]>;
+
+export type CoachStreamEvent =
+  | { type: "reasoning" | "content"; text: string }
+  | { type: "plan_proposal"; proposal: PlanProposal };
 
 export interface CoachKnowledgeRow {
   id: number;

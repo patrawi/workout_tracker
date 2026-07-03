@@ -12,6 +12,18 @@ _Avoid_: Plan date, saved plan
 The currently saved prescription for a Push, Pull, or Legs day, intended for the user's next matching session if they choose to use it. It is not evidence that the workout happened, and its rep range is the source of truth for progression targets.
 _Avoid_: Workout log, completed session
 
+**Plan Proposal**:
+A structured coach recommendation for changing a Saved Plan that has not been committed yet. It uses the same exercise structure as a Saved Plan, but becomes a Saved Plan only after an Explicit Save Action.
+_Avoid_: Draft saved plan, unsaved workout
+
+**Plan Proposal Event**:
+A structured chat-stream event that carries a Plan Proposal separately from the coach's human-readable message. The UI should render it as a saveable proposal card rather than parsing plan data out of markdown text.
+_Avoid_: JSON in chat text, markdown plan parsing
+
+**Coach Proposal Parity**:
+The streaming and non-streaming coach chat endpoints should both be able to return a Plan Proposal. This keeps the app behavior consistent if the UI switches transport modes.
+_Avoid_: Stream-only proposals, dropped non-stream proposals
+
 **Plan Saved Time**:
 The time a Saved Plan was saved or issued. It is not the intended workout date and must not be used as workout-history evidence.
 _Avoid_: Session date, workout date
@@ -27,6 +39,14 @@ _Avoid_: Feedback from unsaved parsed data
 **Post-Save Feedback Request**:
 A user-triggered request for coach feedback after a Workout Session has been confirmed and saved. It should be initiated by an explicit button, refers to the exact saved Workout Session rather than the current calendar date, and only asks the coach to propose the next plan until the user explicitly confirms saving.
 _Avoid_: Automatic ReviewModal feedback
+
+**Explicit Save Action**:
+A user-initiated app or API action that commits a proposed Saved Plan. Autonomous coach tool calls are not Explicit Save Actions, even when the chat text appears to contain confirmation language.
+_Avoid_: Prompt confirmation, model-decided save
+
+**In-Chat Plan Save**:
+An Explicit Save Action presented inside the coach chat surface for a Plan Proposal. It may be a one-step save when the proposal card clearly shows that it replaces the whole current Push, Pull, or Legs Saved Plan, and the commit still happens through the app's normal plan-saving API.
+_Avoid_: Coach tool save, hidden auto-save
 
 **Coach Feedback Handoff**:
 The UI transition after a Post-Save Feedback Request. The app should navigate to Coach chat and send a session-anchored feedback request there, rather than rendering coach feedback inline on the home page.

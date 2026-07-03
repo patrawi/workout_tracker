@@ -42,10 +42,14 @@ export function useCoach() {
                         const updated = [...m];
                         const last = updated[updated.length - 1];
                         if (last && last.role === "coach") {
-                            updated[updated.length - 1] =
-                                evt.type === "reasoning"
-                                    ? { ...last, reasoning: (last.reasoning ?? "") + evt.text }
-                                    : { ...last, text: last.text + evt.text };
+                            if (evt.type === "plan_proposal") {
+                                updated[updated.length - 1] = { ...last, proposal: evt.proposal };
+                            } else {
+                                updated[updated.length - 1] =
+                                    evt.type === "reasoning"
+                                        ? { ...last, reasoning: (last.reasoning ?? "") + evt.text }
+                                        : { ...last, text: last.text + evt.text };
+                            }
                         }
                         return updated;
                     });
