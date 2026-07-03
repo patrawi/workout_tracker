@@ -117,6 +117,9 @@ export function createApp(ctx: AppContext) {
           }),
         )
         .use(cookie())
+        .onAfterHandle(({ set }) => {
+          set.headers["Cache-Control"] = "no-store";
+        })
         .post(
           "/auth/login",
           async ({ body, jwt, cookie: { auth } }) =>
