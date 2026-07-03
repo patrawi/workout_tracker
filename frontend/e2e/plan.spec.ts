@@ -20,6 +20,8 @@ test("see plan", async ({ authedPage: page, mock }) => {
           rep_high: 8,
           rpe_low: 7,
           rpe_high: 9,
+          exercise_role: "compound",
+          progression_ladder: "double_12",
           notes: "",
           updated_at: null,
         },

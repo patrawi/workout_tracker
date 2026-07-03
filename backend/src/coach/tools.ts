@@ -3,6 +3,14 @@ import { isValidDateString } from "../lib/date";
 import { classifySession } from "./classify";
 import { assessExercise } from "./overload";
 import type { CoachPlanInput } from "../repositories/coach-plan.repository";
+import {
+    DEFAULT_EXERCISE_ROLE,
+    DEFAULT_PROGRESSION_LADDER,
+    EXERCISE_ROLES,
+    PROGRESSION_LADDERS,
+    type ExerciseRole,
+    type ProgressionLadder,
+} from "../constants";
 
 const MAX_DAYS = 31;
 const MAX_LIMIT = 20;
@@ -19,6 +27,16 @@ type ToolRunner = (name: string, args: Record<string, unknown>) => Promise<strin
 export interface CoachPlanProposal {
     day_type: "Push" | "Pull" | "Legs";
     exercises: CoachPlanInput[];
+}
+
+export interface CoachSessionPrescriptionExercise extends CoachPlanInput {
+    source_day_type: "Push" | "Pull";
+}
+
+export interface CoachSessionPrescription {
+    kind: "upper_flex";
+    title: string;
+    exercises: CoachSessionPrescriptionExercise[];
 }
 
 function parseDays(raw: unknown, fallback: number): number {
@@ -48,6 +66,22 @@ function parseDate(raw: unknown): string | null {
 function parseDayType(raw: unknown): "Push" | "Pull" | "Legs" | null {
     return (PLAN_DAY_TYPES as readonly string[]).includes(raw as string)
         ? (raw as "Push" | "Pull" | "Legs")
+        : null;
+}
+
+function parseUpperSourceDayType(raw: unknown): "Push" | "Pull" | null {
+    return raw === "Push" || raw === "Pull" ? raw : null;
+}
+
+function parseExerciseRole(raw: unknown): ExerciseRole | null {
+    return (EXERCISE_ROLES as readonly string[]).includes(raw as string)
+        ? (raw as ExerciseRole)
+        : null;
+}
+
+function parseProgressionLadder(raw: unknown): ProgressionLadder | null {
+    return (PROGRESSION_LADDERS as readonly string[]).includes(raw as string)
+        ? (raw as ProgressionLadder)
         : null;
 }
 
@@ -88,6 +122,8 @@ function coercePlanRow(raw: Record<string, unknown>, index: number): CoachPlanIn
         rep_high: num(raw.rep_high),
         rpe_low: num(raw.rpe_low),
         rpe_high: num(raw.rpe_high),
+        exercise_role: parseExerciseRole(raw.exercise_role) ?? DEFAULT_EXERCISE_ROLE,
+        progression_ladder: parseProgressionLadder(raw.progression_ladder) ?? DEFAULT_PROGRESSION_LADDER,
         notes: str(raw.notes),
     };
 }
@@ -134,17 +170,30 @@ const planExerciseSchema = {
         rep_high: { type: "number" },
         rpe_low: { type: "number" },
         rpe_high: { type: "number" },
+        exercise_role: { type: "string", enum: ["compound", "isolation"] },
+        progression_ladder: { type: "string", enum: ["double_12", "double_15", "bodyweight_high_rep"] },
         notes: { type: "string" },
     },
-    required: ["position", "exercise_name", "is_bodyweight", "sets", "rep_low", "rep_high", "rpe_low", "rpe_high"],
+    required: ["position", "exercise_name", "is_bodyweight", "sets", "rep_low", "rep_high", "rpe_low", "rpe_high", "exercise_role", "progression_ladder"],
+};
+
+const sessionPrescriptionExerciseSchema = {
+    type: "object",
+    properties: {
+        ...planExerciseSchema.properties,
+        source_day_type: { type: "string", enum: ["Push", "Pull"] },
+    },
+    required: [...planExerciseSchema.required, "source_day_type"],
 };
 
 export function buildCoachTools(deps: CoachServiceDeps): {
     schemas: ToolSchemas;
     run: ToolRunner;
     drainPlanProposals: () => CoachPlanProposal[];
+    drainSessionPrescriptions: () => CoachSessionPrescription[];
 } {
     const planProposals: CoachPlanProposal[] = [];
+    const sessionPrescriptions: CoachSessionPrescription[] = [];
     const schemas: ToolSchemas = [
         {
             type: "function",
@@ -273,6 +322,22 @@ export function buildCoachTools(deps: CoachServiceDeps): {
                 },
             },
         },
+        {
+            type: "function",
+            function: {
+                name: "propose_session_prescription",
+                description: "Return a structured one-off session prescription such as an ad-hoc Upper Flex day. This DOES NOT save and MUST NOT replace a Push/Pull/Legs plan.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        kind: { type: "string", enum: ["upper_flex"] },
+                        title: { type: "string" },
+                        exercises: { type: "array", items: sessionPrescriptionExerciseSchema },
+                    },
+                    required: ["kind", "title", "exercises"],
+                },
+            },
+        },
     ];
 
     const run: ToolRunner = async (name, args) => {
@@ -364,6 +429,8 @@ export function buildCoachTools(deps: CoachServiceDeps): {
                         rep_high: r.rep_high,
                         rpe_low: r.rpe_low,
                         rpe_high: r.rpe_high,
+                        exercise_role: r.exercise_role,
+                        progression_ladder: r.progression_ladder,
                         notes: r.notes,
                         updated_at: r.updated_at,
                     })),
@@ -427,7 +494,7 @@ export function buildCoachTools(deps: CoachServiceDeps): {
                         gym_profile: s.gym_profile,
                         sets: s.sets.map((set) => ({ weight: set.weight, reps: set.reps, rpe: set.rpe, pain: set.pain })),
                     })),
-                    { rep_low: target.rep_low, rep_high: target.rep_high, sets: target.sets, rpe_high: target.rpe_high, is_bodyweight: target.is_bodyweight },
+                    { rep_low: target.rep_low, rep_high: target.rep_high, sets: target.sets, rpe_high: target.rpe_high, is_bodyweight: target.is_bodyweight, progression_ladder: target.progression_ladder },
                     { isDumbbell },
                 );
 
@@ -463,6 +530,30 @@ export function buildCoachTools(deps: CoachServiceDeps): {
                     message: "Plan proposal prepared for the app UI. Do not say it is saved until the user clicks Save Plan.",
                 });
             }
+            case "propose_session_prescription": {
+                if (args.kind !== "upper_flex") return JSON.stringify({ error: "kind must be upper_flex" });
+                if (!Array.isArray(args.exercises)) return JSON.stringify({ error: "exercises must be an array" });
+
+                const rows: CoachSessionPrescriptionExercise[] = [];
+                for (const [index, raw] of (args.exercises as Record<string, unknown>[]).entries()) {
+                    const sourceDay = parseUpperSourceDayType(raw.source_day_type);
+                    if (!sourceDay) return JSON.stringify({ error: "source_day_type must be Push or Pull" });
+                    rows.push({ ...coercePlanRow(raw, index), source_day_type: sourceDay });
+                }
+
+                const prescription: CoachSessionPrescription = {
+                    kind: "upper_flex",
+                    title: str(args.title) || "Upper Flex Today",
+                    exercises: rows,
+                };
+                sessionPrescriptions.push(prescription);
+                return JSON.stringify({
+                    ok: true,
+                    prescription,
+                    saved: false,
+                    message: "One-off session prescription prepared for the app UI. Do not say it replaced a saved plan.",
+                });
+            }
             default:
                 return JSON.stringify({ error: `Unknown tool: ${name}` });
         }
@@ -472,5 +563,6 @@ export function buildCoachTools(deps: CoachServiceDeps): {
         schemas,
         run,
         drainPlanProposals: () => planProposals.splice(0),
+        drainSessionPrescriptions: () => sessionPrescriptions.splice(0),
     };
 }

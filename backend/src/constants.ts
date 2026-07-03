@@ -54,6 +54,15 @@ export type SessionType = (typeof SESSION_TYPES)[number];
 export const DEFAULT_SESSION_TYPE: SessionType = "working";
 export const DEFAULT_GYM_PROFILE = "The Gym Group Edinburgh Meadowbank Branch";
 
+// Saved plan metadata. Role is for session construction; ladder is for overload math.
+export const EXERCISE_ROLES = ["compound", "isolation"] as const;
+export type ExerciseRole = (typeof EXERCISE_ROLES)[number];
+export const DEFAULT_EXERCISE_ROLE: ExerciseRole = "isolation";
+
+export const PROGRESSION_LADDERS = ["double_12", "double_15", "bodyweight_high_rep"] as const;
+export type ProgressionLadder = (typeof PROGRESSION_LADDERS)[number];
+export const DEFAULT_PROGRESSION_LADDER: ProgressionLadder = "double_12";
+
 // API Defaults (for ?? fallbacks)
 export const DEFAULT_EXERCISE_NAME = "Unknown Exercise";
 export const DEFAULT_MUSCLE_GROUP = "Other";

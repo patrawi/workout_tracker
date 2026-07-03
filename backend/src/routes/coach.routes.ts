@@ -14,6 +14,12 @@ const planExerciseSchema = t.Object({
   rep_high: t.Number(),
   rpe_low: t.Number(),
   rpe_high: t.Number(),
+  exercise_role: t.Union([t.Literal("compound"), t.Literal("isolation")]),
+  progression_ladder: t.Union([
+    t.Literal("double_12"),
+    t.Literal("double_15"),
+    t.Literal("bodyweight_high_rep"),
+  ]),
   notes: t.String(),
 });
 

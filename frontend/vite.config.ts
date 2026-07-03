@@ -3,6 +3,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import type { ManifestTransform } from 'workbox-build'
+
+const removeIndexHtmlFromManifest: ManifestTransform = (manifest) => ({
+  manifest: manifest.filter((entry) => !entry.url.endsWith('index.html')),
+  warnings: [],
+})
 
 export default defineConfig({
   plugins: [
@@ -16,12 +22,7 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ['icon-192.svg', 'icon-512.svg', 'robots.txt'],
       injectManifest: {
-        manifestTransforms: [
-          (manifest: any[]) => ({
-            manifest: manifest.filter((e: any) => !e.url.endsWith('index.html')),
-            warnings: [],
-          }),
-        ],
+        manifestTransforms: [removeIndexHtmlFromManifest],
       },
       manifest: {
         name: 'Workout Tracker',

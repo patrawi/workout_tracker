@@ -27,7 +27,6 @@ export default function DatePicker({ value, onChange, disabled = false, id, clas
 
   useEffect(() => {
     if (!open) return;
-    reposition();
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;
       if (btnRef.current?.contains(t) || popRef.current?.contains(t)) return;
@@ -48,6 +47,11 @@ export default function DatePicker({ value, onChange, disabled = false, id, clas
     };
   }, [open, reposition]);
 
+  const toggleOpen = () => {
+    if (!open) reposition();
+    setOpen((o) => !o);
+  };
+
   const formatted = fromYMD(value).toLocaleDateString("en-US", {
     weekday: "short",
     day: "numeric",
@@ -62,7 +66,7 @@ export default function DatePicker({ value, onChange, disabled = false, id, clas
         type="button"
         id={id}
         disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggleOpen}
         className={`inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] px-2 py-1 rounded cursor-pointer transition-colors outline-none focus:ring-1 focus:ring-[var(--color-accent-400)] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       >
         <CalendarDays className="w-3.5 h-3.5" />

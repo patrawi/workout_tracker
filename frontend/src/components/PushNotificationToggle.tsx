@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { urlBase64ToUint8Array, arrayBufferToBase64 } from "@/lib/push-utils";
 
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
 export default function PushNotificationToggle() {
   const [permission, setPermission] =
     useState<NotificationPermission>("default");
@@ -19,10 +23,10 @@ export default function PushNotificationToggle() {
     try {
       const reg = await Promise.race([
         navigator.serviceWorker.ready,
-        new Promise<ServiceWorkerRegistration>((resolve) =>
+        new Promise<null>((resolve) =>
           setTimeout(() => {
             console.warn("[PushNotification] Service worker not ready");
-            resolve(null as unknown as ServiceWorkerRegistration);
+            resolve(null);
           }, 5000),
         ),
       ]);
@@ -85,8 +89,8 @@ export default function PushNotificationToggle() {
             ),
           ),
         ]);
-      } catch (err: any) {
-        if (err.message?.includes("timed out")) {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes("timed out")) {
           throw err;
         }
         throw new Error(
@@ -125,10 +129,9 @@ export default function PushNotificationToggle() {
       }
 
       setSubscribed(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[PushNotification] Failed to enable:", err);
-      const message = err?.message || "Failed to enable notifications";
-      setError(message);
+      setError(errorMessage(err, "Failed to enable notifications"));
     } finally {
       setLoading(false);
     }
@@ -143,9 +146,9 @@ export default function PushNotificationToggle() {
         await sub.unsubscribe();
         setSubscribed(false);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[PushNotification] Failed to disable:", err);
-      setError(err?.message || "Failed to disable notifications");
+      setError(errorMessage(err, "Failed to disable notifications"));
     }
   };
 

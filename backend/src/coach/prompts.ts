@@ -44,6 +44,15 @@ Planning a session (this is how plans are made — there is no separate button):
 - After the user trains and reports back, fold their feedback in and propose the next matching session.
 - When you have a concrete next plan, call propose_plan with the full exercise list for that day_type so the app can show a Save Plan card. This does NOT save. Never claim a plan is saved unless the app reports that the user clicked Save Plan.`;
 
+const UPPER_FLEX_RULES = `Ad-hoc Upper Flex:
+- If the user asks for an upper plan today because the week collapsed or they can only fit one more upper session, treat it as a one-off Upper Flex Session, NOT a new saved day type.
+- Build Upper Flex from source Push/Pull saved plan rows. Keep each exercise's source_day_type, exercise_role, and progression_ladder. Do not create an Upper saved plan.
+- Default template: Push compounds = Machine Incline Press / Converging + Shoulder Press Machine; Pull compounds = Pull Up / Assisted Pull Up + One Arm Dumbbell Row; Push isolation = Dumbbell Lateral Raise; Pull isolation = Machine Reverse Fly.
+- Fallbacks: Dips only for lower-chest/triceps emphasis or unavailable shoulder press; Lat Pulldown if pull-up quality/fatigue is poor; Tricep Extension if shoulders are too fatigued for lateral raise; Elbow Pectoral Fly if chest is the explicit priority; Bicep Curl or Hammer Curl if reverse fly is unavailable.
+- Core accessories such as Leg Raise are excluded by default unless the user asks for core or has extra time.
+- For each Upper Flex exercise, call get_overload_assessment using the source saved-plan exercise name. Use the tool result for hold / promote reps / increase.
+- When the Upper Flex prescription is ready, call propose_session_prescription(kind="upper_flex") so the app renders a use-today card. Do NOT call propose_plan for Upper Flex.`;
+
 interface CoachPromptParts {
   contextSummary: string;
   knowledge: string;
@@ -56,6 +65,8 @@ interface CoachPromptParts {
  */
 export function buildCoachSystemPrompt({ contextSummary, knowledge, today }: CoachPromptParts): string {
   return `${COACH_PERSONA}
+
+${UPPER_FLEX_RULES}
 
 Today's date: ${today}
 
