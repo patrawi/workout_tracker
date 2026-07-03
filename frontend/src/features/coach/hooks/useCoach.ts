@@ -44,6 +44,8 @@ export function useCoach() {
                         if (last && last.role === "coach") {
                             if (evt.type === "plan_proposal") {
                                 updated[updated.length - 1] = { ...last, proposal: evt.proposal };
+                            } else if (evt.type === "session_prescription") {
+                                updated[updated.length - 1] = { ...last, prescription: evt.prescription };
                             } else {
                                 updated[updated.length - 1] =
                                     evt.type === "reasoning"

@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { coachPlan } from "../schema";
+import type { ExerciseRole, ProgressionLadder } from "../constants";
 
 export interface CoachPlanRow {
     id: number;
@@ -14,6 +15,8 @@ export interface CoachPlanRow {
     rep_high: number;
     rpe_low: number;
     rpe_high: number;
+    exercise_role: ExerciseRole;
+    progression_ladder: ProgressionLadder;
     notes: string;
     updated_at: string | null;
 }

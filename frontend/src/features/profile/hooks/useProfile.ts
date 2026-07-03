@@ -5,6 +5,17 @@ import { queryKeys } from "@/lib/query-keys";
 import type { ProfileData } from "@/types";
 import { formatDate } from "@/lib/date-utils";
 
+const DEFAULT_PROFILE: ProfileData = {
+  weight_kg: 0,
+  height_cm: 0,
+  tdee: 0,
+  calories_intake: 0,
+  protein_target: 0,
+  carbs_target: 0,
+  fat_target: 0,
+  water_target_glasses: 10,
+};
+
 function getLocalDateString(): string {
   const now = new Date();
   const offset = now.getTimezoneOffset();
@@ -42,32 +53,26 @@ function profileEquals(a: ProfileData, b: ProfileData): boolean {
   );
 }
 
+function normalizeProfile(data: ProfileData | null | undefined): ProfileData {
+  if (!data) return DEFAULT_PROFILE;
+  return {
+    weight_kg: data.weight_kg,
+    height_cm: data.height_cm,
+    tdee: data.tdee,
+    calories_intake: data.calories_intake,
+    protein_target: data.protein_target,
+    carbs_target: data.carbs_target,
+    fat_target: data.fat_target,
+    water_target_glasses: data.water_target_glasses,
+  };
+}
+
 export function useProfile(): UseProfileReturn {
   const queryClient = useQueryClient();
-  const [profile, setProfile] = useState<ProfileData>({
-    weight_kg: 0,
-    height_cm: 0,
-    tdee: 0,
-    calories_intake: 0,
-    protein_target: 0,
-    carbs_target: 0,
-    fat_target: 0,
-    water_target_glasses: 10,
-  });
+  const [draftProfile, setDraftProfile] = useState<Partial<ProfileData>>({});
   const [bodyweightDate, setBodyweightDate] = useState(getLocalDateString);
   const [selectedRange, setSelectedRange] = useState("180");
   const [saved, setSaved] = useState(false);
-  // Track the last successfully synced profile to detect dirty changes
-  const [syncedProfile, setSyncedProfile] = useState<ProfileData>({
-    weight_kg: 0,
-    height_cm: 0,
-    tdee: 0,
-    calories_intake: 0,
-    protein_target: 0,
-    carbs_target: 0,
-    fat_target: 0,
-    water_target_glasses: 10,
-  });
   const [syncedBwDate, setSyncedBwDate] = useState(getLocalDateString);
 
   // Fetch profile data
@@ -80,23 +85,11 @@ export function useProfile(): UseProfileReturn {
     },
   });
 
-  // Sync fetched data into local state via useEffect (not select side-effect)
-  useEffect(() => {
-    if (profileData) {
-      const next = {
-        weight_kg: profileData.weight_kg,
-        height_cm: profileData.height_cm,
-        tdee: profileData.tdee,
-        calories_intake: profileData.calories_intake,
-        protein_target: profileData.protein_target,
-        carbs_target: profileData.carbs_target,
-        fat_target: profileData.fat_target,
-        water_target_glasses: profileData.water_target_glasses,
-      };
-      setProfile(next);
-      setSyncedProfile(next);
-    }
-  }, [profileData]);
+  const serverProfile = useMemo(() => normalizeProfile(profileData), [profileData]);
+  const profile = useMemo(
+    () => ({ ...serverProfile, ...draftProfile }),
+    [serverProfile, draftProfile],
+  );
 
   // Fetch bodyweight history
   const { data: bodyweightsData, isLoading: isLoadingBw } = useQuery({
@@ -124,11 +117,16 @@ export function useProfile(): UseProfileReturn {
       if (res.success) return true;
       throw new Error("Failed to save profile");
     },
-    onSuccess: () => {
+    onSuccess: (_saved, data) => {
+      const { bodyweight_date: bodyweightDateFromSave, ...savedProfile } = data;
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      setSyncedProfile(profile);
-      setSyncedBwDate(bodyweightDate);
+      setDraftProfile({});
+      setSyncedBwDate(bodyweightDateFromSave);
+      queryClient.setQueryData<ProfileData | undefined>(
+        queryKeys.profile.all,
+        (current) => ({ ...current, ...savedProfile }),
+      );
       queryClient.invalidateQueries({ queryKey: queryKeys.profile.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.bodyweight.all });
     },
@@ -149,14 +147,19 @@ export function useProfile(): UseProfileReturn {
   }, [profile, bodyweightDate]);
 
   const updateField = useCallback((field: keyof ProfileData, value: number) => {
-    setProfile((prev) => ({ ...prev, [field]: value }));
-  }, []);
+    setDraftProfile((prev) => {
+      const next = { ...prev };
+      if (value === serverProfile[field]) delete next[field];
+      else next[field] = value;
+      return next;
+    });
+  }, [serverProfile]);
 
   // Dirty detection: check if current state differs from last synced
   const isDirty = useMemo(
     () =>
-      !profileEquals(profile, syncedProfile) || bodyweightDate !== syncedBwDate,
-    [profile, syncedProfile, bodyweightDate, syncedBwDate],
+      !profileEquals(profile, serverProfile) || bodyweightDate !== syncedBwDate,
+    [profile, serverProfile, bodyweightDate, syncedBwDate],
   );
 
   const bmi = useMemo(

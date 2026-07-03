@@ -7,6 +7,7 @@
 // this module only surfaces the boolean pain flag + which sets carried it.
 
 import type { SessionType } from "../constants";
+import type { ProgressionLadder } from "../constants";
 
 // ─── Inputs ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ export interface OverloadTarget {
   sets: number;            // planned number of sets
   rpe_high: number;
   is_bodyweight: boolean;
+  progression_ladder: ProgressionLadder;
 }
 
 // ─── Constants (spec §4.1 / §4.3 / §4.4) ─────────────────────────────────────
@@ -232,9 +234,9 @@ export function assessExercise(
     return hold(`Haven't hit the top of the rep range (${target.rep_high}) across all ${target.sets} sets yet — keep climbing reps (double progression).`, base);
   }
 
-  // Compound rep ladder (handoff / CONTEXT): 8-10 at 10×3 promotes the target
-  // to 10-12 at the SAME weight. Weight only increases after 12×3.
-  if (!target.is_bodyweight && target.rep_low === 8 && target.rep_high === 10) {
+  // Double-12 ladder: 8-10 at 10×sets promotes the target to 10-12
+  // at the SAME weight. Weight only increases after 12×sets.
+  if (!target.is_bodyweight && target.progression_ladder === "double_12" && target.rep_low === 8 && target.rep_high === 10) {
     const lw = latestWorking!;
     return {
       ...base,
@@ -250,6 +252,10 @@ export function assessExercise(
         reason: `Hit 10 reps across all ${target.sets} sets. Promote the target to 10-12 at the same ${lw.fromWeight}kg; do not add weight yet.`,
       },
     };
+  }
+
+  if (target.progression_ladder === "bodyweight_high_rep") {
+    return hold("Hit the high-rep target on a bodyweight accessory. Keep it controlled unless the user explicitly wants a harder variation.", base);
   }
 
   // Go-signal fired. Bodyweight: surface the weighted option, don't force a jump (§4.4).
@@ -275,9 +281,9 @@ export function assessExercise(
   const inc = nextIncrement(lw.fromWeight, { isDumbbell: opts.isDumbbell, tooLight });
   const oneRm = epley1RM(lw.fromWeight, target.rep_high);
   const expectedReps = Math.round(repsAtWeight(inc.toWeight, oneRm));
-  const resetsCompoundLadder = target.rep_low === 10 && target.rep_high === 12;
-  const nextRepLow = resetsCompoundLadder ? 8 : target.rep_low;
-  const nextRepHigh = resetsCompoundLadder ? 10 : target.rep_high;
+  const resetsDouble12Ladder = target.progression_ladder === "double_12" && target.rep_low === 10 && target.rep_high === 12;
+  const nextRepLow = resetsDouble12Ladder ? 8 : target.rep_low;
+  const nextRepHigh = resetsDouble12Ladder ? 10 : target.rep_high;
 
   const reason = tooLight
     ? `Top of range at RPE ${lw.maxRpe} (≤${TOO_LIGHT_RPE}) — it's been too light for a while. Larger-than-4% jump allowed: ${lw.fromWeight}kg → ${inc.toWeight}kg (+${(inc.jumpPct * 100).toFixed(1)}%).`

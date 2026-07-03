@@ -50,6 +50,8 @@ function createDeps() {
                     rep_high: 10,
                     rpe_low: 8,
                     rpe_high: 9,
+                    exercise_role: "compound",
+                    progression_ladder: "double_12",
                     notes: "",
                     updated_at: "2026-07-01",
                 },
@@ -65,6 +67,8 @@ function createDeps() {
                     rep_high: 9,
                     rpe_low: 8,
                     rpe_high: 9,
+                    exercise_role: "compound",
+                    progression_ladder: "double_12",
                     notes: "",
                     updated_at: "2026-07-01",
                 },
@@ -171,6 +175,7 @@ describe("buildCoachTools", () => {
         const names = tools.schemas.map((tool) => tool.function.name);
 
         expect(names).toContain("propose_plan");
+        expect(names).toContain("propose_session_prescription");
         expect(names).not.toContain("save_plan");
     });
 
@@ -191,6 +196,8 @@ describe("buildCoachTools", () => {
                     rep_high: 10,
                     rpe_low: 8,
                     rpe_high: 9,
+                    exercise_role: "compound",
+                    progression_ladder: "double_12",
                     notes: "Hold",
                 },
             ],
@@ -201,5 +208,38 @@ describe("buildCoachTools", () => {
         expect(result.proposal.exercises[0].exercise_name).toBe("Bench Press");
         expect(deps.coachPlanRepo.replaceDayType).not.toHaveBeenCalled();
         expect(tools.drainPlanProposals()).toEqual([result.proposal]);
+    });
+
+    test("propose_session_prescription returns a one-off Upper Flex without replacing saved plans", async () => {
+        const deps = createDeps();
+        const tools = buildCoachTools(deps as any);
+
+        const result = JSON.parse(await tools.run("propose_session_prescription", {
+            kind: "upper_flex",
+            title: "Upper Flex Today",
+            exercises: [
+                {
+                    source_day_type: "Push",
+                    position: 1,
+                    exercise_name: "Bench Press",
+                    is_bodyweight: false,
+                    target_weight: 100,
+                    sets: 3,
+                    rep_low: 8,
+                    rep_high: 10,
+                    rpe_low: 8,
+                    rpe_high: 9,
+                    exercise_role: "compound",
+                    progression_ladder: "double_12",
+                    notes: "Source Push",
+                },
+            ],
+        }));
+
+        expect(result.saved).toBe(false);
+        expect(result.prescription.kind).toBe("upper_flex");
+        expect(result.prescription.exercises[0].source_day_type).toBe("Push");
+        expect(deps.coachPlanRepo.replaceDayType).not.toHaveBeenCalled();
+        expect(tools.drainSessionPrescriptions()).toEqual([result.prescription]);
     });
 });

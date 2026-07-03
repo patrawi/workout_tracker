@@ -11,6 +11,7 @@ import {
     index,
     vector,
 } from "drizzle-orm/pg-core";
+import type { ExerciseRole, ProgressionLadder } from "./constants";
 
 // Embedding dimension for the food catalog (Gemini text-embedding-004).
 export const EMBEDDING_DIMENSIONS = 768;
@@ -85,6 +86,8 @@ export const coachPlan = pgTable("coach_plan", {
     rep_high: integer("rep_high").default(0).notNull(),
     rpe_low: integer("rpe_low").default(0).notNull(),
     rpe_high: integer("rpe_high").default(0).notNull(),
+    exercise_role: text("exercise_role").$type<ExerciseRole>().default("isolation").notNull(),
+    progression_ladder: text("progression_ladder").$type<ProgressionLadder>().default("double_12").notNull(),
     notes: text("notes").default("").notNull(),
     updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
 }, (table) => [

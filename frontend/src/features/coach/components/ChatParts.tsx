@@ -1,8 +1,8 @@
 import { memo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Save, Sparkles, Send } from "lucide-react";
+import { Check, Dumbbell, Save, Sparkles, Send } from "lucide-react";
 import { coachApi } from "@/lib/api/coach";
-import type { CoachMessage, PlanProposal } from "../coach.types";
+import type { CoachMessage, PlanExercise, PlanProposal, SessionPrescription } from "../coach.types";
 import { MarkdownMessage } from "./MarkdownMessage";
 
 export function CoachAvatar({ size = 34 }: { size?: number }) {
@@ -42,6 +42,7 @@ function BubbleImpl({ m }: { m: CoachMessage }) {
                     {user ? m.text : <MarkdownMessage text={m.text} />}
                 </div>
                 {!user && m.proposal && <PlanProposalCard proposal={m.proposal} />}
+                {!user && m.prescription && <SessionPrescriptionCard prescription={m.prescription} />}
             </div>
         </div>
     );
@@ -49,6 +50,16 @@ function BubbleImpl({ m }: { m: CoachMessage }) {
 
 // rerender-memo: existing bubbles don't re-render when a new message appends.
 export const Bubble = memo(BubbleImpl);
+
+function ExerciseMeta({ exercise }: { exercise: PlanExercise }) {
+    return (
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
+            <span>{exercise.is_bodyweight ? "BW" : exercise.target_weight != null ? `${exercise.target_weight}kg` : "No load"}</span>
+            <span>{exercise.sets} × {exercise.rep_low}{exercise.rep_high !== exercise.rep_low ? `-${exercise.rep_high}` : ""}</span>
+            <span>RPE {exercise.rpe_low}{exercise.rpe_high !== exercise.rpe_low ? `-${exercise.rpe_high}` : ""}</span>
+        </div>
+    );
+}
 
 function PlanProposalCard({ proposal }: { proposal: PlanProposal }) {
     const queryClient = useQueryClient();
@@ -91,11 +102,7 @@ function PlanProposalCard({ proposal }: { proposal: PlanProposal }) {
                 {proposal.exercises.map((exercise) => (
                     <div key={`${exercise.position}-${exercise.exercise_name}`} className="px-3.5 py-2.5">
                         <div className="font-semibold text-[14px] text-[var(--foreground)]">{exercise.exercise_name}</div>
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
-                            <span>{exercise.is_bodyweight ? "BW" : exercise.target_weight != null ? `${exercise.target_weight}kg` : "No load"}</span>
-                            <span>{exercise.sets} × {exercise.rep_low}{exercise.rep_high !== exercise.rep_low ? `-${exercise.rep_high}` : ""}</span>
-                            <span>RPE {exercise.rpe_low}{exercise.rpe_high !== exercise.rpe_low ? `-${exercise.rpe_high}` : ""}</span>
-                        </div>
+                        <ExerciseMeta exercise={exercise} />
                     </div>
                 ))}
             </div>
@@ -104,6 +111,39 @@ function PlanProposalCard({ proposal }: { proposal: PlanProposal }) {
                     Save failed.
                 </div>
             )}
+        </div>
+    );
+}
+
+function SessionPrescriptionCard({ prescription }: { prescription: SessionPrescription }) {
+    return (
+        <div className="rounded-2xl border border-[oklch(0.68_0.14_230)]/45 bg-[var(--card)] overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-3.5 py-3 border-b border-[var(--border)]">
+                <div className="min-w-0">
+                    <div className="font-bold text-[var(--foreground)]">{prescription.title}</div>
+                    <div className="text-xs text-[var(--muted-foreground)]">One-off session · does not replace saved plans</div>
+                </div>
+                <span className="flex-none inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-[oklch(0.68_0.14_230)]/16 text-[oklch(0.72_0.15_230)]">
+                    <Dumbbell className="w-4 h-4" />
+                    Use Today
+                </span>
+            </div>
+            <div className="divide-y divide-[var(--border)]">
+                {prescription.exercises.map((exercise) => (
+                    <div key={`${exercise.source_day_type}-${exercise.position}-${exercise.exercise_name}`} className="px-3.5 py-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="font-semibold text-[14px] text-[var(--foreground)]">{exercise.exercise_name}</div>
+                            <span className="px-2 py-0.5 rounded-full bg-white/5 text-[11px] font-semibold text-[var(--muted-foreground)]">
+                                {exercise.source_day_type}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-white/5 text-[11px] font-semibold text-[var(--muted-foreground)]">
+                                {exercise.exercise_role}
+                            </span>
+                        </div>
+                        <ExerciseMeta exercise={exercise} />
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

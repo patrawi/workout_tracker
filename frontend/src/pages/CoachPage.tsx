@@ -46,7 +46,7 @@ export default function CoachPage() {
   // While streaming, the last coach bubble is empty until the first token —
   // show the typing dots in its place, not alongside it.
   const last = messages[messages.length - 1];
-  const waiting = typing && last?.role === "coach" && !last.text && !last.reasoning && !last.proposal;
+  const waiting = typing && last?.role === "coach" && !last.text && !last.reasoning && !last.proposal && !last.prescription;
 
   // Auto-follow the stream only when the user is already near the bottom.
   // Otherwise every streamed token would yank the viewport down and fight a
@@ -64,7 +64,6 @@ export default function CoachPage() {
     if (!initialMessage || initialMessageSentRef.current) return;
 
     initialMessageSentRef.current = true;
-    setTab("chat");
     send(initialMessage);
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate, send]);
@@ -207,7 +206,7 @@ export default function CoachPage() {
                     </button>
                   </div>
                   {messages.map((m, i) =>
-                    m.role === "coach" && !m.text && !m.reasoning && !m.proposal ? null : (
+                    m.role === "coach" && !m.text && !m.reasoning && !m.proposal && !m.prescription ? null : (
                       <Bubble key={i} m={m} />
                     )
                   )}

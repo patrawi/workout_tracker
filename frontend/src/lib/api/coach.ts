@@ -5,11 +5,12 @@ import type {
     CoachKnowledgeRow,
     CoachStreamEvent,
     PlanExercise,
+    SessionPrescription,
 } from "@/features/coach/coach.types";
 
 export const coachApi = {
     chat: (messages: CoachMessage[]) =>
-        api.post<{ reply: string; reasoning?: string; proposal?: { day_type: string; exercises: PlanExercise[] } }>("/coach/chat", { messages }),
+        api.post<{ reply: string; reasoning?: string; proposal?: { day_type: string; exercises: PlanExercise[] }; prescription?: SessionPrescription }>("/coach/chat", { messages }),
 
     getPlan: () => api.get<CoachPlanGrouped>("/coach/plan"),
 
@@ -60,6 +61,8 @@ export const coachApi = {
                 if (evt.done) return;
                 if (evt.type === "plan_proposal" && evt.proposal) {
                     onEvent({ type: "plan_proposal", proposal: evt.proposal });
+                } else if (evt.type === "session_prescription" && evt.prescription) {
+                    onEvent({ type: "session_prescription", prescription: evt.prescription });
                 } else if (evt.type && evt.text) {
                     onEvent({ type: evt.type, text: evt.text });
                 }

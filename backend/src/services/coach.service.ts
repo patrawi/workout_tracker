@@ -7,7 +7,7 @@ import type { BodyweightService } from "./bodyweight.service";
 import type { ProfileService } from "./profile.service";
 import { createCoachClient, createDeepSeekCoachClient, type CoachClient, type CoachMessage } from "../coach/client";
 import { buildCoachSystemPrompt } from "../coach/prompts";
-import { buildCoachTools, type CoachPlanProposal } from "../coach/tools";
+import { buildCoachTools, type CoachPlanProposal, type CoachSessionPrescription } from "../coach/tools";
 import { deepseekChatStream, type StreamDelta, type DeepSeekMessage } from "../llm/deepseek";
 import { ExternalServiceError, ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
@@ -25,10 +25,13 @@ export const PLAN_DAY_TYPES = ["Push", "Pull", "Legs"] as const;
 export type PlanDayType = (typeof PLAN_DAY_TYPES)[number];
 
 export type CoachPlanGrouped = Record<PlanDayType, CoachPlanRow[]>;
-export type CoachStreamEvent = StreamDelta | { type: "plan_proposal"; proposal: CoachPlanProposal };
+export type CoachStreamEvent =
+  | StreamDelta
+  | { type: "plan_proposal"; proposal: CoachPlanProposal }
+  | { type: "session_prescription"; prescription: CoachSessionPrescription };
 
 export interface CoachService {
-  chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal }>;
+  chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal; prescription?: CoachSessionPrescription }>;
   chatStream(messages: CoachMessage[]): AsyncGenerator<CoachStreamEvent>;
   getPlan(): Promise<CoachPlanGrouped>;
   savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
@@ -168,7 +171,7 @@ export function createCoachService(
   const provider = config.llmProvider === "deepseek" && config.deepseekApiKey ? "DeepSeek" : "Gemini";
 
   return {
-    async chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal }> {
+    async chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal; prescription?: CoachSessionPrescription }> {
       if (!client) {
         throw new ExternalServiceError(provider, "No LLM API key is set");
       }
@@ -193,7 +196,8 @@ export function createCoachService(
           : client;
         const reply = await chatClient.chat(systemPrompt, messages);
         const proposal = tools?.drainPlanProposals().at(-1);
-        return { reply: reply.text, reasoning: reply.reasoning, proposal };
+        const prescription = tools?.drainSessionPrescriptions().at(-1);
+        return { reply: reply.text, reasoning: reply.reasoning, proposal, prescription };
       } catch (error) {
         logger.error("Coach chat failed", { error: String(error) });
         throw new ExternalServiceError(provider, String(error));
@@ -252,6 +256,9 @@ export function createCoachService(
             }
             for (const proposal of tools.drainPlanProposals()) {
               yield { type: "plan_proposal", proposal };
+            }
+            for (const prescription of tools.drainSessionPrescriptions()) {
+              yield { type: "session_prescription", prescription };
             }
             history.push({ role: "tool", content: toolResult, tool_call_id: tc.id });
           }

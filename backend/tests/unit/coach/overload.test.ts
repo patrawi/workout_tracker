@@ -33,9 +33,9 @@ function session(
   };
 }
 
-const TARGET: OverloadTarget = { rep_low: 10, rep_high: 12, sets: 3, rpe_high: 9, is_bodyweight: false };
-const COMPOUND_START_TARGET: OverloadTarget = { rep_low: 8, rep_high: 10, sets: 3, rpe_high: 9, is_bodyweight: false };
-const ISOLATION_TARGET: OverloadTarget = { rep_low: 12, rep_high: 15, sets: 3, rpe_high: 9, is_bodyweight: false };
+const TARGET: OverloadTarget = { rep_low: 10, rep_high: 12, sets: 3, rpe_high: 9, is_bodyweight: false, progression_ladder: "double_12" };
+const DOUBLE_12_START_TARGET: OverloadTarget = { rep_low: 8, rep_high: 10, sets: 3, rpe_high: 9, is_bodyweight: false, progression_ladder: "double_12" };
+const DOUBLE_15_TARGET: OverloadTarget = { rep_low: 12, rep_high: 15, sets: 3, rpe_high: 9, is_bodyweight: false, progression_ladder: "double_15" };
 
 // N qualifying working sessions where every set hits the top of the range.
 function topSessions(n: number, weight: number, rpe: number): OverloadSession[] {
@@ -140,9 +140,9 @@ describe("go-signal (§4.3)", () => {
     expect(a.recommendation.toWeight).toBeNull();
   });
 
-  test("compound 10×3 at 8-10 target → promote reps, same weight", () => {
+  test("double-12 10×3 at 8-10 target → promote reps, same weight", () => {
     const sessions = Array.from({ length: 5 }, () => session([set(100, 10, 8), set(100, 10, 8), set(100, 10, 8)]));
-    const a = assessExercise(sessions, COMPOUND_START_TARGET, { isDumbbell: false });
+    const a = assessExercise(sessions, DOUBLE_12_START_TARGET, { isDumbbell: false });
     expect(a.recommendation.action).toBe("promote_reps");
     expect(a.recommendation.fromWeight).toBe(100);
     expect(a.recommendation.toWeight).toBe(100);
@@ -150,7 +150,7 @@ describe("go-signal (§4.3)", () => {
     expect(a.recommendation.nextRepHigh).toBe(12);
   });
 
-  test("compound 12×3 at 10-12 target → increase weight and reset to 8-10", () => {
+  test("double-12 12×3 at 10-12 target → increase weight and reset to 8-10", () => {
     const a = assessExercise(topSessions(5, 100, 8), TARGET, { isDumbbell: false });
     expect(a.recommendation.action).toBe("increase");
     expect(a.recommendation.toWeight).toBe(102.5);
@@ -158,12 +158,23 @@ describe("go-signal (§4.3)", () => {
     expect(a.recommendation.nextRepHigh).toBe(10);
   });
 
-  test("isolation 15×3 at 12-15 target → increase and keep 12-15", () => {
+  test("double-15 15×3 at 12-15 target → increase and keep 12-15", () => {
     const sessions = Array.from({ length: 5 }, () => session([set(20, 15, 9), set(20, 15, 9), set(20, 15, 9)]));
-    const a = assessExercise(sessions, ISOLATION_TARGET, { isDumbbell: true });
+    const a = assessExercise(sessions, DOUBLE_15_TARGET, { isDumbbell: true });
     expect(a.recommendation.action).toBe("increase");
     expect(a.recommendation.nextRepLow).toBe(12);
     expect(a.recommendation.nextRepHigh).toBe(15);
+  });
+
+  test("bodyweight high-rep accessories do not get weighted-belt advice", () => {
+    const sessions = Array.from({ length: 5 }, () => session([set(0, 18, 9), set(0, 18, 9), set(0, 18, 9)]));
+    const a = assessExercise(
+      sessions,
+      { rep_low: 15, rep_high: 18, sets: 3, rpe_high: 10, is_bodyweight: true, progression_ladder: "bodyweight_high_rep" },
+      { isDumbbell: false },
+    );
+    expect(a.recommendation.action).toBe("hold");
+    expect(a.recommendation.reason).toContain("bodyweight accessory");
   });
 });
 

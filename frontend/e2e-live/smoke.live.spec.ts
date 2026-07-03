@@ -14,8 +14,22 @@ import { test, expect } from "@playwright/test";
 const PASSWORD = process.env.E2E_PASSWORD;
 const MARK = "__E2E_LIVE_SMOKE__";
 
+interface ApiEnvelope<T> {
+  data?: T;
+}
+
+interface WorkoutRow {
+  id: number;
+  exercise_name: string;
+}
+
 // Unwrap the app's { success, data } envelope (some routes return data directly).
-const data = (body: any) => body?.data ?? body;
+function data<T>(body: ApiEnvelope<T> | T): T {
+  if (typeof body === "object" && body !== null && "data" in body) {
+    return (body as ApiEnvelope<T>).data as T;
+  }
+  return body as T;
+}
 
 test.describe("live smoke (real backend + local DB)", () => {
   test.skip(!PASSWORD, "Set E2E_PASSWORD to run the live smoke.");
@@ -44,14 +58,14 @@ test.describe("live smoke (real backend + local DB)", () => {
       },
     });
     expect(created.ok()).toBeTruthy();
-    const id = data(await created.json())[0]?.id;
+    const id = data<WorkoutRow[]>(await created.json())[0]?.id;
     expect(id, "created workout should have an id").toBeTruthy();
 
     try {
       // 3. Read it back from the real DB.
       const list = await request.get("/api/workouts");
-      const rows = data(await list.json());
-      expect(rows.some((r: any) => r.id === id), "created row should be listed").toBeTruthy();
+      const rows = data<WorkoutRow[]>(await list.json());
+      expect(rows.some((r) => r.id === id), "created row should be listed").toBeTruthy();
     } finally {
       // 4. Cleanup — always delete the row we made, even if the assertion failed.
       const del = await request.delete(`/api/workouts/${id}`);
@@ -61,8 +75,8 @@ test.describe("live smoke (real backend + local DB)", () => {
 
     // 5. Confirm it's gone — the round-trip is real.
     const after = await request.get("/api/workouts");
-    const rowsAfter = data(await after.json());
-    expect(rowsAfter.some((r: any) => r.id === id), "row should be gone after delete").toBeFalsy();
+    const rowsAfter = data<WorkoutRow[]>(await after.json());
+    expect(rowsAfter.some((r) => r.id === id), "row should be gone after delete").toBeFalsy();
   });
 
   // Regression guard: POST /api/workouts (manual add) used to strip exercise_name
@@ -75,7 +89,7 @@ test.describe("live smoke (real backend + local DB)", () => {
       data: { exercise_name: MARK, weight: 1, reps: 1, rpe: 1, muscle_group: "Other" },
     });
     expect(created.ok(), "manual add should succeed").toBeTruthy();
-    const row = data(await created.json());
+    const row = data<WorkoutRow>(await created.json());
     expect(row.exercise_name).toBe(MARK);
 
     // Cleanup.

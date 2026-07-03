@@ -3,7 +3,7 @@ import { Outlet } from "react-router-dom";
 import Header from "./Header";
 import LoginPage from "./LoginPage";
 import PWAInstallPrompt from "./PWAInstallPrompt";
-import { useAuthContext } from "@/context/AuthContext";
+import { useAuthContext } from "@/context/useAuthContext";
 
 export default function Layout() {
     const { isAuthenticated, isCheckingAuth, logout } = useAuthContext();
