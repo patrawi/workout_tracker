@@ -7,7 +7,7 @@ import type { BodyweightService } from "./bodyweight.service";
 import type { ProfileService } from "./profile.service";
 import { createCoachClient, createDeepSeekCoachClient, type CoachClient, type CoachMessage } from "../coach/client";
 import { buildCoachSystemPrompt } from "../coach/prompts";
-import { buildCoachTools } from "../coach/tools";
+import { buildCoachTools, type CoachPlanProposal } from "../coach/tools";
 import { deepseekChatStream, type StreamDelta, type DeepSeekMessage } from "../llm/deepseek";
 import { ExternalServiceError, ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
@@ -25,10 +25,11 @@ export const PLAN_DAY_TYPES = ["Push", "Pull", "Legs"] as const;
 export type PlanDayType = (typeof PLAN_DAY_TYPES)[number];
 
 export type CoachPlanGrouped = Record<PlanDayType, CoachPlanRow[]>;
+export type CoachStreamEvent = StreamDelta | { type: "plan_proposal"; proposal: CoachPlanProposal };
 
 export interface CoachService {
-  chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string }>;
-  chatStream(messages: CoachMessage[]): AsyncGenerator<StreamDelta>;
+  chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal }>;
+  chatStream(messages: CoachMessage[]): AsyncGenerator<CoachStreamEvent>;
   getPlan(): Promise<CoachPlanGrouped>;
   savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
   listKnowledge(): Promise<CoachKnowledgeRow[]>;
@@ -158,7 +159,7 @@ export function createCoachService(
   // Pick the coach LLM by provider; fall back to Gemini if DeepSeek isn't configured.
   let client: CoachClient | null = null;
   if (config.llmProvider === "deepseek" && config.deepseekApiKey) {
-    client = createDeepSeekCoachClient(config.deepseekApiKey, DEEPSEEK_COACH_MODEL, buildCoachTools(deps));
+    client = createDeepSeekCoachClient(config.deepseekApiKey, DEEPSEEK_COACH_MODEL);
   } else if (config.geminiApiKey) {
     client = createCoachClient(config.geminiApiKey);
   } else {
@@ -167,7 +168,7 @@ export function createCoachService(
   const provider = config.llmProvider === "deepseek" && config.deepseekApiKey ? "DeepSeek" : "Gemini";
 
   return {
-    async chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string }> {
+    async chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal }> {
       if (!client) {
         throw new ExternalServiceError(provider, "No LLM API key is set");
       }
@@ -184,15 +185,22 @@ export function createCoachService(
           knowledge,
           today: getLocalDateString(),
         });
-        const reply = await client.chat(systemPrompt, messages);
-        return { reply: reply.text, reasoning: reply.reasoning };
+        const tools = config.llmProvider === "deepseek" && config.deepseekApiKey
+          ? buildCoachTools(deps)
+          : undefined;
+        const chatClient = tools
+          ? createDeepSeekCoachClient(config.deepseekApiKey, DEEPSEEK_COACH_MODEL, tools)
+          : client;
+        const reply = await chatClient.chat(systemPrompt, messages);
+        const proposal = tools?.drainPlanProposals().at(-1);
+        return { reply: reply.text, reasoning: reply.reasoning, proposal };
       } catch (error) {
         logger.error("Coach chat failed", { error: String(error) });
         throw new ExternalServiceError(provider, String(error));
       }
     },
 
-    async *chatStream(messages: CoachMessage[]): AsyncGenerator<StreamDelta> {
+    async *chatStream(messages: CoachMessage[]): AsyncGenerator<CoachStreamEvent> {
       if (!config.deepseekApiKey) {
         throw new ExternalServiceError("DeepSeek", "DEEPSEEK_API_KEY is not set");
       }
@@ -241,6 +249,9 @@ export function createCoachService(
               toolResult = await tools.run(tc.function.name, JSON.parse(tc.function.arguments));
             } catch (err) {
               toolResult = JSON.stringify({ error: String(err) });
+            }
+            for (const proposal of tools.drainPlanProposals()) {
+              yield { type: "plan_proposal", proposal };
             }
             history.push({ role: "tool", content: toolResult, tool_call_id: tc.id });
           }

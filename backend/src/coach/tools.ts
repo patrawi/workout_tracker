@@ -16,6 +16,11 @@ type ToolSchemas = {
 
 type ToolRunner = (name: string, args: Record<string, unknown>) => Promise<string>;
 
+export interface CoachPlanProposal {
+    day_type: "Push" | "Pull" | "Legs";
+    exercises: CoachPlanInput[];
+}
+
 function parseDays(raw: unknown, fallback: number): number {
     const n = typeof raw === "number" ? raw : Number(raw);
     const clean = Number.isFinite(n) ? Math.round(n) : fallback;
@@ -134,7 +139,12 @@ const planExerciseSchema = {
     required: ["position", "exercise_name", "is_bodyweight", "sets", "rep_low", "rep_high", "rpe_low", "rpe_high"],
 };
 
-export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas; run: ToolRunner } {
+export function buildCoachTools(deps: CoachServiceDeps): {
+    schemas: ToolSchemas;
+    run: ToolRunner;
+    drainPlanProposals: () => CoachPlanProposal[];
+} {
+    const planProposals: CoachPlanProposal[] = [];
     const schemas: ToolSchemas = [
         {
             type: "function",
@@ -251,8 +261,8 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
         {
             type: "function",
             function: {
-                name: "save_plan",
-                description: "Save (replace) the plan for one day type. Call this ONLY after the user has explicitly confirmed they want to save. Replaces the whole day's plan with the given exercises.",
+                name: "propose_plan",
+                description: "Return a structured plan proposal for one day type. This DOES NOT save. Use this after presenting the plan so the app can show a one-click Save Plan card.",
                 parameters: {
                     type: "object",
                     properties: {
@@ -439,18 +449,28 @@ export function buildCoachTools(deps: CoachServiceDeps): { schemas: ToolSchemas;
                     painComments,
                 });
             }
-            case "save_plan": {
+            case "propose_plan": {
                 const day = parseDayType(args.day_type);
                 if (!day) return JSON.stringify({ error: "day_type must be Push, Pull, or Legs" });
                 if (!Array.isArray(args.exercises)) return JSON.stringify({ error: "exercises must be an array" });
                 const rows = (args.exercises as Record<string, unknown>[]).map(coercePlanRow);
-                const saved = await deps.coachPlanRepo.replaceDayType(day, rows);
-                return JSON.stringify({ ok: true, day_type: day, saved_count: saved.length });
+                const proposal = { day_type: day, exercises: rows };
+                planProposals.push(proposal);
+                return JSON.stringify({
+                    ok: true,
+                    proposal,
+                    saved: false,
+                    message: "Plan proposal prepared for the app UI. Do not say it is saved until the user clicks Save Plan.",
+                });
             }
             default:
                 return JSON.stringify({ error: `Unknown tool: ${name}` });
         }
     };
 
-    return { schemas, run };
+    return {
+        schemas,
+        run,
+        drainPlanProposals: () => planProposals.splice(0),
+    };
 }

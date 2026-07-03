@@ -1,6 +1,8 @@
 import { memo, useRef, useState } from "react";
-import { Sparkles, Send } from "lucide-react";
-import type { CoachMessage } from "../coach.types";
+import { useQueryClient } from "@tanstack/react-query";
+import { Check, Save, Sparkles, Send } from "lucide-react";
+import { coachApi } from "@/lib/api/coach";
+import type { CoachMessage, PlanProposal } from "../coach.types";
 import { MarkdownMessage } from "./MarkdownMessage";
 
 export function CoachAvatar({ size = 34 }: { size?: number }) {
@@ -39,6 +41,7 @@ function BubbleImpl({ m }: { m: CoachMessage }) {
                 >
                     {user ? m.text : <MarkdownMessage text={m.text} />}
                 </div>
+                {!user && m.proposal && <PlanProposalCard proposal={m.proposal} />}
             </div>
         </div>
     );
@@ -46,6 +49,64 @@ function BubbleImpl({ m }: { m: CoachMessage }) {
 
 // rerender-memo: existing bubbles don't re-render when a new message appends.
 export const Bubble = memo(BubbleImpl);
+
+function PlanProposalCard({ proposal }: { proposal: PlanProposal }) {
+    const queryClient = useQueryClient();
+    const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+    const save = async () => {
+        if (state === "saving" || state === "saved") return;
+        setState("saving");
+        const res = await coachApi.savePlan(proposal.day_type, proposal.exercises);
+        if (!res.success) {
+            setState("error");
+            return;
+        }
+        await queryClient.invalidateQueries({ queryKey: ["coach", "plan"] });
+        setState("saved");
+    };
+
+    return (
+        <div className="rounded-2xl border border-[var(--primary)]/35 bg-[var(--card)] overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-3.5 py-3 border-b border-[var(--border)]">
+                <div className="min-w-0">
+                    <div className="font-bold text-[var(--foreground)]">{proposal.day_type} plan proposal</div>
+                    <div className="text-xs text-[var(--muted-foreground)]">Replaces current {proposal.day_type} plan</div>
+                </div>
+                <button
+                    type="button"
+                    onClick={save}
+                    disabled={state === "saving" || state === "saved"}
+                    className={`flex-none inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition ${
+                        state === "saved"
+                            ? "bg-[oklch(0.74_0.15_154)]/16 text-[oklch(0.74_0.15_154)]"
+                            : "bg-[var(--primary)] text-[var(--primary-foreground)] disabled:opacity-70"
+                    }`}
+                >
+                    {state === "saved" ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                    {state === "saving" ? "Saving" : state === "saved" ? "Saved" : "Save Plan"}
+                </button>
+            </div>
+            <div className="divide-y divide-[var(--border)]">
+                {proposal.exercises.map((exercise) => (
+                    <div key={`${exercise.position}-${exercise.exercise_name}`} className="px-3.5 py-2.5">
+                        <div className="font-semibold text-[14px] text-[var(--foreground)]">{exercise.exercise_name}</div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)]">
+                            <span>{exercise.is_bodyweight ? "BW" : exercise.target_weight != null ? `${exercise.target_weight}kg` : "No load"}</span>
+                            <span>{exercise.sets} × {exercise.rep_low}{exercise.rep_high !== exercise.rep_low ? `-${exercise.rep_high}` : ""}</span>
+                            <span>RPE {exercise.rpe_low}{exercise.rpe_high !== exercise.rpe_low ? `-${exercise.rpe_high}` : ""}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            {state === "error" && (
+                <div className="px-3.5 py-2 text-sm text-[oklch(0.72_0.14_25)] border-t border-[var(--border)]">
+                    Save failed.
+                </div>
+            )}
+        </div>
+    );
+}
 
 export function TypingDots() {
     return (

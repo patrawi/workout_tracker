@@ -24,16 +24,25 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "https://workout.patrawi.com",
   "http://localhost:3000",
 ];
+const FALLBACK_JWT_SECRET = "frictionless-tracker-secret-change-me";
+const MIN_JWT_SECRET_LENGTH = 32;
 
 export class ConfigService {
   constructor(private readonly config: AppConfig) {}
 
   static fromEnv(env: NodeJS.ProcessEnv = process.env): ConfigService {
+    const masterPassword = getOptionalEnv(env, "MASTER_PASSWORD");
+    const jwtSecret = getOptionalEnv(env, "JWT_SECRET");
+
+    if (masterPassword.length > 0) {
+      validateJwtSecret(jwtSecret);
+    }
+
     return new ConfigService({
       port: getNumberEnv(env, "PORT", 3000),
       databaseUrl: getRequiredEnv(env, "DATABASE_URL"),
-      masterPassword: getOptionalEnv(env, "MASTER_PASSWORD"),
-      jwtSecret: getOptionalEnv(env, "JWT_SECRET", "frictionless-tracker-secret-change-me"),
+      masterPassword,
+      jwtSecret: jwtSecret || FALLBACK_JWT_SECRET,
       geminiApiKey: getOptionalEnv(env, "GEMINI_API_KEY"),
       deepseekApiKey: getOptionalEnv(env, "DEEPSEEK_API_KEY"),
       llmProvider: getOptionalEnv(env, "LLM_PROVIDER", "gemini").toLowerCase() === "deepseek" ? "deepseek" : "gemini",
@@ -116,4 +125,16 @@ function getNumberEnv(env: NodeJS.ProcessEnv, name: string, fallback: number): n
   }
   const parsed = Number(value);
   return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function validateJwtSecret(value: string): void {
+  if (!value) {
+    throw new Error("JWT_SECRET must be set when MASTER_PASSWORD enables authentication.");
+  }
+  if (value === FALLBACK_JWT_SECRET) {
+    throw new Error("JWT_SECRET must not use the default fallback value.");
+  }
+  if (value.length < MIN_JWT_SECRET_LENGTH) {
+    throw new Error(`JWT_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters when authentication is enabled.`);
+  }
 }

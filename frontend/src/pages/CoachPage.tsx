@@ -46,7 +46,7 @@ export default function CoachPage() {
   // While streaming, the last coach bubble is empty until the first token —
   // show the typing dots in its place, not alongside it.
   const last = messages[messages.length - 1];
-  const waiting = typing && last?.role === "coach" && !last.text && !last.reasoning;
+  const waiting = typing && last?.role === "coach" && !last.text && !last.reasoning && !last.proposal;
 
   // Auto-follow the stream only when the user is already near the bottom.
   // Otherwise every streamed token would yank the viewport down and fight a
@@ -207,7 +207,7 @@ export default function CoachPage() {
                     </button>
                   </div>
                   {messages.map((m, i) =>
-                    m.role === "coach" && !m.text && !m.reasoning ? null : (
+                    m.role === "coach" && !m.text && !m.reasoning && !m.proposal ? null : (
                       <Bubble key={i} m={m} />
                     )
                   )}

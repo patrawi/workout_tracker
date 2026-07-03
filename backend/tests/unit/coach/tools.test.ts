@@ -165,4 +165,41 @@ describe("buildCoachTools", () => {
             96,
         );
     });
+
+    test("exposes propose_plan instead of save_plan", () => {
+        const tools = buildCoachTools(createDeps() as any);
+        const names = tools.schemas.map((tool) => tool.function.name);
+
+        expect(names).toContain("propose_plan");
+        expect(names).not.toContain("save_plan");
+    });
+
+    test("propose_plan returns a proposal without replacing saved plan rows", async () => {
+        const deps = createDeps();
+        const tools = buildCoachTools(deps as any);
+
+        const result = JSON.parse(await tools.run("propose_plan", {
+            day_type: "Push",
+            exercises: [
+                {
+                    position: 1,
+                    exercise_name: "Bench Press",
+                    is_bodyweight: false,
+                    target_weight: 100,
+                    sets: 3,
+                    rep_low: 8,
+                    rep_high: 10,
+                    rpe_low: 8,
+                    rpe_high: 9,
+                    notes: "Hold",
+                },
+            ],
+        }));
+
+        expect(result.saved).toBe(false);
+        expect(result.proposal.day_type).toBe("Push");
+        expect(result.proposal.exercises[0].exercise_name).toBe("Bench Press");
+        expect(deps.coachPlanRepo.replaceDayType).not.toHaveBeenCalled();
+        expect(tools.drainPlanProposals()).toEqual([result.proposal]);
+    });
 });

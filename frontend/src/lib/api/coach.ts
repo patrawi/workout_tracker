@@ -3,13 +3,18 @@ import type {
     CoachMessage,
     CoachPlanGrouped,
     CoachKnowledgeRow,
+    CoachStreamEvent,
+    PlanExercise,
 } from "@/features/coach/coach.types";
 
 export const coachApi = {
     chat: (messages: CoachMessage[]) =>
-        api.post<{ reply: string; reasoning?: string }>("/coach/chat", { messages }),
+        api.post<{ reply: string; reasoning?: string; proposal?: { day_type: string; exercises: PlanExercise[] } }>("/coach/chat", { messages }),
 
     getPlan: () => api.get<CoachPlanGrouped>("/coach/plan"),
+
+    savePlan: (dayType: string, exercises: PlanExercise[]) =>
+        api.put("/coach/plan", { day_type: dayType, exercises }),
 
     listKnowledge: () =>
         api.get<CoachKnowledgeRow[]>("/coach/knowledge"),
@@ -28,7 +33,7 @@ export const coachApi = {
 
     chatStream: async (
         messages: CoachMessage[],
-        onEvent: (evt: { type: "reasoning" | "content"; text: string }) => void,
+        onEvent: (evt: CoachStreamEvent) => void,
     ): Promise<void> => {
         const res = await fetch("/api/coach/chat/stream", {
             method: "POST",
@@ -53,7 +58,11 @@ export const coachApi = {
                 const evt = JSON.parse(line.slice(5).trim());
                 if (evt.error) throw new Error(evt.error);
                 if (evt.done) return;
-                if (evt.type && evt.text) onEvent({ type: evt.type, text: evt.text });
+                if (evt.type === "plan_proposal" && evt.proposal) {
+                    onEvent({ type: "plan_proposal", proposal: evt.proposal });
+                } else if (evt.type && evt.text) {
+                    onEvent({ type: evt.type, text: evt.text });
+                }
             }
         }
     },

@@ -42,7 +42,7 @@ Planning a session (this is how plans are made — there is no separate button):
 - Declined go-signal: if the user says they're not ready (e.g. not ready to go weighted on dips), surface it once, respect it, and don't re-nag every session.
 - Plan exercise names may be placeholder base machines the gym lacks. If the history shows the user trains an equivalent (e.g. any incline/upper-chest press variant — machine, dumbbell, converging — is interchangeable), prescribe the variant they actually log and say you swapped it.
 - After the user trains and reports back, fold their feedback in and propose the next matching session.
-- Save ONLY when the user explicitly confirms (e.g. "ok save", "บันทึก"). Then call save_plan with the full exercise list for that day_type. Never call save_plan speculatively or without a clear confirmation. After saving, tell the user it is saved and visible on the Plan page.`;
+- When you have a concrete next plan, call propose_plan with the full exercise list for that day_type so the app can show a Save Plan card. This does NOT save. Never claim a plan is saved unless the app reports that the user clicked Save Plan.`;
 
 interface CoachPromptParts {
   contextSummary: string;

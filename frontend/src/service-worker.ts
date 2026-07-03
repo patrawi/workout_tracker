@@ -6,6 +6,8 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 declare const self: ServiceWorkerGlobalScope
 
+const API_CACHE = 'api-cache'
+
 // === Railway Vary: * fix ===
 // Railway returns Vary: * on responses which causes cache.put() to throw.
 // Wrap the native fetch to strip Vary: * from all same-origin responses
@@ -29,6 +31,16 @@ self.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Re
 // Precache all assets (index.html excluded via vite.config.ts manifestTransforms)
 precacheAndRoute(self.__WB_MANIFEST)
 
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.delete(API_CACHE))
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'CLEAR_PRIVATE_CACHES') {
+    event.waitUntil(caches.delete(API_CACHE))
+  }
+})
+
 // Navigation route — NetworkFirst for SPA fallback
 registerRoute(
   new NavigationRoute(
@@ -41,19 +53,6 @@ registerRoute(
       ],
     })
   )
-)
-
-// Runtime caching: API calls — NetworkFirst
-registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/'),
-  new NetworkFirst({
-    cacheName: 'api-cache',
-    networkTimeoutSeconds: 10,
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 5 * 60 }),
-    ],
-  })
 )
 
 // Runtime caching: Fonts — CacheFirst

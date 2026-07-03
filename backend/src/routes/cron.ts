@@ -22,6 +22,11 @@ const pushSubRepo = createPushSubscriptionRepository(db);
 
 export const cronRoutes = new Elysia({ prefix: '/cron' })
   .get('/check-notifications', async ({ headers, set }) => {
+    if (!config.CRON_SECRET) {
+      set.status = 503;
+      return { error: 'CRON_SECRET not configured' };
+    }
+
     // Verify CRON_SECRET
     const auth = headers['authorization'];
     if (!auth || auth !== `Bearer ${config.CRON_SECRET}`) {
