@@ -21,7 +21,7 @@ export default function DailyWorkoutPage() {
     const [editingWorkout, setEditingWorkout] = useState<WorkoutRow | null>(null);
 
     const { data, isLoading, error } = useQuery({
-        queryKey: queryKeys.workouts.byDate(date ?? ""),
+        queryKey: queryKeys.history.detail(date ?? ""),
         queryFn: async () => {
             if (!date) throw new Error("No date provided");
 
@@ -31,8 +31,8 @@ export default function DailyWorkoutPage() {
                 profileApi.get(),
             ]);
 
-            const workouts = workoutsRes.success && workoutsRes.data ? workoutsRes.data : [];
-            const nutritionItems = nutritionRes.success && nutritionRes.data ? nutritionRes.data : [];
+            const workouts = workoutsRes.success && Array.isArray(workoutsRes.data) ? workoutsRes.data : [];
+            const nutritionItems = nutritionRes.success && Array.isArray(nutritionRes.data) ? nutritionRes.data : [];
             const targets: MacroTargets = profileRes.success && profileRes.data
                 ? {
                     protein_target: profileRes.data.protein_target,
@@ -62,10 +62,20 @@ export default function DailyWorkoutPage() {
 
     const displayDate = date ? formatFullDate(date) : "Unknown Date";
 
-    const handleEditSave = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.byDate(date ?? "") });
-        setEditingWorkout(null);
+    const invalidateDailyData = useCallback(() => {
+        if (!date) return;
+        queryClient.invalidateQueries({ queryKey: queryKeys.history.detail(date) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.byDate(date) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.workouts.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.heatmap.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.history.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
     }, [queryClient, date]);
+
+    const handleEditSave = useCallback(() => {
+        invalidateDailyData();
+        setEditingWorkout(null);
+    }, [invalidateDailyData]);
 
     const deleteMutation = useMutation({
         mutationFn: async (workoutId: number) => {
@@ -74,7 +84,7 @@ export default function DailyWorkoutPage() {
             throw new Error(res.error || "Failed to delete workout");
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.workouts.byDate(date ?? "") });
+            invalidateDailyData();
         },
     });
 

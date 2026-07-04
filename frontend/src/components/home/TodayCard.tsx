@@ -39,7 +39,7 @@ export default function TodayCard() {
         queryKey: queryKeys.workouts.byDate(today),
         queryFn: async () => {
             const res = await workoutsApi.getByDate(today);
-            return res.success && res.data ? res.data : [];
+            return res.success && Array.isArray(res.data) ? res.data : [];
         },
     });
 

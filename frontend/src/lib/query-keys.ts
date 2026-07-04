@@ -35,5 +35,6 @@ export const queryKeys = {
     history: {
         all: ["history"] as const,
         dates: () => [...queryKeys.history.all, "dates"] as const,
+        detail: (date: string) => [...queryKeys.history.all, "detail", date] as const,
     },
 };
