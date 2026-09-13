@@ -4,15 +4,16 @@
 // only the interpret pass-through accepts base64 payloads (size-capped).
 import { t } from "elysia";
 import { routeHandlerCtx } from "../lib/route-handler";
+import { MEAL_VALUES } from "../constants";
+import {
+  COMPONENT_KINDS,
+  EVIDENCE_BASES,
+  EVIDENCE_SOURCES,
+  HINT_KINDS,
+  HINT_LEVELS,
+  PORTION_MODES,
+} from "../nutrition-estimation/types";
 import type { AppContext } from "../context";
-
-const MEAL_VALUES = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
-const PORTION_MODES = ["measured", "estimated"] as const;
-const COMPONENT_KINDS = ["rice", "main", "side", "broth", "other"] as const;
-const EVIDENCE_SOURCES = ["measured", "declared", "user_estimated"] as const;
-const EVIDENCE_BASES = ["raw", "served", "unknown"] as const;
-const HINT_KINDS = ["visible_oil", "dryness", "remaining_broth"] as const;
-const HINT_LEVELS = ["none", "low", "medium", "high"] as const;
 
 const literals = <T extends readonly string[]>(values: T) =>
   values.map((v) => t.Literal(v));
@@ -87,6 +88,7 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
         meal_source: body.meal_source,
         components: body.components,
         reference_id: body.reference_id,
+        has_after_image: body.has_after_image,
       });
     }), {
       body: t.Object({
@@ -97,6 +99,9 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
         meal_source: t.Optional(t.String({ maxLength: 200 })),
         components: t.Array(ComponentSchema, { minItems: 1 }),
         reference_id: t.Optional(t.Integer()),
+        // Fractions were confirmed against an after image → any value in (0, 1]
+        // is accepted; otherwise only the fixed quartile choices (ADR 0015).
+        has_after_image: t.Optional(t.Boolean()),
       }),
     })
     .post("/meal-observations/interpret", routeHandlerCtx(async ({ body }) => {

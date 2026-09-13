@@ -2,17 +2,19 @@
 // 0016, 0020, 0022). Persists Meal Observations, runs tiered reference matching,
 // calculates estimates via the domain engine, and dual-writes confirmed central
 // values into nutrition_logs with provenance markers.
+import { calculateNutrition } from "./calculation/engine";
 import {
-  calculateNutrition,
-} from "./calculation/engine";
-import { InfeasibleEvidenceError } from "./types";
-import type {
-  CalculationResult,
-  ComponentKind,
-  IngredientEvidence,
-  LatentHint,
-  MassRange,
-  PortionComponentInput,
+  COMPONENT_KINDS,
+  QUARTILE_FRACTIONS,
+  type CalculationResult,
+  type ComponentKind,
+  type IngredientEvidence,
+  type LatentHint,
+  type MassRange,
+  type MatchTier,
+  type PortionComponentInput,
+  type PortionMode,
+  type ReferenceMacros,
 } from "./types";
 import type {
   CreateObservationInput,
@@ -61,6 +63,12 @@ export interface CreateObservationServiceInput {
   meal_source?: string;
   components: ServiceComponentInput[];
   reference_id?: number;
+  /**
+   * An after image was provided and fractions were confirmed against it → any
+   * fraction in (0, 1] is accepted. Without one, only the fixed quartile
+   * choices are allowed (design spec §3, ADR 0015).
+   */
+  has_after_image?: boolean;
 }
 
 export type CreateObservationMatch =
@@ -71,16 +79,74 @@ export type CreateObservationMatch =
 export interface CreateObservationResult {
   observation: ObservationDetail;
   match: CreateObservationMatch;
+  /** Per-observation explanation flags (design spec §6). */
+  explanation: ObservationExplanation;
 }
 
 export interface CalculateForReferenceResult {
   observation: ObservationDetail;
   revision: PersistedRevision;
   reference: ReferenceRow | null;
+  /** Per-observation explanation flags (design spec §6). */
+  explanation: ObservationExplanation;
+}
+
+/**
+ * Explanation payload returned alongside estimates (design spec §6): the
+ * reference used with provider and version, and the per-observation flags —
+ * measured/estimated mode, relaxed assumptions, manually entered fields.
+ * Persisted calculation jsonb stays engine-shaped; this is the response view.
+ */
+export interface ObservationExplanation {
+  reference: { id: number; provider: string; version: string } | null;
+  portion_mode: PortionMode;
+  /** Soft constraints were relaxed during calculation (ADR 0019). */
+  relaxed: boolean;
+  relaxed_constraints: string[];
+  /** Any component carries manually entered ingredient evidence. */
+  manually_entered_fields: boolean;
+  components: Array<{ name: string; manually_entered_fields: boolean }>;
 }
 
 function todayDateString(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Explanation payload for an observation detail (design spec §6): the reference
+ * used with provider and version, and the per-observation flags. Persisted
+ * calculation jsonb stays engine-shaped; this is the response view attached by
+ * the service to create/GET/recalculate payloads.
+ */
+function buildExplanation(
+  detail: ObservationDetail,
+  calculation: CalculationResult | null,
+  reference: ReferenceRow | null = detail.reference,
+): ObservationExplanation {
+  return {
+    reference: reference
+      ? { id: reference.id, provider: reference.provider, version: reference.version }
+      : null,
+    portion_mode: detail.portion_mode,
+    relaxed: calculation?.relaxed ?? false,
+    relaxed_constraints: calculation?.relaxed_constraints ?? [],
+    // Ingredient evidence present = manually entered fields on that component.
+    manually_entered_fields: detail.components.some((c) => c.ingredient_evidence.length > 0),
+    components: detail.components.map((c) => ({
+      name: c.name,
+      manually_entered_fields: c.ingredient_evidence.length > 0,
+    })),
+  };
+}
+
+/** Observation detail enriched with the response-level explanation payload. */
+export type ObservationDetailWithExplanation = ObservationDetail & {
+  explanation: ObservationExplanation;
+};
+
+function withExplanation(detail: ObservationDetail): ObservationDetailWithExplanation {
+  const calculation = detail.latest_revision?.calculation ?? detail.calculation;
+  return { ...detail, explanation: buildExplanation(detail, calculation) };
 }
 
 function isMassRange(value: number | MassRange): value is MassRange {
@@ -98,11 +164,63 @@ function isValidRange(range: MassRange): boolean {
   );
 }
 
-const COMPONENT_KINDS: ComponentKind[] = ["rice", "main", "side", "broth", "other"];
+function evidenceBounds(grams: number | MassRange): MassRange {
+  return typeof grams === "number"
+    ? { low: grams, central: grams, high: grams }
+    : grams;
+}
+
+/**
+ * Obvious evidence-vs-component conflicts are rejected at entry (design spec
+ * §5): an ingredient whose central grams exceed the component's central weight,
+ * or measured evidence sitting entirely above a measured component weight.
+ * Borderline interval cases are left to the engine's soft relaxation (ADR 0019).
+ */
+function validateEvidenceConflicts(
+  components: Array<Pick<PortionComponentInput, "name" | "weight_g" | "ingredient_evidence">>,
+): void {
+  for (const component of components) {
+    const weight = isMassRange(component.weight_g)
+      ? component.weight_g
+      : { low: component.weight_g, central: component.weight_g, high: component.weight_g };
+    for (const evidence of component.ingredient_evidence ?? []) {
+      const grams = evidenceBounds(evidence.grams);
+      // Measured evidence entirely above the component weight conflicts at
+      // every bound — the strongest statement, reported first.
+      if (evidence.source === "measured" && grams.low > weight.high) {
+        throw new ValidationError(
+          `Measured ingredient '${evidence.name}' (${grams.low}g) exceeds component '${component.name}' (${weight.high}g) at every bound.`,
+        );
+      }
+      if (grams.central > weight.central) {
+        throw new ValidationError(
+          `Ingredient '${evidence.name}' (${grams.central}g) exceeds component '${component.name}' (${weight.central}g central).`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Structural pre-check (ADR 0019): hard facts alone — measured component
+ * weights, measured ingredient evidence, confirmed consumed fractions — must
+ * admit a feasible mass decomposition. Per100 is irrelevant to feasibility, so
+ * a zero baseline keeps the engine's structural checks only; soft evidence is
+ * relaxed inside the engine, never thrown here. Runs even when no reference
+ * exists yet (gap/ambiguous tiers never reach a real calculation).
+ */
+const FEASIBILITY_ONLY_REFERENCE: ReferenceMacros = {
+  per100: { protein: 0, carbs: 0, fat: 0, alcohol: 0, calories: 0 },
+};
+
+function assertMassFeasible(components: PortionComponentInput[]): void {
+  calculateNutrition(components, FEASIBILITY_ONLY_REFERENCE);
+}
 
 function validateComponents(
   components: ServiceComponentInput[],
   portionMode: "measured" | "estimated",
+  hasAfterImage: boolean,
 ): PortionComponentInput[] {
   if (components.length === 0) {
     throw new ValidationError("At least one component is required.");
@@ -118,6 +236,16 @@ function validateComponents(
     if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) {
       throw new ValidationError(
         `consumed_fraction for '${name}' must be within (0, 1].`,
+      );
+    }
+    // Without an after image the fraction comes from the fixed quartile
+    // choices — all / ¾ / ½ / ¼ (design spec §3, ADR 0015).
+    if (
+      !hasAfterImage &&
+      !QUARTILE_FRACTIONS.some((q) => Math.abs(fraction - q) < 1e-9)
+    ) {
+      throw new ValidationError(
+        `consumed_fraction for '${name}' must be one of ${QUARTILE_FRACTIONS.join(", ")} when no after image is provided.`,
       );
     }
     if (isMassRange(c.weight_g)) {
@@ -234,14 +362,17 @@ export function createNutritionEstimationService(deps: {
       throw new ValidationError("menu_name is required.");
     }
     const portionMode = input.portion_mode === "measured" ? "measured" : "estimated";
-    const components = validateComponents(input.components ?? [], portionMode);
+    const hasAfterImage = input.has_after_image ?? false;
+    const components = validateComponents(input.components ?? [], portionMode, hasAfterImage);
+    validateEvidenceConflicts(components);
+    assertMassFeasible(components);
     const date = input.date ?? todayDateString();
     const mealType: MealType = input.meal;
 
     const toRepoInput = (
       status: CreateObservationInput["status"],
       referenceId: number | null,
-      matchTier: string,
+      matchTier: MatchTier,
       calculation: CalculationResult | null,
     ): CreateObservationInput => ({
       date,
@@ -287,15 +418,14 @@ export function createNutritionEstimationService(deps: {
       }),
     });
 
-    // Manual reference selection skips matching entirely.
-    if (input.reference_id !== undefined) {
-      const reference = await repo.getReferenceById(input.reference_id);
-      if (!reference) {
-        throw new ValidationError(`Reference ${input.reference_id} not found.`);
-      }
+    /** Shared manual/auto path: calculate, persist the draft, save a revision. */
+    async function persistCalculatedDraft(
+      reference: ReferenceRow,
+      tier: "manual" | "auto",
+    ): Promise<CreateObservationResult> {
       const calculation = calculateNutrition(components, { per100: reference.per100 });
       const observationId = await repo.insertObservation(
-        toRepoInput("draft", reference.id, "manual", calculation),
+        toRepoInput("draft", reference.id, tier, calculation),
       );
       await repo.insertRevision({
         observation_id: observationId,
@@ -304,54 +434,49 @@ export function createNutritionEstimationService(deps: {
         reference_version: reference.version,
         calculation,
       });
+      const detail = (await repo.getObservationDetail(observationId))!;
       return {
-        observation: (await repo.getObservationDetail(observationId))!,
-        match: { tier: "manual", reference },
+        observation: detail,
+        match: { tier, reference },
+        explanation: buildExplanation(detail, calculation),
       };
+    }
+
+    /** Reference-pending path: no reference persisted, no calculation. */
+    async function persistReferencePending(
+      match: Extract<MatchOutcomeLike, { tier: "ambiguous" | "gap" }>,
+    ): Promise<CreateObservationResult> {
+      const observationId = await repo.insertObservation(
+        toRepoInput("reference_pending", null, match.tier, null),
+      );
+      const detail = (await repo.getObservationDetail(observationId))!;
+      return {
+        observation: detail,
+        match,
+        explanation: buildExplanation(detail, null),
+      };
+    }
+
+    // Manual reference selection skips matching entirely.
+    if (input.reference_id !== undefined) {
+      const reference = await repo.getReferenceById(input.reference_id);
+      if (!reference) {
+        throw new ValidationError(`Reference ${input.reference_id} not found.`);
+      }
+      return await persistCalculatedDraft(reference, "manual");
     }
 
     const match = await matcher.matchReference(menuName);
 
     if (match.tier === "auto") {
-      const calculation = calculateNutrition(components, {
-        per100: match.reference.per100,
-      });
-      const observationId = await repo.insertObservation(
-        toRepoInput("draft", match.reference.id, "auto", calculation),
-      );
-      await repo.insertRevision({
-        observation_id: observationId,
-        reference_id: match.reference.id,
-        reference_provider: match.reference.provider,
-        reference_version: match.reference.version,
-        calculation,
-      });
-      return {
-        observation: (await repo.getObservationDetail(observationId))!,
-        match: { tier: "auto", reference: match.reference },
-      };
+      return await persistCalculatedDraft(match.reference, "auto");
     }
 
-    if (match.tier === "ambiguous") {
-      // No reference persisted and no calculation; candidates go back to the
-      // caller for selection; the observation waits as reference-pending.
-      const observationId = await repo.insertObservation(
-        toRepoInput("reference_pending", null, "ambiguous", null),
-      );
-      return {
-        observation: (await repo.getObservationDetail(observationId))!,
-        match: { tier: "ambiguous", candidates: match.candidates },
-      };
-    }
-
-    // Reference Coverage Gap → Reference-Pending Meal, no fabricated macros.
-    const observationId = await repo.insertObservation(
-      toRepoInput("reference_pending", null, "gap", null),
-    );
-    return {
-      observation: (await repo.getObservationDetail(observationId))!,
-      match: { tier: "gap" },
-    };
+    // Ambiguous: candidates go back to the caller for selection. Gap: Reference
+    // Coverage Gap → Reference-Pending Meal, no fabricated macros. Either way
+    // the observation waits as reference-pending with no reference and no
+    // calculation.
+    return await persistReferencePending(match);
   }
 
   /** Recalculate against a chosen reference and save a new pending revision. */
@@ -361,10 +486,14 @@ export function createNutritionEstimationService(deps: {
   ): Promise<CalculateForReferenceResult> {
     const detail = await repo.getObservationDetail(observationId);
     if (!detail) throw new NotFoundError("Meal observation");
+    // Re-validate persisted components (spec §5): stored evidence may predate
+    // entry validation or conflict with the newly chosen reference.
+    const components = componentsFromDetail(detail);
+    validateEvidenceConflicts(components);
     const reference = await repo.getReferenceById(referenceId);
     if (!reference) throw new NotFoundError("Nutrition reference");
 
-    const calculation = calculateNutrition(componentsFromDetail(detail), {
+    const calculation = calculateNutrition(components, {
       per100: reference.per100,
     });
 
@@ -380,10 +509,12 @@ export function createNutritionEstimationService(deps: {
       calculation,
     });
 
+    const updated = (await repo.getObservationDetail(observationId))!;
     return {
-      observation: (await repo.getObservationDetail(observationId))!,
+      observation: updated,
       revision,
       reference,
+      explanation: buildExplanation(updated, calculation, reference),
     };
   }
 
@@ -418,11 +549,14 @@ export function createNutritionEstimationService(deps: {
       observation_id: observationId,
     });
 
+    const reference = detail.reference ??
+      (revision.reference_id ? await repo.getReferenceById(revision.reference_id) : null);
+
     return {
       observation: (await repo.getObservationDetail(observationId))!,
       revision: { ...revision, status: "confirmed" },
-      reference: detail.reference ??
-        (revision.reference_id ? await repo.getReferenceById(revision.reference_id) : null),
+      reference,
+      explanation: buildExplanation(detail, revision.calculation, reference),
     };
   }
 
@@ -438,16 +572,18 @@ export function createNutritionEstimationService(deps: {
     }
     const result = await calculateForReference(observationId, referenceId);
     await repo.updateObservationStatus(observationId, "draft");
+    const observation = (await repo.getObservationDetail(observationId))!;
     return {
       ...result,
-      observation: (await repo.getObservationDetail(observationId))!,
+      observation,
+      explanation: buildExplanation(observation, result.revision.calculation),
     };
   }
 
-  async function getObservation(id: number): Promise<ObservationDetail> {
+  async function getObservation(id: number): Promise<ObservationDetailWithExplanation> {
     const detail = await repo.getObservationDetail(id);
     if (!detail) throw new NotFoundError("Meal observation");
-    return detail;
+    return withExplanation(detail);
   }
 
   async function listPending(): Promise<PersistedObservation[]> {
@@ -474,8 +610,6 @@ export function createNutritionEstimationService(deps: {
     getObservation,
     listPending,
     interpret,
-    // Exported for completeness — callers may catch it explicitly.
-    InfeasibleEvidenceError,
   };
 }
 

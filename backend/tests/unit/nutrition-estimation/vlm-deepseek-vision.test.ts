@@ -258,6 +258,94 @@ describe("createDeepSeekVisionInterpreter — anti-anchoring guards (ADR 0017)",
   });
 });
 
+describe("createDeepSeekVisionInterpreter — per-field confidence (spec §2)", () => {
+  const model = {
+    dish_name: "dish",
+    dish_name_confidence: "high",
+    components: [
+      // Low-confidence weight → the whole component is dropped (weight is
+      // required evidence; a hidden weight would anchor the user).
+      {
+        name: "unweighed",
+        kind: "rice",
+        weight_g: { low: 100, central: 150, high: 200 },
+        weight_confidence: "low",
+        component_confidence: "high",
+      },
+      // Low-confidence consumed_fraction → only the fraction is dropped.
+      {
+        name: "half_eaten",
+        kind: "main",
+        weight_g: { low: 100, central: 150, high: 200 },
+        weight_confidence: "medium",
+        consumed_fraction: 0.5,
+        consumed_fraction_confidence: "low",
+        component_confidence: "high",
+      },
+      // Medium/high per-field confidence survives intact.
+      {
+        name: "good",
+        kind: "side",
+        weight_g: { low: 10, central: 20, high: 30 },
+        weight_confidence: "medium",
+        consumed_fraction: 0.25,
+        consumed_fraction_confidence: "high",
+        component_confidence: "high",
+      },
+    ],
+  };
+
+  test("prompt contract asks for weight_confidence and consumed_fraction_confidence", async () => {
+    const { calls, fetchImpl } = createMockFetch(JSON.stringify(VALID_PROPOSAL));
+    const interpreter = createDeepSeekVisionInterpreter({ apiKey: "k", fetchImpl });
+    await interpreter.interpret({ menuName: "x", afterImageBase64: "A" });
+    const body = JSON.parse(String(calls[0]!.init.body));
+    const system = body.messages[0].content as string;
+    expect(system).toContain("weight_confidence");
+    expect(system).toContain("consumed_fraction_confidence");
+  });
+
+  test("drops a component whose weight is low-confidence, keeps medium/high", async () => {
+    const { fetchImpl } = createMockFetch(JSON.stringify(model));
+    const interpreter = createDeepSeekVisionInterpreter({ apiKey: "k", fetchImpl });
+
+    const outcome = await interpreter.interpret({ menuName: "x", afterImageBase64: "A" });
+
+    expect(outcome.status).toBe("ok");
+    if (outcome.status !== "ok") return;
+    expect(outcome.proposal.components.map((c) => c.name)).toEqual(["half_eaten", "good"]);
+    expect(outcome.proposal.components[1]!.weight_confidence).toBe("medium");
+  });
+
+  test("drops only the consumed_fraction when its confidence is low", async () => {
+    const { fetchImpl } = createMockFetch(JSON.stringify(model));
+    const interpreter = createDeepSeekVisionInterpreter({ apiKey: "k", fetchImpl });
+
+    const outcome = await interpreter.interpret({ menuName: "x", afterImageBase64: "A" });
+
+    expect(outcome.status).toBe("ok");
+    if (outcome.status !== "ok") return;
+    const [halfEaten, good] = outcome.proposal.components;
+    expect(halfEaten!.consumed_fraction).toBeUndefined();
+    expect(halfEaten!.consumed_fraction_confidence).toBeUndefined();
+    expect(good!.consumed_fraction).toBe(0.25);
+    expect(good!.consumed_fraction_confidence).toBe("high");
+  });
+
+  test("components without explicit per-field confidence still parse", async () => {
+    const { fetchImpl } = createMockFetch(JSON.stringify(VALID_PROPOSAL));
+    const interpreter = createDeepSeekVisionInterpreter({ apiKey: "k", fetchImpl });
+
+    const outcome = await interpreter.interpret({ menuName: "x", afterImageBase64: "A" });
+
+    expect(outcome.status).toBe("ok");
+    if (outcome.status !== "ok") return;
+    expect(outcome.proposal.components).toHaveLength(2);
+    expect(outcome.proposal.components[0]!.weight_confidence).toBeUndefined();
+    expect(outcome.proposal.components[1]!.consumed_fraction).toBe(0.75);
+  });
+});
+
 describe("createDeepSeekVisionInterpreter — failure states", () => {
   test("maps model-signalled no_food and unreadable", async () => {
     const noFood = createMockFetch(JSON.stringify({ status: "no_food" }));

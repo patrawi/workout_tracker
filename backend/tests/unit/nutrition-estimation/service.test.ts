@@ -5,6 +5,7 @@ import {
   type MatcherLike,
   type InterpreterLike,
 } from "../../../src/nutrition-estimation/service";
+import { InfeasibleEvidenceError } from "../../../src/nutrition-estimation/types";
 import type {
   CalculationResult,
 } from "../../../src/nutrition-estimation/types";
@@ -117,10 +118,6 @@ function createFakeRepo() {
       );
     },
 
-    async listByDateRange(from: string, to: string): Promise<PersistedObservation[]> {
-      return state.observations.filter((o) => o.date >= from && o.date <= to);
-    },
-
     async upsertNutritionLogLink(input: UpsertNutritionLogInput): Promise<number> {
       const existing = state.nutritionLogs.find(
         (l) => l.observation_id === input.observation_id,
@@ -184,13 +181,12 @@ function createFakeRepo() {
 
     async updateObservationEstimate(
       id: number,
-      update: { reference_id?: number | null; match_tier?: string | null; calculation?: CalculationResult | null },
+      update: { reference_id: number; calculation: CalculationResult },
     ): Promise<void> {
       const obs = state.observations.find((o) => o.id === id);
       if (!obs) return;
-      if (update.reference_id !== undefined) obs.reference_id = update.reference_id;
-      if (update.match_tier !== undefined) obs.match_tier = update.match_tier;
-      if (update.calculation !== undefined) obs.calculation = update.calculation;
+      obs.reference_id = update.reference_id;
+      obs.calculation = update.calculation;
     },
 
     async listReferences(): Promise<ReferenceRow[]> {
@@ -536,5 +532,306 @@ describe("interpret pass-through", () => {
     const { repo } = createFakeRepo();
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
     expect(await service.interpret({ menuName: "ข้าวผัด" })).toEqual({ status: "unavailable" });
+  });
+});
+
+describe("entry validation — obvious evidence conflicts (spec §5)", () => {
+  test("evidence central grams exceeding the component central weight is rejected", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+    expect(
+      service.createObservation(
+        estimatedInput({
+          components: [
+            {
+              name: "main",
+              kind: "main",
+              weight_g: { low: 20, central: 30, high: 40 },
+              ingredient_evidence: [
+                { name: "sugar", source: "declared", basis: "raw", grams: 50 },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/'sugar'.*exceeds component 'main'/);
+  });
+
+  test("range evidence whose central exceeds the component central weight is rejected too", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+    expect(
+      service.createObservation(
+        estimatedInput({
+          components: [
+            {
+              name: "main",
+              kind: "main",
+              weight_g: { low: 20, central: 30, high: 40 },
+              ingredient_evidence: [
+                {
+                  name: "pork",
+                  source: "user_estimated",
+                  basis: "served",
+                  grams: { low: 25, central: 35, high: 45 },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  test("measured evidence above a measured component weight at every bound is rejected", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+    expect(
+      service.createObservation({
+        meal: "Dinner",
+        menu_name: "ข้าวมันไก่",
+        portion_mode: "measured",
+        components: [
+          {
+            name: "rice",
+            kind: "rice",
+            weight_g: 100,
+            ingredient_evidence: [
+              {
+                name: "chicken",
+                source: "measured",
+                basis: "served",
+                grams: { low: 150, central: 160, high: 170 },
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/at every bound/);
+  });
+
+  test("borderline soft evidence is not rejected — the engine relaxes it (ADR 0019)", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    const result = await service.createObservation(
+      estimatedInput({
+        components: [
+          {
+            name: "rice",
+            kind: "rice",
+            weight_g: { low: 40, central: 50, high: 60 },
+            ingredient_evidence: [
+              {
+                name: "sugar",
+                source: "declared",
+                basis: "served",
+                grams: { low: 40, central: 45, high: 90 },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    // Central 45 g fits inside 50 g central; the widened high bound is clamped.
+    expect(result.observation.calculation!.relaxed).toBe(true);
+    expect(result.observation.calculation!.relaxed_constraints).toContain("declared:sugar@rice");
+  });
+
+  test("borderline measured evidence with a fitting central reaches the engine and throws infeasible", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+    // low 5 fits, central 90 fits, high 150 exceeds the 100 g point weight —
+    // not an "at every bound" conflict, so the engine-level hard check fires.
+    await expect(
+      service.createObservation({
+        meal: "Dinner",
+        menu_name: "ข้าวมันไก่",
+        portion_mode: "measured",
+        components: [
+          {
+            name: "rice",
+            kind: "rice",
+            weight_g: 100,
+            ingredient_evidence: [
+              {
+                name: "chicken",
+                source: "measured",
+                basis: "served",
+                grams: { low: 5, central: 90, high: 150 },
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow(InfeasibleEvidenceError);
+  });
+
+  test("calculateForReference re-validates persisted components", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    const created = await service.createObservation(estimatedInput());
+    // Simulate legacy/conflicting persisted evidence directly in the store.
+    state.evidence.push({
+      id: 9_999,
+      component_id: state.components[0]!.id,
+      name: "sugar",
+      source: "declared",
+      basis: "raw",
+      grams_low: 500,
+      grams_central: 500,
+      grams_high: 500,
+      per100: null,
+    });
+
+    expect(service.calculateForReference(created.observation.id, REF.id)).rejects.toThrow(
+      /'sugar'.*exceeds component 'rice'/,
+    );
+  });
+});
+
+describe("quartile enforcement (ADR 0015)", () => {
+  test("without an after image, non-quartile consumed_fraction is rejected", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+    expect(
+      service.createObservation(
+        estimatedInput({
+          components: [
+            { name: "rice", kind: "rice", weight_g: { low: 180, central: 200, high: 220 }, consumed_fraction: 0.6 },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/one of 1, 0.75, 0.5, 0.25/);
+  });
+
+  test("without an after image, each quartile is accepted", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+    for (const fraction of [1, 0.75, 0.5, 0.25]) {
+      await expect(
+        service.createObservation(
+          estimatedInput({
+            components: [
+              { name: "rice", kind: "rice", weight_g: { low: 180, central: 200, high: 220 }, consumed_fraction: fraction },
+            ],
+          }),
+        ),
+      ).resolves.toBeTruthy();
+    }
+  });
+
+  test("with has_after_image, any fraction in (0, 1] is accepted", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+    const result = await service.createObservation(
+      estimatedInput({
+        has_after_image: true,
+        components: [
+          { name: "rice", kind: "rice", weight_g: { low: 180, central: 200, high: 220 }, consumed_fraction: 0.6 },
+        ],
+      }),
+    );
+    expect(result.observation.components[0]!.consumed_fraction).toBe(0.6);
+  });
+
+  test("has_after_image false behaves like absent", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+    await expect(
+      service.createObservation(
+        estimatedInput({
+          has_after_image: false,
+          components: [
+            { name: "rice", kind: "rice", weight_g: { low: 180, central: 200, high: 220 }, consumed_fraction: 0.6 },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+});
+
+describe("explanation payload (spec §6)", () => {
+  test("auto tier: reference provider + version, portion_mode, relaxed, manual-entry flags", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    const result = await service.createObservation(
+      estimatedInput({
+        components: [
+          {
+            name: "rice",
+            kind: "rice",
+            weight_g: { low: 40, central: 50, high: 60 },
+            ingredient_evidence: [
+              { name: "sugar", source: "declared", basis: "served", grams: { low: 40, central: 45, high: 90 } },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.explanation.reference).toEqual({
+      id: REF.id,
+      provider: "thaifcd",
+      version: "2024.1",
+    });
+    expect(result.explanation.portion_mode).toBe("estimated");
+    expect(result.explanation.relaxed).toBe(true);
+    expect(result.explanation.relaxed_constraints).toContain("declared:sugar@rice");
+    expect(result.explanation.manually_entered_fields).toBe(true);
+    expect(result.explanation.components).toEqual([
+      { name: "rice", manually_entered_fields: true },
+    ]);
+  });
+
+  test("gap tier: no reference, relaxed false, no manual entry", async () => {
+    const { repo } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    const result = await service.createObservation(estimatedInput());
+
+    expect(result.explanation.reference).toBeNull();
+    expect(result.explanation.relaxed).toBe(false);
+    expect(result.explanation.relaxed_constraints).toEqual([]);
+    expect(result.explanation.manually_entered_fields).toBe(false);
+  });
+
+  test("getObservation includes the explanation from the latest revision", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    const created = await service.createObservation(estimatedInput());
+    const fetched = await service.getObservation(created.observation.id);
+
+    expect(fetched.explanation.reference).toEqual({
+      id: REF.id,
+      provider: "thaifcd",
+      version: "2024.1",
+    });
+    expect(fetched.explanation.portion_mode).toBe("estimated");
+    expect(fetched.explanation.relaxed).toBe(false);
+  });
+
+  test("calculateForReference returns the explanation for the new revision", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    const created = await service.createObservation(estimatedInput());
+    const result = await service.calculateForReference(created.observation.id, REF.id);
+
+    expect(result.explanation.reference).toEqual({
+      id: REF.id,
+      provider: "thaifcd",
+      version: "2024.1",
+    });
+    expect(result.explanation.relaxed).toBe(false);
   });
 });

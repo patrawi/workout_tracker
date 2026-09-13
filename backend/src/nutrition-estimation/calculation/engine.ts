@@ -118,7 +118,6 @@ interface SubMass {
 interface ComponentNutrients {
   name: string;
   consumedWeight: Interval;
-  calories: Interval;
   perMacro: Record<MacroKey, Interval>;
 }
 
@@ -153,14 +152,6 @@ function calculateComponent(
         );
       }
     }
-  }
-  const measuredTotal = evidence
-    .filter((e) => e.source === "measured")
-    .reduce((sum, e) => sum + weightInterval(e.grams).high, 0);
-  if (measuredTotal > weight.high + EPS) {
-    hardReasons.push(
-      `combined measured ingredients (${measuredTotal}g) exceed component weight '${name}' (${weight.high}g)`,
-    );
   }
 
   // --- Latent hints ---
@@ -245,12 +236,29 @@ function calculateComponent(
 
   // --- Per-bound evaluation (mass conserved at each bound) ---
   const bounds = ["low", "central", "high"] as const;
+
+  // --- Hard-fact feasibility (ADR 0019): after soft relaxation, hard facts
+  // alone (measured component weights + measured ingredient evidence) must
+  // still admit a mass decomposition at EVERY bound. Measured evidence is never
+  // relaxed, so a bound where it does not fit means no feasible decomposition
+  // exists — fail loudly instead of presenting a range with an infeasible
+  // (floored) point, e.g. a central mass below hard subtractions.
+  for (const b of bounds) {
+    const hardSum = subs
+      .filter((s) => s.group === "measured")
+      .reduce((sum, s) => sum + s.interval[b], 0);
+    if (hardSum > weight[b] + EPS) {
+      hardReasons.push(
+        `measured evidence (${hardSum}g) does not fit component '${name}' at the ${b} bound (${weight[b]}g)`,
+      );
+    }
+  }
+
   const perMacro = Object.fromEntries(
     MACRO_KEYS.map((k) => [k, point(0)]),
   ) as Record<MacroKey, Interval>;
   let baseFloored = false;
   const consumedWeight = mulInterval(weight, fraction);
-  const calories: Interval = { low: 0, central: 0, high: 0 };
   for (const b of bounds) {
     const subSum = subs.reduce((sum, s) => sum + s.interval[b], 0);
     const rawBase = weight[b] - subSum;
@@ -263,16 +271,15 @@ function calculateComponent(
         total += (s.interval[b] * per100[k]) / 100;
       }
       perMacro[k][b] = total * fraction;
-      if (k === "calories") {
-        calories[b] = perMacro[k][b];
-      }
     }
   }
   if (baseFloored) {
+    // ADR 0019: relaxation is always flagged, including the base-mass floor.
+    relaxedConstraints.add(`base_mass_floor@${name}`);
     drivers.add(`base mass floored at zero on ${name}`);
   }
 
-  return { name, consumedWeight, calories, perMacro };
+  return { name, consumedWeight, perMacro };
 }
 
 /**
@@ -314,7 +321,7 @@ export function calculateNutrition(
     per_component: perComponent.map((c) => ({
       name: c.name,
       consumed_weight_g: c.consumedWeight,
-      contribution: { low: c.calories.low, central: c.calories.central, high: c.calories.high },
+      contribution: { ...c.perMacro },
     })),
   };
 }

@@ -15,24 +15,33 @@ import {
   DEEPSEEK_VISION_MODEL,
   DEEPSEEK_TEMPERATURE,
 } from "../../constants";
-import type {
-  ComponentKind,
-  LatentHint,
-  MassRange,
+import {
+  CONFIDENCE_LEVELS,
+  COMPONENT_KINDS,
+  HINT_KINDS,
+  HINT_LEVELS,
+  type ConfidenceLevel,
+  type ComponentKind,
+  type LatentHint,
+  type MassRange,
 } from "../types";
 
 export interface VlmComponent {
   name: string;
   kind: ComponentKind;
   weight_g: MassRange;
+  /** Per-field confidence (spec §2). A low-confidence weight drops the component. */
+  weight_confidence?: ConfidenceLevel;
   consumed_fraction?: number;
-  component_confidence: "high" | "medium" | "low";
+  /** A low-confidence consumed_fraction drops just the fraction, not the component. */
+  consumed_fraction_confidence?: ConfidenceLevel;
+  component_confidence: ConfidenceLevel;
   latent_hints?: LatentHint[];
 }
 
 export interface VlmProposal {
   dish_name: string;
-  dish_name_confidence: "high" | "medium" | "low";
+  dish_name_confidence: ConfidenceLevel;
   components: VlmComponent[];
 }
 
@@ -50,11 +59,6 @@ export interface InterpretInput {
 export interface DeepSeekVisionInterpreter {
   interpret(input: InterpretInput): Promise<InterpretOutcome>;
 }
-
-const CONFIDENCE_LEVELS = ["high", "medium", "low"] as const;
-const COMPONENT_KINDS: ComponentKind[] = ["rice", "main", "side", "broth", "other"];
-const HINT_KINDS = ["visible_oil", "dryness", "remaining_broth"] as const;
-const HINT_LEVELS = ["none", "low", "medium", "high"] as const;
 
 /** Macronutrient-like field names the VLM must never output (ADR 0017). */
 const FORBIDDEN_MACRO_FIELDS = new Set([
@@ -81,7 +85,9 @@ Return ONLY a JSON object, no prose, in exactly this contract:
       "name": string,                     // coarse observable part (e.g. rice, curry, broth)
       "kind": "rice" | "main" | "side" | "broth" | "other",
       "weight_g": { "low": number, "central": number, "high": number },  // grams, 0 < low <= central <= high
+      "weight_confidence": "high" | "medium" | "low",   // confidence in weight_g, evaluated per field
       "consumed_fraction": number,        // ONLY include when an after image was provided; 0 < f <= 1
+      "consumed_fraction_confidence": "high" | "medium" | "low",  // ONLY with consumed_fraction
       "component_confidence": "high" | "medium" | "low",
       "latent_hints": [                   // coarse levels only, from what is visible
         { "kind": "visible_oil" | "dryness" | "remaining_broth", "level": "none" | "low" | "medium" | "high" }
@@ -175,12 +181,24 @@ function parseComponents(raw: unknown, hasAfterImage: boolean): VlmComponent[] {
     if (!name || !isConfidence(rec["component_confidence"])) continue;
     if (typeof kind !== "string" || !COMPONENT_KINDS.includes(kind as ComponentKind)) continue;
     if (!isPositiveRange(rec["weight_g"])) continue;
+    const weightConfidence = isConfidence(rec["weight_confidence"])
+      ? rec["weight_confidence"]
+      : undefined;
+    // Weight is the required portion evidence: a low-confidence weight drops
+    // the whole component (spec §2 per-field confidence, ADR 0017).
+    if (weightConfidence === "low") continue;
 
     let consumedFraction: number | undefined;
+    let fractionConfidence: ConfidenceLevel | undefined;
     if (hasAfterImage && typeof rec["consumed_fraction"] === "number") {
       const f = rec["consumed_fraction"];
-      if (Number.isFinite(f) && f > 0 && f <= 1) {
+      const confidence = isConfidence(rec["consumed_fraction_confidence"])
+        ? rec["consumed_fraction_confidence"]
+        : undefined;
+      // A low-confidence fraction drops just the fraction; the component stays.
+      if (Number.isFinite(f) && f > 0 && f <= 1 && confidence !== "low") {
         consumedFraction = f;
+        fractionConfidence = confidence;
       }
     }
     // Without an after image the VLM may not propose consumed fractions at all.
@@ -189,8 +207,12 @@ function parseComponents(raw: unknown, hasAfterImage: boolean): VlmComponent[] {
       name,
       kind: kind as ComponentKind,
       weight_g: rec["weight_g"] as MassRange,
+      ...(weightConfidence !== undefined ? { weight_confidence: weightConfidence } : {}),
       ...(consumedFraction !== undefined ? { consumed_fraction: consumedFraction } : {}),
-      component_confidence: rec["component_confidence"] as "high" | "medium" | "low",
+      ...(fractionConfidence !== undefined
+        ? { consumed_fraction_confidence: fractionConfidence }
+        : {}),
+      component_confidence: rec["component_confidence"] as ConfidenceLevel,
       latent_hints: parseLatentHints(rec["latent_hints"]),
     });
   }

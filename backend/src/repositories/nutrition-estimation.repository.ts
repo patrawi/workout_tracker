@@ -2,7 +2,7 @@
 // The estimate tables own the full model (observations + components + evidence +
 // hints + revisions); `nutrition_logs` only receives a dual-written point row
 // with provenance markers when an estimate is confirmed.
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { cosineDistance } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -10,13 +10,21 @@ import {
   mealIngredientEvidence,
   mealLatentHints,
   mealObservations,
-  mealImages,
   nutritionEstimateRevisions,
   nutritionLogs,
   nutritionReferences,
 } from "../schema";
-import type { CalculationResult, Macronutrients } from "../nutrition-estimation/types";
-import type { ReferenceRow } from "../nutrition-estimation/matching/matcher";
+import type {
+  CalculationResult,
+  ComponentKind,
+  EvidenceSource,
+  IngredientBasis,
+  LatentHintKind,
+  LatentHintLevel,
+  Macronutrients,
+  MatchTier,
+} from "../nutrition-estimation/types";
+import type { ReferenceRow } from "../nutrition-estimation/types";
 
 export type MealType = "Breakfast" | "Lunch" | "Dinner" | "Snack";
 export type ObservationStatus = "draft" | "confirmed" | "reference_pending";
@@ -24,8 +32,8 @@ export type RevisionStatus = "pending_confirmation" | "confirmed" | "superseded"
 
 export interface CreateIngredientEvidenceInput {
   name: string;
-  source: string; // EvidenceSource
-  basis: string; // IngredientBasis
+  source: EvidenceSource;
+  basis: IngredientBasis;
   /** Point value → all three columns set equal; range → low/central/high. */
   grams_low: number | null;
   grams_central: number | null;
@@ -34,13 +42,13 @@ export interface CreateIngredientEvidenceInput {
 }
 
 export interface CreateLatentHintInput {
-  kind: string; // LatentHintKind
-  level: string; // LatentHintLevel
+  kind: LatentHintKind;
+  level: LatentHintLevel;
 }
 
 export interface CreateComponentInput {
   name: string;
-  kind: string; // ComponentKind
+  kind: ComponentKind;
   weight_mode: "measured" | "estimated";
   weight_low: number | null;
   weight_central: number | null;
@@ -51,15 +59,6 @@ export interface CreateComponentInput {
   latent_hints?: CreateLatentHintInput[];
 }
 
-export interface CreateImageInput {
-  role: "before" | "after" | "label_or_menu";
-  object_key?: string | null;
-  checksum?: string | null;
-  consent?: boolean;
-  evaluation_eligible?: boolean;
-  lifecycle_status?: string;
-}
-
 export interface CreateObservationInput {
   date: string;
   meal_type: MealType;
@@ -68,18 +67,17 @@ export interface CreateObservationInput {
   meal_source: string | null;
   status: ObservationStatus;
   reference_id: number | null;
-  match_tier: string | null;
+  match_tier: MatchTier | null;
   calculation: CalculationResult | null;
   components: CreateComponentInput[];
-  images?: CreateImageInput[];
 }
 
 export interface PersistedIngredientEvidence {
   id: number;
   component_id: number;
   name: string;
-  source: string;
-  basis: string;
+  source: EvidenceSource;
+  basis: IngredientBasis;
   grams_low: number | null;
   grams_central: number | null;
   grams_high: number | null;
@@ -89,15 +87,15 @@ export interface PersistedIngredientEvidence {
 export interface PersistedLatentHint {
   id: number;
   component_id: number;
-  kind: string;
-  level: string;
+  kind: LatentHintKind;
+  level: LatentHintLevel;
 }
 
 export interface PersistedComponent {
   id: number;
   observation_id: number;
   name: string;
-  kind: string;
+  kind: ComponentKind;
   weight_mode: "measured" | "estimated";
   weight_low: number | null;
   weight_central: number | null;
@@ -129,7 +127,7 @@ export interface PersistedObservation {
   meal_source: string | null;
   status: ObservationStatus;
   reference_id: number | null;
-  match_tier: string | null;
+  match_tier: MatchTier | null;
   calculation: CalculationResult | null;
   created_at: string | null;
   updated_at: string | null;
@@ -154,9 +152,8 @@ export interface UpsertNutritionLogInput {
 }
 
 export interface UpdateEstimateInput {
-  reference_id?: number | null;
-  match_tier?: string | null;
-  calculation?: CalculationResult | null;
+  reference_id: number;
+  calculation: CalculationResult;
 }
 
 export function createNutritionEstimationRepository(dbInstance: PostgresJsDatabase) {
@@ -225,8 +222,8 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
 
   return {
     /**
-     * Insert an observation with its components, ingredient evidence, latent
-     * hints and image metadata in one transaction. Returns the observation id.
+     * Insert an observation with its components, ingredient evidence and
+     * latent hints in one transaction. Returns the observation id.
      */
     async insertObservation(input: CreateObservationInput): Promise<number> {
       return await dbInstance.transaction(async (tx) => {
@@ -288,20 +285,6 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
               })),
             );
           }
-        }
-
-        if (input.images?.length) {
-          await tx.insert(mealImages).values(
-            input.images.map((img) => ({
-              observation_id: observationId,
-              role: img.role,
-              object_key: img.object_key ?? null,
-              checksum: img.checksum ?? null,
-              consent: img.consent ?? false,
-              evaluation_eligible: img.evaluation_eligible ?? false,
-              lifecycle_status: img.lifecycle_status ?? "active",
-            })),
-          );
         }
 
         return observationId;
@@ -409,16 +392,6 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
         .from(mealObservations)
         .where(inArray(mealObservations.status, ["reference_pending", "draft"]))
         .orderBy(desc(mealObservations.created_at));
-      return rows.map(mapObservationRow);
-    },
-
-    /** Observations within an inclusive date range ("YYYY-MM-DD" bounds). */
-    async listByDateRange(from: string, to: string): Promise<PersistedObservation[]> {
-      const rows = await dbInstance
-        .select()
-        .from(mealObservations)
-        .where(and(gte(mealObservations.date, from), lte(mealObservations.date, to)))
-        .orderBy(asc(mealObservations.date), asc(mealObservations.id));
       return rows.map(mapObservationRow);
     },
 
@@ -547,20 +520,31 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
         .where(eq(mealObservations.id, id));
     },
 
-    /** Persist a match/estimate outcome onto the observation (reference, tier, cached calculation). */
+    /** Persist a calculated estimate onto the observation (reference, cached calculation). */
     async updateObservationEstimate(id: number, update: UpdateEstimateInput): Promise<void> {
       await dbInstance
         .update(mealObservations)
         .set({
-          ...(update.reference_id !== undefined ? { reference_id: update.reference_id } : {}),
-          ...(update.match_tier !== undefined ? { match_tier: update.match_tier } : {}),
-          ...(update.calculation !== undefined ? { calculation: update.calculation } : {}),
+          reference_id: update.reference_id,
+          calculation: update.calculation,
           updated_at: sql`now()`,
         })
         .where(eq(mealObservations.id, id));
     },
 
     // ——— ReferenceMatcherRepo implementation (ADR 0014 hybrid retrieval) ———
+
+    /** Exact food-code lookup, case-insensitive on the trimmed code (spec §7 tier 0). */
+    async findByFoodCode(code: string): Promise<ReferenceRow | null> {
+      const normalized = code.trim().toLowerCase();
+      if (!normalized) return null;
+      const [row] = await dbInstance
+        .select(REFERENCE_COLUMNS)
+        .from(nutritionReferences)
+        .where(sql`lower(${nutritionReferences.provider_food_code}) = ${normalized}`)
+        .limit(1);
+      return row ? mapReferenceRow(row) : null;
+    },
 
     /** Candidate pool for lexical matching (Nutrition Reference Catalog). */
     async listReferences(): Promise<ReferenceRow[]> {

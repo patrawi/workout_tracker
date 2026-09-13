@@ -28,6 +28,11 @@ function makeRepo(
 ): ReferenceMatcherRepo {
   return {
     listReferences: mock(async () => pool),
+    findByFoodCode: mock(async (code: string) =>
+      pool.find(
+        (r) => r.providerFoodCode.trim().toLowerCase() === code.trim().toLowerCase(),
+      ) ?? null,
+    ),
     ...(searchByEmbedding ? { searchByEmbedding } : {}),
   };
 }
@@ -55,6 +60,46 @@ describe("scoreReference", () => {
     const ref = row({ id: 1, nameEn: "Fried Rice", nameTh: "ข้าวผัด" });
     expect(scoreReference("ข้าวผัด", ref)).toBe(1);
     expect(scoreReference("fried rice", ref)).toBe(1);
+  });
+});
+
+describe("matchReference — food-code lookup tier (spec §7)", () => {
+  const pool = [
+    row({ id: 1, providerFoodCode: "TFC-001", nameEn: "Khao Moo Daeng" }),
+    row({ id: 2, providerFoodCode: "TFC-002", nameEn: "Khao Man Gai" }),
+  ];
+
+  test("menu name that is exactly a food code → auto immediately, skipping lexical scoring", async () => {
+    const repo = makeRepo(pool);
+    const listReferences = repo.listReferences;
+    const matcher = createReferenceMatcher(repo);
+    const outcome = await matcher.matchReference("  tfc-002  ");
+    expect(outcome.tier).toBe("auto");
+    if (outcome.tier === "auto") {
+      expect(outcome.reference.id).toBe(2);
+      expect(outcome.score).toBe(1);
+    }
+    // Tier-0 short-circuit: the lexical pool was never consulted.
+    expect(listReferences).not.toHaveBeenCalled();
+  });
+
+  test("food-code lookup is case-insensitive", async () => {
+    const repo = makeRepo(pool);
+    const matcher = createReferenceMatcher(repo);
+    const outcome = await matcher.matchReference("tfc-001");
+    expect(outcome.tier).toBe("auto");
+    if (outcome.tier === "auto") expect(outcome.reference.id).toBe(1);
+  });
+
+  test("a name that is not a food code falls through to lexical matching", async () => {
+    const repo = makeRepo(pool);
+    const matcher = createReferenceMatcher(repo);
+    const outcome = await matcher.matchReference("khao man gai");
+    expect(outcome.tier).toBe("auto");
+    if (outcome.tier === "auto") {
+      expect(outcome.reference.id).toBe(2);
+      expect(outcome.score).toBeCloseTo(1);
+    }
   });
 });
 

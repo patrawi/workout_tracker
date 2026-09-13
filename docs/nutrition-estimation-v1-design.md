@@ -55,6 +55,12 @@ Nutrient total = Σ over components of consumed-mass contributions from the refe
 
 Low / central / high = constrained minimum / central / maximum of the nutrient total. No percentile claims (ADR 0007).
 
+**Provisional evidence widening factors (uncalibrated defaults — listed with §12):**
+
+- Declared Known Ingredient Evidence widens ±5% around the given value.
+- User-estimated evidence widens ±25% around the given value.
+- Unknown weight basis applies an additional ×1.5 widening of the interval (never applied to measured quantities, which stay points).
+
 **Provisional latent-factor hint table (heuristic defaults, marked provisional until calibration data exists):**
 
 | Hint level | Visible oil (% of component mass) |
@@ -63,7 +69,7 @@ Low / central / high = constrained minimum / central / maximum of the nutrient t
 | medium | 2–6% |
 | high | 6–12% |
 
-Similar provisional bands to be specified for dryness and remaining-broth hints during implementation.
+Dryness and remaining-broth hints remain evidence-only in V1 core: they are recorded as range drivers with no numeric band until calibration data exists (provisional, uncalibrated — listed with the §12 defaults).
 
 ## 5. Constraint priority and infeasibility (ADR 0019)
 
@@ -111,5 +117,7 @@ On ≥30 Gold Meal Label meals: median macro error (kcal + protein) reduced ≥1
 ## 12. Provisional defaults awaiting calibration
 
 - Latent-factor hint bands in §4.
+- Known Ingredient Evidence widening factors in §4: declared ±5%, user-estimated ±25%, unknown basis ×1.5.
+- Dryness and remaining-broth hint bands: none in V1 core — both hints stay evidence-only (recorded as drivers, no numeric band) until calibration data exists.
 - Matching score threshold and "clear margin" definition in §7.
 - Per-field confidence thresholds in §2.

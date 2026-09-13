@@ -35,7 +35,32 @@ describe("calculateNutrition — basics", () => {
     expect(result.relaxed_constraints).toEqual([]);
     expect(result.drivers).toEqual([]);
     expect(result.per_component[0]!.consumed_weight_g).toEqual({ low: 200, central: 200, high: 200 });
-    expect(result.per_component[0]!.contribution).toEqual({ low: 400, central: 400, high: 400 });
+    expect(result.per_component[0]!.contribution).toEqual({
+      protein: { low: 20, central: 20, high: 20 },
+      carbs: { low: 40, central: 40, high: 40 },
+      fat: { low: 10, central: 10, high: 10 },
+      alcohol: { low: 0, central: 0, high: 0 },
+      calories: { low: 400, central: 400, high: 400 },
+    });
+  });
+
+  test("per-component contribution covers every nutrient (spec §6)", () => {
+    const result = calculateNutrition(
+      [
+        component({
+          ingredient_evidence: [
+            { name: "chicken", source: "measured", basis: "served", grams: 100, per100: FATTY },
+          ],
+        }),
+      ],
+      REF,
+    );
+    // base 100 g at ref + 100 g fatty ingredient, per nutrient.
+    expect(result.per_component[0]!.contribution.protein).toEqual({ low: 10, central: 10, high: 10 });
+    expect(result.per_component[0]!.contribution.carbs).toEqual({ low: 20, central: 20, high: 20 });
+    expect(result.per_component[0]!.contribution.fat).toEqual({ low: 55, central: 55, high: 55 });
+    expect(result.per_component[0]!.contribution.alcohol).toEqual({ low: 0, central: 0, high: 0 });
+    expect(result.per_component[0]!.contribution.calories).toEqual({ low: 750, central: 750, high: 750 });
   });
 
   test("estimated (interval) weight widens the range and adds a driver", () => {
@@ -67,8 +92,9 @@ describe("calculateNutrition — basics", () => {
     );
     expect(result.nutrients.calories).toEqual({ low: 600, central: 600, high: 600 });
     expect(result.per_component).toHaveLength(2);
-    expect(result.per_component[0]!.contribution.central).toBe(400);
-    expect(result.per_component[1]!.contribution.central).toBe(200);
+    expect(result.per_component[0]!.contribution.calories.central).toBe(400);
+    expect(result.per_component[1]!.contribution.calories.central).toBe(200);
+    expect(result.per_component[0]!.contribution.protein.central).toBe(20);
   });
 
   test("low/central/high are ordered min ≤ central ≤ max in a mixed scenario", () => {
@@ -346,7 +372,7 @@ describe("calculateNutrition — relaxation and infeasibility (ADR 0019)", () =>
     expect(result.nutrients.calories.low).toBeCloseTo(30 * 4);
   });
 
-  test("base mass floored at zero when weak evidence exceeds the low weight bound (driver, not relaxed)", () => {
+  test("base mass floored at zero when weak evidence exceeds the low weight bound (relaxed, ADR 0019)", () => {
     const result = calculateNutrition(
       [
         component({
@@ -361,8 +387,8 @@ describe("calculateNutrition — relaxation and infeasibility (ADR 0019)", () =>
       REF,
     );
     // 157.5 ≤ 200 → no constraint clamping; but base_low = 100 − 142.5 < 0 → floored.
-    expect(result.relaxed).toBe(false);
-    expect(result.relaxed_constraints).toEqual([]);
+    expect(result.relaxed).toBe(true);
+    expect(result.relaxed_constraints).toContain("base_mass_floor@main");
     expect(result.drivers).toContain("base mass floored at zero on main");
     expect(result.nutrients.calories.low).toBeCloseTo(142.5 * 4);
     expect(result.nutrients.calories.high).toBeCloseTo(42.5 * 2 + 157.5 * 4);
@@ -429,5 +455,75 @@ describe("calculateNutrition — relaxation and infeasibility (ADR 0019)", () =>
     );
     expect(result.relaxed).toBe(false);
     expect(result.relaxed_constraints).toEqual([]);
+  });
+
+  test("hard facts infeasible at the low bound throw even though the high bound fits (ADR 0019)", () => {
+    let caught: unknown;
+    try {
+      calculateNutrition(
+        [
+          component({
+            name: "main",
+            kind: "main",
+            weight_g: { low: 100, central: 150, high: 200 },
+            ingredient_evidence: [
+              { name: "rice", source: "measured", basis: "served", grams: 120 },
+            ],
+          }),
+        ],
+        REF,
+      );
+    } catch (err) {
+      caught = err;
+    }
+    // Measured evidence is never relaxed: 120 g cannot fit inside the 100 g low
+    // bound, so no feasible decomposition exists for hard facts alone.
+    expect(caught).toBeInstanceOf(InfeasibleEvidenceError);
+    const reasons = (caught as InfeasibleEvidenceError).reasons;
+    expect(reasons.some((r) => r.includes("low bound"))).toBe(true);
+    expect(reasons.some((r) => r.includes("'main'"))).toBe(true);
+  });
+
+  test("hard facts infeasible at the central bound throw — never present a range whose central point is infeasible", () => {
+    let caught: unknown;
+    try {
+      calculateNutrition(
+        [
+          component({
+            name: "main",
+            kind: "main",
+            weight_g: { low: 100, central: 150, high: 200 },
+            ingredient_evidence: [
+              { name: "rice", source: "measured", basis: "served", grams: { low: 90, central: 160, high: 180 } },
+            ],
+          }),
+        ],
+        REF,
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(InfeasibleEvidenceError);
+    const reasons = (caught as InfeasibleEvidenceError).reasons;
+    expect(reasons.some((r) => r.includes("central bound"))).toBe(true);
+  });
+
+  test("soft evidence exceeding a bound is relaxed, not thrown (hard-fact check ignores soft facts)", () => {
+    const result = calculateNutrition(
+      [
+        component({
+          name: "main",
+          kind: "main",
+          weight_g: { low: 100, central: 150, high: 200 },
+          ingredient_evidence: [
+            { name: "sugar", source: "declared", basis: "served", grams: 250, per100: { protein: 0, carbs: 100, fat: 0, alcohol: 0, calories: 400 } },
+          ],
+        }),
+      ],
+      REF,
+    );
+    // No measured evidence → hard facts alone are feasible; declared is clamped.
+    expect(result.relaxed).toBe(true);
+    expect(result.relaxed_constraints).toContain("declared:sugar@main");
   });
 });

@@ -3,12 +3,27 @@
 // docs/nutrition-estimation-v1-design.md §4–§7 and docs/adr/0005, 0006, 0008,
 // 0017, 0018, 0019, 0020.
 
-export type ComponentKind = "rice" | "main" | "side" | "broth" | "other";
-export type EvidenceSource = "measured" | "declared" | "user_estimated";
-export type IngredientBasis = "raw" | "served" | "unknown";
-export type PortionMode = "measured" | "estimated";
-export type LatentHintKind = "visible_oil" | "dryness" | "remaining_broth";
-export type LatentHintLevel = "none" | "low" | "medium" | "high";
+// ——— Canonical vocabularies (single source of truth for routes, service, VLM) ———
+export const COMPONENT_KINDS = ["rice", "main", "side", "broth", "other"] as const;
+export const EVIDENCE_SOURCES = ["measured", "declared", "user_estimated"] as const;
+export const EVIDENCE_BASES = ["raw", "served", "unknown"] as const;
+export const PORTION_MODES = ["measured", "estimated"] as const;
+export const HINT_KINDS = ["visible_oil", "dryness", "remaining_broth"] as const;
+export const HINT_LEVELS = ["none", "low", "medium", "high"] as const;
+export const CONFIDENCE_LEVELS = ["high", "medium", "low"] as const;
+/** Fixed consumed-fraction choices when there is no after image (ADR 0015). */
+export const QUARTILE_FRACTIONS = [1, 0.75, 0.5, 0.25] as const;
+
+export type ComponentKind = (typeof COMPONENT_KINDS)[number];
+export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
+export type IngredientBasis = (typeof EVIDENCE_BASES)[number];
+export type PortionMode = (typeof PORTION_MODES)[number];
+export type LatentHintKind = (typeof HINT_KINDS)[number];
+export type LatentHintLevel = (typeof HINT_LEVELS)[number];
+export type ConfidenceLevel = (typeof CONFIDENCE_LEVELS)[number];
+/** How a reference was attached to an observation (design spec §7). */
+export type MatchTier = "manual" | "auto" | "ambiguous" | "gap";
+
 export type Macronutrients = {
   protein: number;
   carbs: number;
@@ -56,12 +71,23 @@ export interface ReferenceMacros {
   per100: Macronutrients;
 }
 
+/** A provider-normalized Nutrition Reference Catalog record (ADR 0011, 0020). */
+export interface ReferenceRow {
+  id: number;
+  provider: string;
+  providerFoodCode: string;
+  version: string;
+  nameEn: string | null;
+  nameTh: string | null;
+  per100: Macronutrients;
+}
+
 export interface ComponentBreakdown {
   name: string;
   /** After consumed_fraction applied. */
   consumed_weight_g: MassRange;
-  /** Calories from this component. */
-  contribution: { low: number; central: number; high: number };
+  /** Per-nutrient contribution from this component (grams for macros, kcal for calories). */
+  contribution: Record<keyof Macronutrients, { low: number; central: number; high: number }>;
 }
 
 export interface CalculationResult {

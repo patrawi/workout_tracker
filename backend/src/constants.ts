@@ -74,6 +74,9 @@ export const DEFAULT_NUMBER = 0;
 export const DEFAULT_BOOLEAN_FALSE = false;
 export const DEFAULT_TAGS: string[] = [];
 
+// Meal types shared by nutrition routes (nutrition_logs + Meal Observations).
+export const MEAL_VALUES = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
+
 // Static Assets
 export const STATIC_ASSETS_PREFIX = "/assets";
 export const STATIC_FILES_PATTERN =

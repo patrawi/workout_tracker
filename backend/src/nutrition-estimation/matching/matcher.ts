@@ -1,22 +1,18 @@
-// Reference matching tiers (ADR 0020) over hybrid retrieval (ADR 0014):
-// lexical token overlap is primary; pgvector similarity is only a fallback when
-// the lexical best score is below the auto threshold. Matching uses ONLY the
-// menu name — Weekly Menu Prior ranking is deferred (ADR 0021).
-import type { Macronutrients } from "../types";
+// Reference matching tiers (ADR 0020) over hybrid retrieval (ADR 0014, spec §7):
+// exact food-code lookup first, then lexical token overlap as primary, with
+// pgvector similarity only a fallback when the lexical best score is below the
+// auto threshold. Matching uses ONLY the menu name — Weekly Menu Prior ranking
+// is deferred (ADR 0021).
+import type { ReferenceRow } from "../types";
 
-export interface ReferenceRow {
-  id: number;
-  provider: string;
-  providerFoodCode: string;
-  version: string;
-  nameEn: string | null;
-  nameTh: string | null;
-  per100: Macronutrients;
-}
+// Compatibility re-export: ReferenceRow lives in ../types (domain types).
+export type { ReferenceRow } from "../types";
 
 export interface ReferenceMatcherRepo {
   /** Candidate pool (Nutrition Reference Catalog). */
   listReferences(): Promise<ReferenceRow[]>;
+  /** Exact food-code lookup (hybrid tier 0): case-insensitive, trimmed. */
+  findByFoodCode(code: string): Promise<ReferenceRow | null>;
   /** Optional pgvector fallback. */
   searchByEmbedding?(embedding: number[]): Promise<Array<ReferenceRow & { similarity: number }>>;
 }
@@ -84,6 +80,15 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
   const ambiguousThreshold = opts.ambiguousScoreThreshold ?? AMBIGUOUS_SCORE_THRESHOLD;
 
   async function matchReference(menuName: string): Promise<MatchOutcome> {
+    // Tier 0: exact food-code lookup (spec §7 — hybrid = food-code + lexical +
+    // pgvector). A trimmed, case-insensitive code match auto-selects and skips
+    // lexical scoring entirely.
+    const code = menuName.trim();
+    if (code) {
+      const byCode = await repo.findByFoodCode(code);
+      if (byCode) return { tier: "auto", reference: byCode, score: 1 };
+    }
+
     const pool = await repo.listReferences();
     if (pool.length === 0) return { tier: "gap" };
 

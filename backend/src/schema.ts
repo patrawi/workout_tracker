@@ -13,7 +13,16 @@ import {
     vector,
 } from "drizzle-orm/pg-core";
 import type { ExerciseRole, ProgressionLadder } from "./constants";
-import type { CalculationResult, Macronutrients } from "./nutrition-estimation/types";
+import type {
+    CalculationResult,
+    ComponentKind,
+    IngredientBasis,
+    Macronutrients,
+    MatchTier,
+    EvidenceSource,
+    LatentHintKind,
+    LatentHintLevel,
+} from "./nutrition-estimation/types";
 
 // Embedding dimension for the food catalog (Gemini text-embedding-004).
 export const EMBEDDING_DIMENSIONS = 768;
@@ -216,6 +225,8 @@ export const nutritionReferences = pgTable(
         ),
         index("nutrition_references_name_th_idx").on(table.name_th),
         index("nutrition_references_name_en_idx").on(table.name_en),
+        // Documented exception to the B-tree rule: pgvector similarity requires
+        // an HNSW index; the B-tree rule targets clustered B-tree indexes.
         index("nutrition_references_embedding_idx")
             .using("hnsw", table.embedding.op("vector_cosine_ops")),
     ],
@@ -236,7 +247,7 @@ export const mealObservations = pgTable(
         meal_source: text("meal_source"),
         status: mealObservationStatusEnum("status").default("draft").notNull(),
         reference_id: integer("reference_id").references(() => nutritionReferences.id),
-        match_tier: text("match_tier"),                     // "manual" | "auto" | "ambiguous" | "gap"
+        match_tier: text("match_tier").$type<MatchTier>(), // "manual" | "auto" | "ambiguous" | "gap"
         calculation: jsonb("calculation").$type<CalculationResult | null>(),
         created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
         updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
@@ -258,7 +269,7 @@ export const mealComponents = pgTable(
             .notNull()
             .references(() => mealObservations.id, { onDelete: "cascade" }),
         name: text("name").notNull(),
-        kind: text("kind").notNull(),                       // ComponentKind
+        kind: text("kind").$type<ComponentKind>().notNull(), // ComponentKind
         weight_mode: mealComponentWeightModeEnum("weight_mode").notNull(),
         weight_low: real("weight_low"),
         weight_central: real("weight_central"),
@@ -280,8 +291,8 @@ export const mealIngredientEvidence = pgTable(
             .notNull()
             .references(() => mealComponents.id, { onDelete: "cascade" }),
         name: text("name").notNull(),
-        source: text("source").notNull(),                   // EvidenceSource
-        basis: text("basis").notNull(),                     // IngredientBasis
+        source: text("source").$type<EvidenceSource>().notNull(),   // EvidenceSource
+        basis: text("basis").$type<IngredientBasis>().notNull(),    // IngredientBasis
         grams_low: real("grams_low"),
         grams_central: real("grams_central"),
         grams_high: real("grams_high"),
@@ -300,8 +311,8 @@ export const mealLatentHints = pgTable(
         component_id: integer("component_id")
             .notNull()
             .references(() => mealComponents.id, { onDelete: "cascade" }),
-        kind: text("kind").notNull(),                       // LatentHintKind
-        level: text("level").notNull(),                     // LatentHintLevel
+        kind: text("kind").$type<LatentHintKind>().notNull(),   // LatentHintKind
+        level: text("level").$type<LatentHintLevel>().notNull(), // LatentHintLevel
     },
     (table) => [
         index("meal_latent_hints_component_idx").on(table.component_id),
