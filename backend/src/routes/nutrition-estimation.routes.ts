@@ -76,6 +76,21 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
     .get("/meal-observations/pending", routeHandlerCtx(async () => {
       return await nutritionEstimationService.listPending();
     }))
+    // Reference search for the pending-meal resolution picker (design spec §7).
+    // Static path registered before /:id; query params arrive as strings, so
+    // limit is coerced here (invalid → undefined → service default 10).
+    .get("/meal-observations/references/search", routeHandlerCtx(async ({ query }) => {
+      const parsed = query.limit !== undefined ? Number.parseInt(query.limit, 10) : Number.NaN;
+      return await nutritionEstimationService.searchReferences(
+        query.q,
+        Number.isFinite(parsed) ? parsed : undefined,
+      );
+    }), {
+      query: t.Object({
+        q: t.String({ minLength: 1 }),
+        limit: t.Optional(t.String()),
+      }),
+    })
     .get("/meal-observations/:id", routeHandlerCtx(async ({ params }) => {
       return await nutritionEstimationService.getObservation(Number(params.id));
     }))
