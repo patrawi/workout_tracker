@@ -9,9 +9,11 @@ import {
     jsonb,
     pgEnum,
     index,
+    uniqueIndex,
     vector,
 } from "drizzle-orm/pg-core";
 import type { ExerciseRole, ProgressionLadder } from "./constants";
+import type { CalculationResult, Macronutrients } from "./nutrition-estimation/types";
 
 // Embedding dimension for the food catalog (Gemini text-embedding-004).
 export const EMBEDDING_DIMENSIONS = 768;
@@ -153,10 +155,201 @@ export const nutritionLogs = pgTable(
         fat: real("fat").default(0),                           // grams, after scaling
         alcohol: real("alcohol").default(0),                   // grams, after scaling
         calories: real("calories").default(0),                 // label kcal, or computed: P×4 + C×4 + F×9 + alcohol×7
+        // Provenance markers (ADR 0022 dual-write): set when the row comes from a
+        // confirmed Nutrition Estimate. Legacy manual/AI-parsed rows stay null.
+        source: text("source"),                                // "meal_observation"
+        observation_id: integer("observation_id"),
         created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
     },
     (table) => [
         index("nutrition_logs_date_idx").on(table.date),
+    ],
+);
+
+// ——— Nutrition Estimation V1 (ADR 0011, 0012, 0013, 0020, 0022) ———
+// Nutrition Reference Catalog: normalized per-100 g baselines from any provider
+// (ThaiFCD first). Versioned rows keep original provider codes + attribution.
+export const portionModeEnum = pgEnum("portion_mode", ["measured", "estimated"]);
+export const mealComponentWeightModeEnum = pgEnum("meal_component_weight_mode", [
+    "measured",
+    "estimated",
+]);
+export const mealImageRoleEnum = pgEnum("meal_image_role", [
+    "before",
+    "after",
+    "label_or_menu",
+]);
+export const estimateRevisionStatusEnum = pgEnum("estimate_revision_status", [
+    "pending_confirmation",
+    "confirmed",
+    "superseded",
+]);
+export const mealObservationStatusEnum = pgEnum("meal_observation_status", [
+    "draft",
+    "confirmed",
+    "reference_pending",
+]);
+
+export const nutritionReferences = pgTable(
+    "nutrition_references",
+    {
+        id: serial("id").primaryKey(),
+        provider: text("provider").notNull(),
+        provider_food_code: text("provider_food_code").notNull(),
+        version: text("version").notNull(),
+        name_en: text("name_en"),
+        name_th: text("name_th"),
+        protein: real("protein").default(0).notNull(),
+        carbs: real("carbs").default(0).notNull(),
+        fat: real("fat").default(0).notNull(),
+        alcohol: real("alcohol").default(0).notNull(),
+        calories: real("calories").default(0).notNull(),
+        extra_nutrients: jsonb("extra_nutrients").$type<Record<string, number>>(),
+        embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
+        created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+    },
+    (table) => [
+        uniqueIndex("nutrition_references_provider_code_version_idx").on(
+            table.provider,
+            table.provider_food_code,
+            table.version,
+        ),
+        index("nutrition_references_name_th_idx").on(table.name_th),
+        index("nutrition_references_name_en_idx").on(table.name_en),
+        index("nutrition_references_embedding_idx")
+            .using("hnsw", table.embedding.op("vector_cosine_ops")),
+    ],
+);
+
+// Meal Observation: one consumed meal (user menu name + portion evidence).
+// The estimate tables own the full model; nutrition_logs only gets a dual-written
+// point row with provenance markers (source, observation_id) — ADR 0022.
+
+export const mealObservations = pgTable(
+    "meal_observations",
+    {
+        id: serial("id").primaryKey(),
+        date: text("date").notNull(),                       // "YYYY-MM-DD"
+        meal_type: mealTypeEnum("meal_type").notNull(),
+        menu_name: text("menu_name").notNull(),
+        portion_mode: portionModeEnum("portion_mode").notNull(),
+        meal_source: text("meal_source"),
+        status: mealObservationStatusEnum("status").default("draft").notNull(),
+        reference_id: integer("reference_id").references(() => nutritionReferences.id),
+        match_tier: text("match_tier"),                     // "manual" | "auto" | "ambiguous" | "gap"
+        calculation: jsonb("calculation").$type<CalculationResult | null>(),
+        created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+        updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
+    },
+    (table) => [
+        index("meal_observations_status_idx").on(table.status),
+        index("meal_observations_date_idx").on(table.date),
+    ],
+);
+
+// Portion Component: coarse observable part (rice/main/side/broth/other).
+// For measured mode all three weight columns hold the same point value;
+// for estimated mode they carry the low/central/high interval.
+export const mealComponents = pgTable(
+    "meal_components",
+    {
+        id: serial("id").primaryKey(),
+        observation_id: integer("observation_id")
+            .notNull()
+            .references(() => mealObservations.id, { onDelete: "cascade" }),
+        name: text("name").notNull(),
+        kind: text("kind").notNull(),                       // ComponentKind
+        weight_mode: mealComponentWeightModeEnum("weight_mode").notNull(),
+        weight_low: real("weight_low"),
+        weight_central: real("weight_central"),
+        weight_high: real("weight_high"),
+        consumed_fraction: real("consumed_fraction").default(1).notNull(),
+        position: integer("position").default(0).notNull(),
+    },
+    (table) => [
+        index("meal_components_observation_idx").on(table.observation_id),
+    ],
+);
+
+// Known Ingredient Evidence: known quantity inside a Portion Component (ADR 0006).
+export const mealIngredientEvidence = pgTable(
+    "meal_ingredient_evidence",
+    {
+        id: serial("id").primaryKey(),
+        component_id: integer("component_id")
+            .notNull()
+            .references(() => mealComponents.id, { onDelete: "cascade" }),
+        name: text("name").notNull(),
+        source: text("source").notNull(),                   // EvidenceSource
+        basis: text("basis").notNull(),                     // IngredientBasis
+        grams_low: real("grams_low"),
+        grams_central: real("grams_central"),
+        grams_high: real("grams_high"),
+        per100: jsonb("per100").$type<Macronutrients | null>(),
+    },
+    (table) => [
+        index("meal_ingredient_evidence_component_idx").on(table.component_id),
+    ],
+);
+
+// Latent Recipe Factor hints (visible oil / dryness / remaining broth + level).
+export const mealLatentHints = pgTable(
+    "meal_latent_hints",
+    {
+        id: serial("id").primaryKey(),
+        component_id: integer("component_id")
+            .notNull()
+            .references(() => mealComponents.id, { onDelete: "cascade" }),
+        kind: text("kind").notNull(),                       // LatentHintKind
+        level: text("level").notNull(),                     // LatentHintLevel
+    },
+    (table) => [
+        index("meal_latent_hints_component_idx").on(table.component_id),
+    ],
+);
+
+// Meal image metadata only — uploads live in private R2 (ADR 0013, 0023).
+// Upload endpoints are out of scope for V1 core.
+export const mealImages = pgTable(
+    "meal_images",
+    {
+        id: serial("id").primaryKey(),
+        observation_id: integer("observation_id")
+            .notNull()
+            .references(() => mealObservations.id, { onDelete: "cascade" }),
+        role: mealImageRoleEnum("role").notNull(),
+        object_key: text("object_key"),
+        checksum: text("checksum"),
+        consent: boolean("consent").default(false),
+        evaluation_eligible: boolean("evaluation_eligible").default(false),
+        lifecycle_status: text("lifecycle_status").default("active").notNull(),
+        created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+    },
+    (table) => [
+        index("meal_images_observation_idx").on(table.observation_id),
+    ],
+);
+
+// Nutrition Estimate Revision: immutable per-recalculation record (ADR 0012).
+// Confirming marks the latest pending revision confirmed and supersedes any
+// previously confirmed one; never rewrites history.
+export const nutritionEstimateRevisions = pgTable(
+    "nutrition_estimate_revisions",
+    {
+        id: serial("id").primaryKey(),
+        observation_id: integer("observation_id")
+            .notNull()
+            .references(() => mealObservations.id, { onDelete: "cascade" }),
+        reference_id: integer("reference_id").references(() => nutritionReferences.id),
+        reference_provider: text("reference_provider"),
+        reference_version: text("reference_version"),
+        calculation: jsonb("calculation").$type<CalculationResult>().notNull(),
+        status: estimateRevisionStatusEnum("status").default("pending_confirmation").notNull(),
+        created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+        confirmed_at: timestamp("confirmed_at", { mode: "string" }),
+    },
+    (table) => [
+        index("nutrition_estimate_revisions_observation_idx").on(table.observation_id),
     ],
 );
 

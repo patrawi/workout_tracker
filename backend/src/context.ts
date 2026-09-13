@@ -12,6 +12,10 @@ import { createWaterRepository } from "./repositories/water.repository";
 import { createFoodCatalogRepository } from "./repositories/food-catalog.repository";
 import { createCoachPlanRepository } from "./repositories/coach-plan.repository";
 import { createCoachKnowledgeRepository } from "./repositories/coach-knowledge.repository";
+import { createNutritionEstimationRepository } from "./repositories/nutrition-estimation.repository";
+import { createReferenceMatcher } from "./nutrition-estimation/matching/matcher";
+import { createNutritionEstimationService } from "./nutrition-estimation/service";
+import { createDeepSeekVisionInterpreter } from "./nutrition-estimation/vlm/deepseek-vision";
 import { createAIService } from "./services/ai.service";
 import { createAnalyticsService } from "./services/analytics.service";
 import { createBodyweightService } from "./services/bodyweight.service";
@@ -34,6 +38,7 @@ import type { HistoryService } from "./services/history.service";
 import type { ProfileService } from "./services/profile.service";
 import type { WorkoutService } from "./services/workout.service";
 import type { NutritionService } from "./services/nutrition.service";
+import type { NutritionEstimationService } from "./nutrition-estimation/service";
 import type { WaterService } from "./services/water.service";
 import type { ConfigService } from "./services/config.service";
 import type { AuthService } from "./services/auth.service";
@@ -46,6 +51,7 @@ export interface AppContext {
   profileService: ProfileService;
   workoutService: WorkoutService;
   nutritionService: NutritionService;
+  nutritionEstimationService: NutritionEstimationService;
   waterService: WaterService;
   foodCatalogService: FoodCatalogService;
   coachService: CoachService;
@@ -69,11 +75,11 @@ export function createAppContext(
   const foodCatalogRepo = createFoodCatalogRepository(db);
   const coachPlanRepo = createCoachPlanRepository(db);
   const coachKnowledgeRepo = createCoachKnowledgeRepository(db);
+  const nutritionEstimationRepo = createNutritionEstimationRepository(db);
 
   // Create AI service
   const aiService = createAIService(config);
   const embeddingClient = createEmbeddingClient(config.geminiApiKey);
-
   // Create services
   const analyticsService = createAnalyticsService(analyticsRepo, workoutRepo);
   const bodyweightService = createBodyweightService(bodyweightRepo);
@@ -82,6 +88,24 @@ export function createAppContext(
   const workoutService = createWorkoutService(workoutRepo, aiService);
   const foodCatalogService = createFoodCatalogService(foodCatalogRepo, embeddingClient);
   const nutritionService = createNutritionService(nutritionRepo, aiService, foodCatalogService);
+
+  // Nutrition Estimation V1 — hybrid matcher uses the same repo for the lexical
+  // pool and the pgvector fallback (embedding only wired when a Gemini key
+  // exists; otherwise lexical-only, which is acceptable for V1 core).
+  const referenceMatcher = createReferenceMatcher(nutritionEstimationRepo, {
+    embed: config.geminiApiKey
+      ? (text) => embeddingClient.embed(text)
+      : undefined,
+  });
+  const nutritionEstimationService = createNutritionEstimationService({
+    repo: nutritionEstimationRepo,
+    matcher: referenceMatcher,
+    // VLM interpreter is optional; without a DeepSeek key interpret() returns
+    // { status: "unavailable" } and logging proceeds manually (ADR 0017).
+    interpreter: config.deepseekApiKey
+      ? createDeepSeekVisionInterpreter({ apiKey: config.deepseekApiKey })
+      : undefined,
+  });
   const waterService = createWaterService(waterRepo);
   const profileService = createProfileService(profileRepo, bodyweightService);
   const authService = createAuthService(config);
@@ -103,6 +127,7 @@ export function createAppContext(
     profileService,
     workoutService,
     nutritionService,
+    nutritionEstimationService,
     waterService,
     foodCatalogService,
     coachService,
