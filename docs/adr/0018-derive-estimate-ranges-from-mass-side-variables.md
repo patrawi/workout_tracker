@@ -1,0 +1,3 @@
+# Derive estimate ranges from mass-side variables only
+
+Uncertainty ranges come only from mass-side variables: estimated component weights, latent-factor masses implied by hints, and weakly sourced Known Ingredient Evidence. Measured weights, user-confirmed consumed fractions, and reference per-100-gram composition are fixed points, and the low, central, and high nutrient values are the minimum, central, and maximum of the total under mass-balance constraints. We chose mass-only intervals over also treating reference composition as a range or applying a flat uncertainty multiplier because it keeps the Nutrition Reference Baseline a stable, revisable fact while letting evidence quality, not a blanket percentage, determine interval width.

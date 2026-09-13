@@ -1,0 +1,3 @@
+# Normalize reference providers behind one catalog
+
+Expose one normalized Nutrition Reference Catalog and import ThaiFCD first, adding Western or other providers only when coverage requires them. Every record preserves provider-specific identity, version, quality, and attribution; the system reports a Reference Coverage Gap rather than forcing an unrelated nearest-vector match, and future providers such as CoFID or USDA remain a data-acquisition task rather than a V1 prerequisite. A coverage gap saves the Meal Observation as a Reference-Pending Meal without macros so it can be resolved and reprocessed later instead of blocking logging or inventing nutrition values.

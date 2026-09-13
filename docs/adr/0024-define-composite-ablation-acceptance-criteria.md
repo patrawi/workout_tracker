@@ -1,0 +1,3 @@
+# Define composite ablation acceptance criteria
+
+The LLM interpreter enters the main pipeline only if, on at least 30 Gold Meal Label meals, it reduces median macro error for calories and protein by at least 10 percent or reduces median user correction burden by at least 20 percent, while increasing median latency by no more than 5 seconds per meal and cost by no more than 2x; violating ADR 0010's prohibitions by altering measured facts or inventing unsupported ingredients on more than 1 percent of meals disqualifies it regardless of accuracy. We predefined these composite criteria before any shadow run so the gate cannot be moved after seeing results.

@@ -1,0 +1,3 @@
+# Tier reference matching into auto-accept, ask, and pending
+
+Retrieval results resolve in three tiers: a dominant match, meaning a top score above threshold with a clear margin over the runner-up, is selected automatically and shown in the explanation with a change action; closely scoring top candidates are offered to the user for selection; and nothing above threshold produces a Reference-Pending Meal. We chose tiers over always confirming or always auto-selecting to balance per-meal friction against the risk of silently forcing a compositionally inappropriate reference, consistent with the Reference Coverage Gap rule.

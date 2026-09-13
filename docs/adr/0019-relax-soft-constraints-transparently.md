@@ -1,0 +1,3 @@
+# Relax soft constraints transparently when evidence conflicts
+
+Evidence constraints are ranked: scale-measured and user-confirmed facts are hard, declared or user-estimated ingredient evidence is strong, and heuristic latent-factor hints are soft. Obvious conflicts are validated at entry time; if the solver still finds no feasible range it relaxes the softest constraints first and displays a relaxed-assumptions flag, and if hard constraints alone still conflict the system shows the reason and asks the user to resolve it rather than fabricating a range. We chose transparent relaxation over silent clipping because quietly absorbing data-entry errors into a plausible-looking range would violate honest uncertainty.
