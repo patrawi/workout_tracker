@@ -258,7 +258,28 @@ test("happy path: form → review → result shows the range → confirm", async
   // Review step: proposal loaded into editable rows (AI is a proposal only).
   await expect(page.getByText("Step 2 of 3 — Review estimate")).toBeVisible();
   await expect(page.locator('input[aria-label="Component 1 name"]')).toHaveValue("Rice");
-  await expect(page.getByText("Visible oil · low")).toBeVisible(); // latent hint pill
+  // AI sees: dish-name proposal with a Use action (spec §2).
+  await expect(page.getByText("AI sees:")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use", exact: true })).toBeVisible();
+
+  // Latent hints are correctable proposals (ADR 0017): level select + remove X.
+  await expect(page.getByText("Visible oil", { exact: true })).toBeVisible();
+  const hintLevel = page.getByLabel("Component 1 Visible oil level");
+  await expect(hintLevel).toHaveValue("low");
+  await hintLevel.selectOption({ label: "High" });
+  await expect(hintLevel).toHaveValue("high");
+
+  // No anchoring default: the proposal carries no fraction, so nothing is
+  // preselected (ADR 0017) — saving is blocked with an inline error until the
+  // user explicitly picks a quartile.
+  await page.getByRole("button", { name: "Save estimate" }).click();
+  await expect(page.getByText("Rice: pick the eaten fraction.")).toBeVisible();
+  await expect(page.getByText("Step 2 of 3 — Review estimate")).toBeVisible();
+
+  await page
+    .getByRole("group", { name: "Component 1 eaten fraction" })
+    .getByRole("button", { name: "All" })
+    .click();
 
   const createReq = page.waitForRequest("**/api/meal-observations");
   await page.getByRole("button", { name: "Save estimate" }).click();
@@ -273,6 +294,8 @@ test("happy path: form → review → result shows the range → confirm", async
     kind: "rice",
     weight_g: { low: 160, central: 200, high: 240 },
     consumed_fraction: 1,
+    // Hints reach the engine with the user-corrected level.
+    latent_hints: [{ kind: "visible_oil", level: "high" }],
   });
 
   // Result step: Plausible Nutrition Range (low–central–high) + Confirm.
@@ -288,6 +311,69 @@ test("happy path: form → review → result shows the range → confirm", async
   // Success flash + modal closed.
   await expect(page.getByText("Logged — daily totals updated")).toBeVisible();
   await expect(page.getByText("Step 1 of 3 — Details")).not.toBeVisible();
+});
+
+test("AI dish-name proposal is adoptable; menu name stays user-owned (spec §2)", async ({ authedPage: page, mock }) => {
+  await mockPendingEmpty(page);
+  await mock("**/api/meal-observations/interpret", ok(PROPOSAL));
+  await mock("**/api/meal-observations", ok(CALCULATED_OUTCOME));
+  await mock("**/api/meal-observations/101/confirm", ok(RESOLVE_OUTCOME));
+
+  await openLogModal(page);
+  // The user's own name differs from what the AI sees — adopting is optional.
+  await page.getByLabel("Menu name *").fill("My lunch");
+  await attachBeforePhoto(page);
+  await page.getByRole("button", { name: "Analyze photo" }).click();
+
+  await expect(page.getByText("AI sees:")).toBeVisible();
+  await expect(page.getByText("Chicken rice", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Use", exact: true }).click();
+  await expect(page.getByText("used for matching")).toBeVisible();
+
+  // Adoption flows into the create payload's menu_name.
+  await page
+    .getByRole("group", { name: "Component 1 eaten fraction" })
+    .getByRole("button", { name: "All" })
+    .click();
+  const createReq = page.waitForRequest("**/api/meal-observations");
+  await page.getByRole("button", { name: "Save estimate" }).click();
+  expect((await createReq).postDataJSON().menu_name).toBe("Chicken rice");
+});
+
+test("auto tier: Change reference re-resolves in place (ADR 0020)", async ({ authedPage: page, mock }) => {
+  await mockPendingEmpty(page);
+  await mock("**/api/meal-observations/interpret", ok(PROPOSAL));
+  await mock("**/api/meal-observations", ok(CALCULATED_OUTCOME));
+  await mock("**/api/meal-observations/references/search*", ok({ items: [SEARCH_ITEM] }));
+  await mock("**/api/meal-observations/101/resolve", ok(RESOLVE_OUTCOME));
+  await mock("**/api/meal-observations/101/confirm", ok(RESOLVE_OUTCOME));
+
+  await openLogModal(page);
+  await page.getByLabel("Menu name *").fill("Chicken rice");
+  await attachBeforePhoto(page);
+  await page.getByRole("button", { name: "Analyze photo" }).click();
+  await page
+    .getByRole("group", { name: "Component 1 eaten fraction" })
+    .getByRole("button", { name: "All" })
+    .click();
+  await page.getByRole("button", { name: "Save estimate" }).click();
+
+  // Result step shows the auto-selected estimate with a change action.
+  await expect(page.getByText("Plausible Nutrition Range")).toBeVisible();
+  await page.getByRole("button", { name: "Change reference" }).click();
+
+  // Same search UI as the pending dialog → pick → resolve(observationId, refId).
+  await page.getByLabel("Find a different reference").fill("chicken rice");
+  const resolveReq = page.waitForRequest("**/api/meal-observations/101/resolve");
+  await page.getByRole("button", { name: /Use reference Chicken rice/ }).click();
+  expect((await resolveReq).postDataJSON().reference_id).toBe(12);
+
+  // Recalculated outcome replaces the displayed estimate, then Confirm as usual.
+  await expect(page.getByText("Plausible Nutrition Range")).toBeVisible();
+  const confirmReq = page.waitForRequest("**/api/meal-observations/101/confirm");
+  await page.getByRole("button", { name: "Confirm & log" }).click();
+  await confirmReq;
+  await expect(page.getByText("Logged — daily totals updated")).toBeVisible();
 });
 
 test("oversized image is rejected inline before interpret", async ({ authedPage: page }) => {
@@ -328,11 +414,22 @@ test("failed interpret never blocks — drops into manual entry (ADR 0017)", asy
   await page.locator("#comp-low-0").fill("150");
   await page.locator("#comp-high-0").fill("210");
 
+  // Manual entry is still estimated mode: the eaten fraction must be picked
+  // explicitly — no anchoring default (ADR 0017).
+  await page.getByRole("button", { name: "Save estimate" }).click();
+  await expect(page.getByText("Grilled chicken: pick the eaten fraction.")).toBeVisible();
+
+  await page
+    .getByRole("group", { name: "Component 1 eaten fraction" })
+    .getByRole("button", { name: "1/2" })
+    .click();
+
   const createReq = page.waitForRequest("**/api/meal-observations");
   await page.getByRole("button", { name: "Save estimate" }).click();
   const createBody = (await createReq).postDataJSON();
   expect(createBody.components[0].name).toBe("Grilled chicken");
   expect(createBody.components[0].weight_g).toEqual({ low: 150, central: 180, high: 210 });
+  expect(createBody.components[0].consumed_fraction).toBe(0.5);
 
   await expect(page.getByText("Plausible Nutrition Range")).toBeVisible();
 });
@@ -348,6 +445,10 @@ test("ambiguous match → pick a candidate → resolve → confirm", async ({ au
   await page.getByLabel("Menu name *").fill("Chicken rice");
   await attachBeforePhoto(page);
   await page.getByRole("button", { name: "Analyze photo" }).click();
+  await page
+    .getByRole("group", { name: "Component 1 eaten fraction" })
+    .getByRole("button", { name: "All" })
+    .click();
   await page.getByRole("button", { name: "Save estimate" }).click();
 
   // Candidate list (name + provider/version + code), no range yet.
@@ -376,6 +477,10 @@ test("gap match → reference-pending notice, no macros fabricated", async ({ au
   await page.getByLabel("Menu name *").fill("Mystery stir fry");
   await attachBeforePhoto(page);
   await page.getByRole("button", { name: "Analyze photo" }).click();
+  await page
+    .getByRole("group", { name: "Component 1 eaten fraction" })
+    .getByRole("button", { name: "All" })
+    .click();
   await page.getByRole("button", { name: "Save estimate" }).click();
 
   await expect(page.getByText(/Saved as reference-pending — no macros until a reference is added/)).toBeVisible();

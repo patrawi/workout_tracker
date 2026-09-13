@@ -1,21 +1,26 @@
 import { useState, useCallback } from "react";
-import type { ChangeEvent } from "react";
 import DialogBase from "./DialogBase";
 import EstimateRangePanel from "./EstimateRangePanel";
+import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
+import ImageSlot, { type AttachedImage } from "@/features/nutrition-estimation/components/ImageSlot";
+import ReferenceCandidateCard from "@/features/nutrition-estimation/components/ReferenceCandidateCard";
+import ReferenceSearchPanel from "@/features/nutrition-estimation/components/ReferenceSearchPanel";
 import { useMealObservations } from "@/features/nutrition-estimation/hooks/useMealObservations";
+import {
+    estimateFromCreateOutcome,
+    estimateFromRecalculation,
+} from "@/features/nutrition-estimation/estimate";
+import { useRowList } from "@/features/nutrition-estimation/row-list";
 import { cn } from "@/lib/utils";
 import type {
-    CalculateObservationOutcome,
     ComponentKind,
     CreateOutcome,
+    CalculateObservationOutcome,
     LatentHint,
     MealType,
 } from "@/types";
 
 // ——— Constants ———
-
-/** Binary cap before base64 encoding (server accepts up to 8M base64 chars). */
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 const MEALS: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
@@ -41,13 +46,15 @@ const HINT_LABELS: Record<LatentHint["kind"], string> = {
     remaining_broth: "Remaining broth",
 };
 
-// ——— Local editable shapes ———
+/** Correctable levels per hint; picking "none" removes the hint entirely. */
+const HINT_LEVEL_OPTIONS: { value: LatentHint["level"]; label: string }[] = [
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "none", label: "None (remove)" },
+];
 
-/** Attached photo kept as base64 (for interpret) + data URL (for the preview). */
-interface AttachedImage {
-    base64: string;
-    dataUrl: string;
-}
+// ——— Local editable shapes ———
 
 /** One editable component row in the review step. */
 interface EditableComponent {
@@ -56,6 +63,7 @@ interface EditableComponent {
     low: string;
     central: string;
     high: string;
+    /** Empty string = not yet picked — never an anchoring default (ADR 0017). */
     fraction: string;
     latentHints: LatentHint[];
 }
@@ -71,24 +79,15 @@ type Step = "form" | "review" | "result";
 
 // ——— Helpers ———
 
-function readFileAsImage(file: File): Promise<AttachedImage> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const dataUrl = String(reader.result);
-            // Strip the data: prefix — the API wants raw base64.
-            const comma = dataUrl.indexOf(",");
-            resolve({ base64: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, dataUrl });
-        };
-        reader.onerror = () => reject(new Error("Could not read the file"));
-        reader.readAsDataURL(file);
-    });
-}
-
 function emptyComponent(): EditableComponent {
-    return { name: "", kind: "other", low: "", central: "", high: "", fraction: "1", latentHints: [] };
+    return { name: "", kind: "other", low: "", central: "", high: "", fraction: "", latentHints: [] };
 }
 
+function emptyMeasuredRow(): MeasuredRow {
+    return { name: "", kind: "main", grams: "" };
+}
+
+/** VLM proposal → editable rows. A stripped (low-confidence) fraction stays empty. */
 function proposalToComponents(
     components: Array<{
         name: string;
@@ -104,12 +103,10 @@ function proposalToComponents(
         low: String(c.weight_g.low),
         central: String(c.weight_g.central),
         high: String(c.weight_g.high),
-        fraction: c.consumed_fraction !== undefined ? String(c.consumed_fraction) : "1",
+        fraction: c.consumed_fraction !== undefined ? String(c.consumed_fraction) : "",
         latentHints: c.latent_hints ?? [],
     }));
 }
-
-const r1 = (n: number) => Math.round(n * 10) / 10;
 
 // ——— Component ———
 
@@ -147,79 +144,45 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const [mode, setMode] = useState<"estimated" | "measured">("estimated");
     const [beforeImage, setBeforeImage] = useState<AttachedImage | null>(null);
     const [afterImage, setAfterImage] = useState<AttachedImage | null>(null);
-    const [menuImage, setMenuImage] = useState<AttachedImage | null>(null);
-    const [measuredRows, setMeasuredRows] = useState<MeasuredRow[]>([{ name: "", kind: "main", grams: "" }]);
 
     // Review + result state
-    const [components, setComponents] = useState<EditableComponent[]>([]);
+    const componentList = useRowList<EditableComponent>(emptyComponent);
+    const measuredList = useRowList<MeasuredRow>(emptyMeasuredRow);
     const [outcome, setOutcome] = useState<CreateOutcome | null>(null);
     const [resolved, setResolved] = useState<CalculateObservationOutcome | null>(null);
+    /** VLM dish-name proposal (stripped/low-confidence arrives as "" → null here). */
+    const [vlmDishName, setVlmDishName] = useState<string | null>(null);
+    const [dishNameUsed, setDishNameUsed] = useState(false);
+    const [changeReferenceOpen, setChangeReferenceOpen] = useState(false);
 
-    const hasAfterImage = mode === "estimated" && afterImage !== null;
+    const hasAfterImage = afterImage !== null;
 
-    // ——— Image handling ———
+    // ——— Review-step hint editing (hints are correctable proposals, ADR 0017) ———
 
-    const handleFile = useCallback(
-        async (slot: "before" | "after" | "menu", e: ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
-            e.target.value = ""; // allow re-picking the same file
-            if (!file) return;
-            if (file.size > MAX_IMAGE_BYTES) {
-                setImageError(`"${file.name}" is over 4 MB — pick a smaller image.`);
-                return;
-            }
-            setImageError(null);
-            try {
-                const img = await readFileAsImage(file);
-                if (slot === "before") setBeforeImage(img);
-                else if (slot === "after") setAfterImage(img);
-                else setMenuImage(img);
-            } catch {
-                setImageError("Could not read that file — try another image.");
-            }
+    const setHintLevel = useCallback(
+        (rowIndex: number, kind: LatentHint["kind"], level: LatentHint["level"]) => {
+            const entry = componentList.rows[rowIndex];
+            if (!entry) return;
+            // "none" removes the hint — nothing is sent for it (ADR 0017).
+            const next =
+                level === "none"
+                    ? entry.row.latentHints.filter((h) => h.kind !== kind)
+                    : entry.row.latentHints.map((h) => (h.kind === kind ? { ...h, level } : h));
+            componentList.update(rowIndex, { latentHints: next });
         },
-        [],
+        [componentList],
     );
 
-    const removeImage = useCallback((slot: "before" | "after" | "menu") => {
-        if (slot === "before") setBeforeImage(null);
-        else if (slot === "after") setAfterImage(null);
-        else setMenuImage(null);
-    }, []);
-
-    // ——— Review-step row editing (immutable updates) ———
-
-    const updateComponent = useCallback((index: number, field: keyof EditableComponent, value: string) => {
-        setComponents((prev) => {
-            const copy = [...prev];
-            copy[index] = { ...copy[index], [field]: value };
-            return copy;
-        });
-    }, []);
-
-    const removeComponent = useCallback((index: number) => {
-        setComponents((prev) => prev.filter((_, i) => i !== index));
-    }, []);
-
-    const addComponent = useCallback(() => {
-        setComponents((prev) => [...prev, emptyComponent()]);
-    }, []);
-
-    const updateMeasuredRow = useCallback((index: number, field: keyof MeasuredRow, value: string) => {
-        setMeasuredRows((prev) => {
-            const copy = [...prev];
-            copy[index] = { ...copy[index], [field]: value };
-            return copy;
-        });
-    }, []);
-
-    const removeMeasuredRow = useCallback((index: number) => {
-        setMeasuredRows((prev) => prev.filter((_, i) => i !== index));
-    }, []);
-
-    const addMeasuredRow = useCallback(() => {
-        setMeasuredRows((prev) => [...prev, { name: "", kind: "main", grams: "" }]);
-    }, []);
+    const removeHint = useCallback(
+        (rowIndex: number, kind: LatentHint["kind"]) => {
+            const entry = componentList.rows[rowIndex];
+            if (!entry) return;
+            componentList.update(rowIndex, {
+                latentHints: entry.row.latentHints.filter((h) => h.kind !== kind),
+            });
+        },
+        [componentList],
+    );
 
     // ——— Submission ———
 
@@ -233,12 +196,12 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         }
         if (mode === "measured") {
             // Measured mode: exact grams, no photos, straight to create.
-            if (measuredRows.length === 0) {
+            if (measuredList.rows.length === 0) {
                 setError("Add at least one component.");
                 return;
             }
-            for (let i = 0; i < measuredRows.length; i++) {
-                const row = measuredRows[i];
+            for (let i = 0; i < measuredList.rows.length; i++) {
+                const row = measuredList.rows[i].row;
                 if (!row.name.trim()) {
                     setError(`Component ${i + 1}: name is required.`);
                     return;
@@ -256,7 +219,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                     menu_name: name,
                     portion_mode: "measured",
                     ...(mealSource.trim() ? { meal_source: mealSource.trim() } : {}),
-                    components: measuredRows.map((row) => ({
+                    components: measuredList.rows.map(({ row }) => ({
                         name: row.name.trim(),
                         kind: row.kind,
                         weight_g: Number(row.grams),
@@ -280,30 +243,52 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             const result = await interpret(name, beforeImage.base64, afterImage?.base64);
             if (result.status === "ok" && result.proposal.components.length > 0) {
                 setInterpretNotice(null);
-                setComponents(proposalToComponents(result.proposal.components));
+                componentList.replaceAll(proposalToComponents(result.proposal.components));
+                // A low-confidence dish name arrives stripped to "" (ADR 0017) —
+                // only a real proposal is surfaced.
+                setVlmDishName(result.proposal.dish_name.trim() || null);
+                setDishNameUsed(false);
             } else {
                 // failed (no_food / unreadable) or unavailable — never block (ADR 0017).
                 setInterpretNotice("Couldn't analyze the photo — enter components manually.");
-                setComponents([emptyComponent()]);
+                componentList.replaceAll([emptyComponent()]);
+                setVlmDishName(null);
             }
             setStep("review");
         } catch {
             // Network/API failure — same fallback path.
             setInterpretNotice("Couldn't analyze the photo — enter components manually.");
-            setComponents([emptyComponent()]);
+            componentList.replaceAll([emptyComponent()]);
+            setVlmDishName(null);
             setStep("review");
         }
-    }, [menuName, mode, measuredRows, beforeImage, afterImage, date, meal, mealSource, create, interpret]);
+    }, [
+        menuName,
+        mode,
+        measuredList,
+        beforeImage,
+        afterImage,
+        date,
+        meal,
+        mealSource,
+        create,
+        interpret,
+        componentList,
+    ]);
 
     /** Review → create (estimated mode, editable proposal or manual rows). */
     const handleReviewSubmit = useCallback(async () => {
         setError(null);
-        if (components.length === 0) {
+        if (componentList.rows.length === 0) {
             setError("Add at least one component.");
             return;
         }
-        for (let i = 0; i < components.length; i++) {
-            const row = components[i];
+        // Fractions confirmed against the after photo accept any value in (0, 1];
+        // otherwise only the fixed quartile choices (ADR 0015). The review step is
+        // estimated-mode only, but the payload field spells the mode out.
+        const fractionFromAfterImage = mode === "estimated" && hasAfterImage;
+        for (let i = 0; i < componentList.rows.length; i++) {
+            const row = componentList.rows[i].row;
             const label = row.name.trim() || `Component ${i + 1}`;
             if (!row.name.trim()) {
                 setError(`${label}: name is required.`);
@@ -316,12 +301,17 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                 setError(`${label}: weights must satisfy 0 < low ≤ central ≤ high.`);
                 return;
             }
+            if (row.fraction.trim() === "") {
+                // No anchoring default: the fraction exists only once the user picks it.
+                setError(`${label}: pick the eaten fraction.`);
+                return;
+            }
             const fraction = Number(row.fraction);
             if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) {
                 setError(`${label}: eaten fraction must be between 0 and 1.`);
                 return;
             }
-            if (!hasAfterImage && !QUARTILES.some((q) => Math.abs(fraction - q.value) < 1e-9)) {
+            if (!fractionFromAfterImage && !QUARTILES.some((q) => Math.abs(fraction - q.value) < 1e-9)) {
                 setError(`${label}: without an after photo the eaten fraction must be All, 3/4, 1/2 or 1/4.`);
                 return;
             }
@@ -333,12 +323,15 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                 menu_name: menuName.trim(),
                 portion_mode: "estimated",
                 ...(mealSource.trim() ? { meal_source: mealSource.trim() } : {}),
-                has_after_image: hasAfterImage,
-                components: components.map((row) => ({
+                has_after_image: fractionFromAfterImage,
+                components: componentList.rows.map(({ row }) => ({
                     name: row.name.trim(),
                     kind: row.kind,
                     weight_g: { low: Number(row.low), central: Number(row.central), high: Number(row.high) },
                     consumed_fraction: Number(row.fraction),
+                    ...(row.latentHints.length > 0
+                        ? { latent_hints: row.latentHints.map(({ kind, level }) => ({ kind, level })) }
+                        : {}),
                 })),
             });
             setOutcome(res);
@@ -346,9 +339,9 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save the meal.");
         }
-    }, [components, hasAfterImage, date, meal, menuName, mealSource, create]);
+    }, [componentList, hasAfterImage, mode, date, meal, menuName, mealSource, create]);
 
-    /** Ambiguous match → user picked a reference → recalculate. */
+    /** Candidate/reference picked → resolve → recalculate the displayed estimate. */
     const handlePickCandidate = useCallback(
         async (referenceId: number) => {
             if (!outcome) return;
@@ -356,6 +349,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             try {
                 const res = await resolve(outcome.observation.id, referenceId);
                 setResolved(res);
+                setChangeReferenceOpen(false);
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Failed to resolve the reference.");
             }
@@ -363,15 +357,14 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         [outcome, resolve],
     );
 
-    // ——— Result rendering pieces ———
+    // ——— Result rendering ———
 
-    const calculation = resolved?.revision.calculation ?? outcome?.observation.calculation ?? null;
-    const explanation = resolved?.explanation ?? outcome?.explanation ?? null;
-    const reference =
-        resolved?.reference ??
-        (outcome && (outcome.match.tier === "manual" || outcome.match.tier === "auto")
-            ? outcome.match.reference
-            : null);
+    /** A resolve/confirm recalculation wins over the create outcome's estimate. */
+    const estimate = resolved
+        ? estimateFromRecalculation(resolved)
+        : outcome
+            ? estimateFromCreateOutcome(outcome)
+            : null;
 
     const handleConfirm = useCallback(async () => {
         if (!outcome) return;
@@ -514,105 +507,25 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
                                 {mode === "estimated" ? (
                                     <div className="space-y-3">
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                            {/* Before photo */}
-                                            <div>
-                                                <label className="text-xs text-white font-medium block mb-1.5">
-                                                    Before photo *
-                                                </label>
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    aria-label="Before photo"
-                                                    onChange={(e) => handleFile("before", e)}
-                                                    className="block w-full text-xs text-surface-400 file:mr-2 file:rounded-lg file:border-0 file:bg-white/5 file:px-3 file:py-2 file:text-xs file:text-white file:cursor-pointer"
-                                                />
-                                                {beforeImage && (
-                                                    <div className="mt-2 flex items-center gap-2">
-                                                        <img
-                                                            src={beforeImage.dataUrl}
-                                                            alt="Before photo preview"
-                                                            className="h-20 w-20 rounded-lg object-cover border border-surface-300/30"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeImage("before")}
-                                                            className="text-xs text-red-400/70 hover:text-red-400"
-                                                            aria-label="Remove before photo"
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* After photo */}
-                                            <div>
-                                                <label className="text-xs text-white font-medium block mb-1.5">
-                                                    After photo <span className="text-surface-400">(optional)</span>
-                                                </label>
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    aria-label="After photo"
-                                                    onChange={(e) => handleFile("after", e)}
-                                                    className="block w-full text-xs text-surface-400 file:mr-2 file:rounded-lg file:border-0 file:bg-white/5 file:px-3 file:py-2 file:text-xs file:text-white file:cursor-pointer"
-                                                />
-                                                <p className="text-[11px] text-surface-400 mt-1.5">
-                                                    After eating — leftovers/broth
-                                                </p>
-                                                {afterImage && (
-                                                    <div className="mt-2 flex items-center gap-2">
-                                                        <img
-                                                            src={afterImage.dataUrl}
-                                                            alt="After photo preview"
-                                                            className="h-20 w-20 rounded-lg object-cover border border-surface-300/30"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeImage("after")}
-                                                            className="text-xs text-red-400/70 hover:text-red-400"
-                                                            aria-label="Remove after photo"
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Menu/label photo */}
-                                            <div>
-                                                <label className="text-xs text-white font-medium block mb-1.5">
-                                                    Menu photo <span className="text-surface-400">(optional)</span>
-                                                </label>
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    aria-label="Menu photo"
-                                                    onChange={(e) => handleFile("menu", e)}
-                                                    className="block w-full text-xs text-surface-400 file:mr-2 file:rounded-lg file:border-0 file:bg-white/5 file:px-3 file:py-2 file:text-xs file:text-white file:cursor-pointer"
-                                                />
-                                                <p className="text-[11px] text-surface-400 mt-1.5">
-                                                    Canteen menu photo — kept for a future update
-                                                </p>
-                                                {menuImage && (
-                                                    <div className="mt-2 flex items-center gap-2">
-                                                        <img
-                                                            src={menuImage.dataUrl}
-                                                            alt="Menu photo preview"
-                                                            className="h-20 w-20 rounded-lg object-cover border border-surface-300/30"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeImage("menu")}
-                                                            className="text-xs text-red-400/70 hover:text-red-400"
-                                                            aria-label="Remove menu photo"
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <ImageSlot
+                                                label="Before photo"
+                                                required
+                                                inputLabel="Before photo"
+                                                image={beforeImage}
+                                                onAttach={setBeforeImage}
+                                                onRemove={() => setBeforeImage(null)}
+                                                onError={setImageError}
+                                            />
+                                            <ImageSlot
+                                                label="After photo"
+                                                hint="After eating — leftovers/broth"
+                                                inputLabel="After photo"
+                                                image={afterImage}
+                                                onAttach={setAfterImage}
+                                                onRemove={() => setAfterImage(null)}
+                                                onError={setImageError}
+                                            />
                                         </div>
 
                                         {imageError && (
@@ -627,8 +540,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         <p className="text-xs text-surface-400">
                                             Enter each component's scale-measured weight — no photos needed.
                                         </p>
-                                        {measuredRows.map((row, i) => (
-                                            <div key={i} className="flex items-end gap-2">
+                                        {measuredList.rows.map((entry, i) => (
+                                            <div key={entry.id} className="flex items-end gap-2">
                                                 <div className="flex-1">
                                                     <label htmlFor={`measured-name-${i}`} className="text-xs text-surface-400 block mb-1">
                                                         Component {i + 1}
@@ -636,8 +549,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                                     <input
                                                         id={`measured-name-${i}`}
                                                         type="text"
-                                                        value={row.name}
-                                                        onChange={(e) => updateMeasuredRow(i, "name", e.target.value)}
+                                                        value={entry.row.name}
+                                                        onChange={(e) => measuredList.update(i, { name: e.target.value })}
                                                         placeholder="e.g. Rice"
                                                         className="glass-input w-full px-3 py-2 text-sm text-white"
                                                     />
@@ -648,8 +561,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                                     </label>
                                                     <select
                                                         id={`measured-kind-${i}`}
-                                                        value={row.kind}
-                                                        onChange={(e) => updateMeasuredRow(i, "kind", e.target.value)}
+                                                        value={entry.row.kind}
+                                                        onChange={(e) => measuredList.update(i, { kind: e.target.value as ComponentKind })}
                                                         className="glass-input px-2 py-2 text-sm text-white"
                                                     >
                                                         {KINDS.map((k) => (
@@ -669,15 +582,15 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                                         inputMode="decimal"
                                                         min={0}
                                                         step="any"
-                                                        value={row.grams}
-                                                        onChange={(e) => updateMeasuredRow(i, "grams", e.target.value)}
+                                                        value={entry.row.grams}
+                                                        onChange={(e) => measuredList.update(i, { grams: e.target.value })}
                                                         className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums text-right"
                                                     />
                                                 </div>
-                                                {measuredRows.length > 1 && (
+                                                {measuredList.rows.length > 1 && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => removeMeasuredRow(i)}
+                                                        onClick={() => measuredList.remove(i)}
                                                         className="text-xs text-red-400/60 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-red-500/10"
                                                         aria-label={`Remove component ${i + 1}`}
                                                     >
@@ -688,7 +601,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         ))}
                                         <button
                                             type="button"
-                                            onClick={addMeasuredRow}
+                                            onClick={measuredList.add}
                                             className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
                                         >
                                             + Add component
@@ -722,21 +635,43 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 </div>
                             )}
 
+                            {/* VLM dish-name proposal — user-owned menu name; adopting is optional (spec §2). */}
+                            {vlmDishName && (
+                                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-surface-300/20 bg-surface-100/50 px-4 py-2.5 text-sm">
+                                    <span className="text-surface-400">AI sees:</span>
+                                    <span className="text-white font-medium">{vlmDishName}</span>
+                                    {dishNameUsed ? (
+                                        <span className="text-xs text-emerald-400">used for matching</span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setMenuName(vlmDishName);
+                                                setDishNameUsed(true);
+                                            }}
+                                            className="text-xs font-medium text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline"
+                                        >
+                                            Use
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="space-y-3">
-                                {components.map((row, i) => (
-                                    <div key={i} className="rounded-xl bg-surface-100/50 border border-surface-300/20 p-4 space-y-3">
+                                {componentList.rows.map((entry, i) => (
+                                    <div key={entry.id} className="rounded-xl bg-surface-100/50 border border-surface-300/20 p-4 space-y-3">
                                         <div className="flex items-center gap-2">
                                             <input
                                                 type="text"
-                                                value={row.name}
-                                                onChange={(e) => updateComponent(i, "name", e.target.value)}
+                                                value={entry.row.name}
+                                                onChange={(e) => componentList.update(i, { name: e.target.value })}
                                                 placeholder={`Component ${i + 1} name`}
                                                 aria-label={`Component ${i + 1} name`}
                                                 className="glass-input flex-1 px-3 py-2 text-sm text-white font-medium"
                                             />
                                             <select
-                                                value={row.kind}
-                                                onChange={(e) => updateComponent(i, "kind", e.target.value)}
+                                                value={entry.row.kind}
+                                                onChange={(e) => componentList.update(i, { kind: e.target.value as ComponentKind })}
                                                 aria-label={`Component ${i + 1} kind`}
                                                 className="glass-input px-2 py-2 text-sm text-white"
                                             >
@@ -748,7 +683,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                             </select>
                                             <button
                                                 type="button"
-                                                onClick={() => removeComponent(i)}
+                                                onClick={() => componentList.remove(i)}
                                                 className="text-xs text-red-400/60 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-red-500/10"
                                                 aria-label={`Remove component ${i + 1}`}
                                             >
@@ -767,8 +702,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                                     inputMode="decimal"
                                                     min={0}
                                                     step="any"
-                                                    value={row.low}
-                                                    onChange={(e) => updateComponent(i, "low", e.target.value)}
+                                                    value={entry.row.low}
+                                                    onChange={(e) => componentList.update(i, { low: e.target.value })}
                                                     aria-label={`Component ${i + 1} low weight in grams`}
                                                     className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums text-right"
                                                 />
@@ -783,8 +718,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                                     inputMode="decimal"
                                                     min={0}
                                                     step="any"
-                                                    value={row.central}
-                                                    onChange={(e) => updateComponent(i, "central", e.target.value)}
+                                                    value={entry.row.central}
+                                                    onChange={(e) => componentList.update(i, { central: e.target.value })}
                                                     aria-label={`Component ${i + 1} central weight in grams`}
                                                     className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums text-right"
                                                 />
@@ -799,15 +734,17 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                                     inputMode="decimal"
                                                     min={0}
                                                     step="any"
-                                                    value={row.high}
-                                                    onChange={(e) => updateComponent(i, "high", e.target.value)}
+                                                    value={entry.row.high}
+                                                    onChange={(e) => componentList.update(i, { high: e.target.value })}
                                                     aria-label={`Component ${i + 1} high weight in grams`}
                                                     className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums text-right"
                                                 />
                                             </div>
                                         </div>
 
-                                        {/* Consumed fraction: free input with after photo, quartiles without */}
+                                        {/* Consumed fraction: free input with after photo, quartiles without.
+                                            Nothing is preselected — a missing proposal fraction must not
+                                            anchor to "all eaten" (ADR 0017). */}
                                         {hasAfterImage ? (
                                             <div>
                                                 <label htmlFor={`comp-fraction-${i}`} className="text-xs text-surface-400 block mb-1">
@@ -820,8 +757,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                                     min={0}
                                                     max={1}
                                                     step={0.05}
-                                                    value={row.fraction}
-                                                    onChange={(e) => updateComponent(i, "fraction", e.target.value)}
+                                                    value={entry.row.fraction}
+                                                    onChange={(e) => componentList.update(i, { fraction: e.target.value })}
                                                     aria-label={`Component ${i + 1} eaten fraction`}
                                                     className="glass-input w-32 px-3 py-2 text-sm text-white tabular-nums text-right"
                                                 />
@@ -836,13 +773,14 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                                 >
                                                     {QUARTILES.map((q) => {
                                                         const active =
-                                                            Number.isFinite(Number(row.fraction)) &&
-                                                            Math.abs(Number(row.fraction) - q.value) < 1e-9;
+                                                            Number.isFinite(Number(entry.row.fraction)) &&
+                                                            entry.row.fraction.trim() !== "" &&
+                                                            Math.abs(Number(entry.row.fraction) - q.value) < 1e-9;
                                                         return (
                                                             <button
                                                                 key={q.label}
                                                                 type="button"
-                                                                onClick={() => updateComponent(i, "fraction", String(q.value))}
+                                                                onClick={() => componentList.update(i, { fraction: String(q.value) })}
                                                                 aria-pressed={active}
                                                                 className={cn(
                                                                     "px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors",
@@ -857,11 +795,37 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                             </div>
                                         )}
 
-                                        {row.latentHints.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {row.latentHints.map((h, hi) => (
-                                                    <span key={hi} className="tag-pill">
-                                                        {HINT_LABELS[h.kind]} · {h.level}
+                                        {/* Latent hints stay correctable proposals: level select + remove. */}
+                                        {entry.row.latentHints.length > 0 && (
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {entry.row.latentHints.map((h) => (
+                                                    <span
+                                                        key={h.kind}
+                                                        className="tag-pill inline-flex items-center gap-1.5"
+                                                    >
+                                                        <span className="text-xs">{HINT_LABELS[h.kind]}</span>
+                                                        <select
+                                                            value={h.level}
+                                                            onChange={(e) =>
+                                                                setHintLevel(i, h.kind, e.target.value as LatentHint["level"])
+                                                            }
+                                                            aria-label={`Component ${i + 1} ${HINT_LABELS[h.kind]} level`}
+                                                            className="bg-transparent text-xs text-white outline-none cursor-pointer"
+                                                        >
+                                                            {HINT_LEVEL_OPTIONS.map((o) => (
+                                                                <option key={o.value} value={o.value}>
+                                                                    {o.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeHint(i, h.kind)}
+                                                            aria-label={`Remove ${HINT_LABELS[h.kind]} hint`}
+                                                            className="text-surface-400 hover:text-white"
+                                                        >
+                                                            ✕
+                                                        </button>
                                                     </span>
                                                 ))}
                                             </div>
@@ -871,7 +835,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
                                 <button
                                     type="button"
-                                    onClick={addComponent}
+                                    onClick={componentList.add}
                                     className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
                                 >
                                     + Add component
@@ -896,27 +860,36 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         Several references match "{menuName.trim()}" — pick the closest one.
                                     </p>
                                     {outcome.match.candidates.map((c) => (
-                                        <button
+                                        <ReferenceCandidateCard
                                             key={c.id}
-                                            type="button"
-                                            onClick={() => handlePickCandidate(c.id)}
-                                            className="w-full text-left rounded-xl bg-surface-100/50 border border-surface-300/20 hover:border-emerald-500/50 transition-colors px-4 py-3"
-                                            aria-label={`Use reference ${c.nameEn ?? c.nameTh ?? c.id}`}
-                                        >
-                                            <div className="text-sm text-white font-medium">
-                                                {c.nameEn ?? c.nameTh ?? `Reference #${c.id}`}
-                                            </div>
-                                            <div className="text-xs text-surface-400 mt-0.5">
-                                                {c.provider} v{c.version} · code {c.providerFoodCode} ·{" "}
-                                                {r1(c.per100.calories)} kcal / 100 g
-                                            </div>
-                                        </button>
+                                            candidate={c}
+                                            onPick={() => handlePickCandidate(c.id)}
+                                        />
                                     ))}
                                 </div>
                             )}
 
-                            {(outcome.match.tier !== "gap" || resolved) && calculation && explanation && (
-                                <EstimateRangePanel calculation={calculation} explanation={explanation} reference={reference} />
+                            {estimate && (
+                                <div className="space-y-3">
+                                    {/* ADR 0020: the auto-selected reference is changeable, in place. */}
+                                    <div className="flex items-center justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => setChangeReferenceOpen((openState) => !openState)}
+                                            aria-expanded={changeReferenceOpen}
+                                            className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
+                                        >
+                                            {changeReferenceOpen ? "Hide reference search" : "Change reference"}
+                                        </button>
+                                    </div>
+                                    {changeReferenceOpen && (
+                                        <ReferenceSearchPanel
+                                            label="Find a different reference"
+                                            onPick={handlePickCandidate}
+                                        />
+                                    )}
+                                    <EstimateRangePanel estimate={estimate} />
+                                </div>
                             )}
                         </>
                     )}
@@ -933,27 +906,15 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                             >
                                 Cancel
                             </button>
-                            <button
-                                type="button"
+                            <BusyButton
                                 onClick={handleFormContinue}
+                                busy={isInterpreting || isCreating}
+                                busyLabel={isInterpreting ? "Analyzing…" : "Saving…"}
                                 disabled={busy || (mode === "estimated" && !beforeImage)}
                                 className="btn-primary text-sm flex items-center gap-2"
                             >
-                                {isInterpreting || isCreating ? (
-                                    <>
-                                        <span
-                                            className="inline-block w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full"
-                                            style={{ animation: "spin 0.6s linear infinite" }}
-                                            aria-hidden="true"
-                                        />
-                                        {isInterpreting ? "Analyzing…" : "Saving…"}
-                                    </>
-                                    ) : mode === "estimated" ? (
-                                        "Analyze photo"
-                                    ) : (
-                                        "Save estimate"
-                                    )}
-                            </button>
+                                {mode === "estimated" ? "Analyze photo" : "Save estimate"}
+                            </BusyButton>
                         </>
                     )}
 
@@ -969,31 +930,21 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                             >
                                 Back
                             </button>
-                            <button
-                                type="button"
+                            <BusyButton
                                 onClick={handleReviewSubmit}
+                                busy={isCreating}
+                                busyLabel="Saving…"
                                 disabled={busy}
                                 className="btn-primary text-sm flex items-center gap-2"
                             >
-                                {isCreating ? (
-                                    <>
-                                        <span
-                                            className="inline-block w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full"
-                                            style={{ animation: "spin 0.6s linear infinite" }}
-                                            aria-hidden="true"
-                                        />
-                                        Saving…
-                                    </>
-                                ) : (
-                                    "Save estimate"
-                                )}
-                            </button>
+                                Save estimate
+                            </BusyButton>
                         </>
                     )}
 
                     {step === "result" && outcome && (
                         <>
-                            {outcome.match.tier === "gap" ? (
+                            {outcome.match.tier === "gap" && !estimate ? (
                                 <button type="button" onClick={handleClose} className="btn-primary text-sm">
                                     Close
                                 </button>
@@ -1006,25 +957,15 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                     >
                                         Cancel
                                     </button>
-                                    <button
-                                        type="button"
+                                    <BusyButton
                                         onClick={handleConfirm}
-                                        disabled={busy || !calculation}
+                                        busy={isConfirming}
+                                        busyLabel="Logging…"
+                                        disabled={busy || !estimate}
                                         className="btn-primary text-sm flex items-center gap-2"
                                     >
-                                        {isConfirming ? (
-                                            <>
-                                                <span
-                                                    className="inline-block w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full"
-                                                    style={{ animation: "spin 0.6s linear infinite" }}
-                                                    aria-hidden="true"
-                                                />
-                                                Logging…
-                                            </>
-                                        ) : (
-                                            "Confirm & log"
-                                        )}
-                                    </button>
+                                        Confirm & log
+                                    </BusyButton>
                                 </>
                             )}
                         </>

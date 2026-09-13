@@ -40,7 +40,8 @@ export const queryKeys = {
     mealObservations: {
         all: ["mealObservations"] as const,
         pending: () => [...queryKeys.mealObservations.all, "pending"] as const,
-        detail: (id: number) => [...queryKeys.mealObservations.all, "detail", id] as const,
+        /** id may be null while the consuming query is disabled — never a fake id. */
+        detail: (id: number | null) => [...queryKeys.mealObservations.all, "detail", id] as const,
         referenceSearch: (q: string) =>
             [...queryKeys.mealObservations.all, "referenceSearch", q] as const,
     },

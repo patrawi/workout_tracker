@@ -12,6 +12,7 @@ import PendingMealDialog from "@/components/PendingMealDialog";
 import { queryKeys } from "@/lib/query-keys";
 import { nutritionApi, foodCatalogApi } from "@/lib/api";
 import { formatDate } from "@/lib/date-utils";
+import { roundToWhole, roundToOneDecimal } from "@/features/nutrition-estimation/format";
 import type { NutritionRow, NutritionItem, MealType, PendingObservation } from "@/types";
 
 // ——— Local aliases mapped to the app's global theme tokens (keeps this page
@@ -39,8 +40,8 @@ const MEALS: { id: MealType; emoji: string }[] = [
     { id: "Snack", emoji: "🥨" },
 ];
 
-const r0 = (n: number) => Math.round(n);
-const r1 = (n: number) => Math.round(n * 10) / 10;
+// Shared rounding helpers (roundToWhole/roundToOneDecimal) come from
+// features/nutrition-estimation/format — previously duplicated here as r0/r1.
 const calcKcal = (p: number, c: number, f: number, a: number) => Math.round((p * 4 + c * 4 + f * 9 + a * 7) * 10) / 10;
 
 // ——— Date helpers (YYYY-MM-DD strings) ———
@@ -205,7 +206,7 @@ function CalorieRing({ consumed, goal, size = 210 }: { consumed: number; goal: n
             <svg viewBox="0 0 200 200" width={size} height={size} style={{ filter: "drop-shadow(0 0 14px var(--accent-glow))" }}>{ticks}</svg>
             <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}>
                 <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-.02em", color: "var(--text)", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
-                    {goal > 0 ? r0(Math.abs(remaining)) : r0(consumed)}
+                    {goal > 0 ? roundToWhole(Math.abs(remaining)) : roundToWhole(consumed)}
                 </div>
                 <div style={{ fontSize: 12, color: over ? "var(--fat)" : "var(--dim)", fontWeight: 600 }}>
                     {goal > 0 ? (over ? "kcal over" : "kcal left") : "kcal eaten"}
@@ -250,7 +251,7 @@ function MacroBars({ totals, goals, prev }: {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".04em" }}>{row.k}</span>
                             <span style={{ fontSize: 13, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>
-                                <b style={{ color: row.color }}>{r1(row.v)}</b>
+                                <b style={{ color: row.color }}>{roundToOneDecimal(row.v)}</b>
                                 {row.g > 0 && <span style={{ color: "var(--faint)" }}> / {row.g}g</span>}
                                 <DeltaBadge current={row.v} previous={row.pv} />
                             </span>
@@ -260,7 +261,7 @@ function MacroBars({ totals, goals, prev }: {
                         </div>
                         {row.g > 0 && (
                             <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 4, textAlign: "right" }}>
-                                {remain >= 0 ? r1(remain) + "g left" : r1(-remain) + "g over"}
+                                {remain >= 0 ? roundToOneDecimal(remain) + "g left" : roundToOneDecimal(-remain) + "g over"}
                             </div>
                         )}
                     </div>
@@ -270,7 +271,7 @@ function MacroBars({ totals, goals, prev }: {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".04em" }}>Alcohol</span>
                     <span style={{ fontSize: 13, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>
-                        <b style={{ color: "var(--alcohol)" }}>{r1(totals.a)}</b>
+                        <b style={{ color: "var(--alcohol)" }}>{roundToOneDecimal(totals.a)}</b>
                         <span style={{ color: "var(--faint)" }}> g consumed</span>
                         <DeltaBadge current={totals.a} previous={prev.a} />
                     </span>
@@ -455,8 +456,8 @@ function AddFoodModal({ open, meal, initial, onClose, onSave, isSaving }: {
                         <div><label style={lbl}>Alcohol</label><input inputMode="decimal" value={f.a} onChange={(e) => setF({ ...f, a: e.target.value })} placeholder="g" style={fld} /></div>
                     </div>
                     <div>
-                        <label style={lbl}>Calories <span style={{ textTransform: "none", color: "var(--faint)" }}>(auto: {r0(autoKcal)} kcal)</span></label>
-                        <input inputMode="decimal" value={f.kcal} onChange={(e) => setF({ ...f, kcal: e.target.value })} placeholder={String(r0(autoKcal))} style={fld} />
+                        <label style={lbl}>Calories <span style={{ textTransform: "none", color: "var(--faint)" }}>(auto: {roundToWhole(autoKcal)} kcal)</span></label>
+                        <input inputMode="decimal" value={f.kcal} onChange={(e) => setF({ ...f, kcal: e.target.value })} placeholder={String(roundToWhole(autoKcal))} style={fld} />
                     </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
@@ -499,11 +500,11 @@ function FoodRow({ it, onRemove, onEdit }: { it: NutritionRow; onRemove: () => v
     return (
         <div className="nut-row" style={{ padding: "11px 4px", borderTop: "1px solid var(--border)" }}>
             <div style={{ minWidth: 0, fontSize: 14, color: "var(--text)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.food_name}</div>
-            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.protein)}</span>
-            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.carbs)}</span>
-            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.fat)}</span>
-            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{r1(it.alcohol)}</span>
-            <span style={{ textAlign: "right", fontSize: 14, color: "var(--text)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{r0(it.calories)}</span>
+            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{roundToOneDecimal(it.protein)}</span>
+            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{roundToOneDecimal(it.carbs)}</span>
+            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{roundToOneDecimal(it.fat)}</span>
+            <span className="nut-pcf" style={{ textAlign: "right", fontSize: 13, color: "var(--dim)", fontVariantNumeric: "tabular-nums" }}>{roundToOneDecimal(it.alcohol)}</span>
+            <span style={{ textAlign: "right", fontSize: 14, color: "var(--text)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{roundToWhole(it.calories)}</span>
             <div className="nut-actions">
                 <button className="nut-tap" onClick={onEdit} title="Edit" aria-label={`Edit ${it.food_name}`} style={actBtn}><Icon name="edit" size={13} /></button>
                 <button className="nut-tap" onClick={onRemove} title="Remove" aria-label={`Remove ${it.food_name}`} style={actBtn}><Icon name="close" size={13} /></button>
@@ -526,11 +527,11 @@ function MealSection({ meal, emoji, items, onAdd, onRemove, onEdit }: {
                     <span style={{ fontSize: 22 }}>{emoji}</span>
                     <div>
                         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{meal}</div>
-                        {has && <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 1, whiteSpace: "nowrap" }}>P {r1(s.p)} · C {r1(s.c)} · F {r1(s.f)} · A {r1(s.alc)}</div>}
+                        {has && <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 1, whiteSpace: "nowrap" }}>P {roundToOneDecimal(s.p)} · C {roundToOneDecimal(s.c)} · F {roundToOneDecimal(s.f)} · A {roundToOneDecimal(s.alc)}</div>}
                     </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    {has && <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{r0(s.kcal)}<span style={{ fontSize: 12, color: "var(--faint)", fontWeight: 500 }}> kcal</span></span>}
+                    {has && <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{roundToWhole(s.kcal)}<span style={{ fontSize: 12, color: "var(--faint)", fontWeight: 500 }}> kcal</span></span>}
                     <button className="nut-tap" onClick={() => onAdd(meal)} title={`Add to ${meal}`} aria-label={`Add to ${meal}`} style={addMealBtn}>+</button>
                 </div>
             </div>
@@ -663,12 +664,12 @@ export default function NutritionPage() {
     const handleModalSave = useCallback(async (meal: MealType, f: { name: string; p: number; c: number; f: number; a: number; kcal: number }) => {
         if (modal.editing) {
             await updateItem(modal.editing.id, {
-                food_name: f.name, meal, protein: r1(f.p), carbs: r1(f.c), fat: r1(f.f), alcohol: r1(f.a), calories: r1(f.kcal),
+                food_name: f.name, meal, protein: roundToOneDecimal(f.p), carbs: roundToOneDecimal(f.c), fat: roundToOneDecimal(f.f), alcohol: roundToOneDecimal(f.a), calories: roundToOneDecimal(f.kcal),
             });
             flash("Updated");
         } else {
             const item: NutritionItem = {
-                food_name: f.name, meal, protein: r1(f.p), carbs: r1(f.c), fat: r1(f.f), alcohol: r1(f.a), calories: r1(f.kcal),
+                food_name: f.name, meal, protein: roundToOneDecimal(f.p), carbs: roundToOneDecimal(f.c), fat: roundToOneDecimal(f.f), alcohol: roundToOneDecimal(f.a), calories: roundToOneDecimal(f.kcal),
                 amount: 1, unit: "serving", has_missing_macros: false,
             };
             await confirmItems([item]);
@@ -745,12 +746,12 @@ export default function NutritionPage() {
                             <CalorieRing consumed={summary.totalCalories} goal={calorieGoal} size={210} />
                             <div style={{ display: "flex", gap: 22 }}>
                                 <div style={{ textAlign: "center" }}>
-                                    <div style={{ fontSize: 19, fontWeight: 800, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{r0(summary.totalCalories)}</div>
+                                    <div style={{ fontSize: 19, fontWeight: 800, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{roundToWhole(summary.totalCalories)}</div>
                                     <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>Consumed</div>
                                 </div>
                                 <div style={{ width: 1, background: "var(--border)" }} />
                                 <div style={{ textAlign: "center" }}>
-                                    <div style={{ fontSize: 19, fontWeight: 800, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{calorieGoal > 0 ? r0(calorieGoal) : "—"}</div>
+                                    <div style={{ fontSize: 19, fontWeight: 800, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{calorieGoal > 0 ? roundToWhole(calorieGoal) : "—"}</div>
                                     <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>Goal</div>
                                 </div>
                             </div>

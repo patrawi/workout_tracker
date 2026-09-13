@@ -1,13 +1,34 @@
 import { api } from "../api-client";
 import type {
+    ApiResponse,
     CalculateObservationOutcome,
     CreateMealObservationInput,
     CreateOutcome,
     InterpretOutcome,
+    MealObservationReference,
     ObservationDetailWithExplanation,
     PendingObservation,
     ReferenceSearchItem,
 } from "@/types";
+
+/** Wire item (snake_case search hit) → shared candidate shape used by both pickers. */
+function toReferenceCandidate(item: ReferenceSearchItem): MealObservationReference {
+    return {
+        id: item.id,
+        provider: item.provider,
+        providerFoodCode: item.provider_food_code,
+        version: item.version,
+        nameEn: item.name_en,
+        nameTh: item.name_th,
+        per100: {
+            protein: item.protein,
+            carbs: item.carbs,
+            fat: item.fat,
+            alcohol: item.alcohol,
+            calories: item.calories,
+        },
+    };
+}
 
 /**
  * Meal Observation endpoints (Nutrition Estimation V1).
@@ -37,8 +58,17 @@ export const mealObservationApi = {
     getDetail: (id: number) =>
         api.get<ObservationDetailWithExplanation>(`/meal-observations/${id}`),
 
-    searchReferences: (q: string, limit = 10) =>
-        api.get<{ items: ReferenceSearchItem[] }>(
+    /** Search results mapped to the shared candidate shape (see ReferenceCandidateCard). */
+    searchReferenceCandidates: async (
+        q: string,
+        limit = 10,
+    ): Promise<ApiResponse<MealObservationReference[]>> => {
+        const res = await api.get<{ items: ReferenceSearchItem[] }>(
             `/meal-observations/references/search?q=${encodeURIComponent(q)}&limit=${limit}`,
-        ),
+        );
+        if (res.success && res.data) {
+            return { ...res, data: res.data.items.map(toReferenceCandidate) };
+        }
+        return { success: res.success, error: res.error };
+    },
 };

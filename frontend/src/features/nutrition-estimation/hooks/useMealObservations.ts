@@ -7,9 +7,9 @@ import type {
     CreateMealObservationInput,
     CreateOutcome,
     InterpretOutcome,
+    MealObservationReference,
     ObservationDetailWithExplanation,
     PendingObservation,
-    ReferenceSearchItem,
 } from "@/types";
 
 interface UseMealObservationsReturn {
@@ -101,8 +101,9 @@ export function useMealObservations(): UseMealObservationsReturn {
             throw new Error(res.error ?? "Failed to resolve the reference");
         },
         onSuccess: () => {
+            // Resolve only recalculates the observation — nutrition/history keys
+            // stay untouched here; confirm is what dual-writes into nutrition_logs.
             queryClient.invalidateQueries({ queryKey: queryKeys.mealObservations.all });
-            queryClient.invalidateQueries({ queryKey: queryKeys.nutrition.all });
         },
     });
 
@@ -160,27 +161,34 @@ export function useMealObservations(): UseMealObservationsReturn {
 /** Full observation detail (components + latest revision + reference + explanation). */
 export function useMealObservationDetail(id: number | null) {
     return useQuery({
-        queryKey: queryKeys.mealObservations.detail(id ?? 0),
+        // The key carries the id as-is (null while disabled) — no fake id ever
+        // lands in a cache key.
+        queryKey: queryKeys.mealObservations.detail(id),
         queryFn: async (): Promise<ObservationDetailWithExplanation> => {
-            const res = await mealObservationApi.getDetail(id as number);
+            if (id === null) {
+                // Unreachable: the query is disabled without an id.
+                throw new Error("No meal observation id");
+            }
+            const res = await mealObservationApi.getDetail(id);
             if (res.success && res.data) return res.data;
             throw new Error(res.error ?? "Failed to load the meal");
         },
-        enabled: id !== null,
+        enabled: id != null,
     });
 }
 
 /**
  * Reference search for the pending-meal resolution picker. `query` should be the
  * debounced, trimmed term; pass null to disable the query entirely (the server
- * 422s on a missing q, so empty input never hits the wire).
+ * 422s on a missing q, so empty input never hits the wire). Results come back
+ * already mapped to the shared candidate shape at the api layer.
  */
 export function useReferenceSearch(query: string | null) {
     return useQuery({
         queryKey: queryKeys.mealObservations.referenceSearch(query ?? ""),
-        queryFn: async (): Promise<ReferenceSearchItem[]> => {
-            const res = await mealObservationApi.searchReferences(query as string);
-            if (res.success && res.data) return res.data.items;
+        queryFn: async (): Promise<MealObservationReference[]> => {
+            const res = await mealObservationApi.searchReferenceCandidates(query as string);
+            if (res.success && res.data) return res.data;
             throw new Error(res.error ?? "Reference search failed");
         },
         enabled: query !== null && query.trim().length > 0,

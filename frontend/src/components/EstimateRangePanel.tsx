@@ -1,26 +1,20 @@
-import type { CalculationResult, MealObservationReference, ObservationExplanation } from "@/types";
-
-const r0 = (n: number) => Math.round(n);
-const r1 = (n: number) => Math.round(n * 10) / 10;
-
-function rangeText(r: { low: number; central: number; high: number }, round: (n: number) => number) {
-    return `${round(r.low)}–${round(r.central)}–${round(r.high)}`;
-}
+import { formatInterval, roundToWhole, roundToOneDecimal } from "@/features/nutrition-estimation/format";
+import type { ResolvedEstimate } from "@/features/nutrition-estimation/estimate";
 
 interface EstimateRangePanelProps {
-    calculation: CalculationResult;
-    explanation: ObservationExplanation;
-    reference: MealObservationReference | null;
+    estimate: ResolvedEstimate;
 }
 
 /**
  * "Plausible Nutrition Range" display (design spec §6): low–central–high per
- * nutrient plus the explanation panel — reference used, per-component breakdown,
- * range drivers, and the measured/estimated + relaxed-assumptions flags.
+ * nutrient plus the explanation panel — reference used, complete per-component
+ * breakdown (consumed weight, fraction, per-nutrient contribution), range
+ * drivers, and the measured/estimated + relaxed-assumptions flags.
  */
-export default function EstimateRangePanel({ calculation, explanation, reference }: EstimateRangePanelProps) {
+export default function EstimateRangePanel({ estimate }: EstimateRangePanelProps) {
+    const { calculation, explanation, reference, components } = estimate;
     const { nutrients, per_component, drivers, relaxed, relaxed_constraints } = calculation;
-    const macroRows: Array<{ label: string; key: keyof typeof nutrients; unit: string; color: string }> = [
+    const macroRows: Array<{ label: string; key: "protein" | "carbs" | "fat" | "alcohol"; unit: string; color: string }> = [
         { label: "Protein", key: "protein", unit: "g", color: "text-emerald-400" },
         { label: "Carbs", key: "carbs", unit: "g", color: "text-amber-400" },
         { label: "Fat", key: "fat", unit: "g", color: "text-rose-400" },
@@ -39,7 +33,7 @@ export default function EstimateRangePanel({ calculation, explanation, reference
             {/* Calories headline */}
             <div className="rounded-xl bg-surface-100/50 border border-surface-300/20 p-4 text-center">
                 <div className="text-3xl font-bold text-white tabular-nums">
-                    {rangeText(nutrients.calories, r0)}
+                    {formatInterval(nutrients.calories, roundToWhole)}
                     <span className="text-sm font-medium text-surface-400 ml-2">kcal</span>
                 </div>
             </div>
@@ -50,7 +44,7 @@ export default function EstimateRangePanel({ calculation, explanation, reference
                     <div key={m.key} className="rounded-xl bg-surface-100/50 border border-surface-300/20 p-3">
                         <div className={`text-xs font-semibold ${m.color}`}>{m.label}</div>
                         <div className="text-sm text-white tabular-nums mt-1">
-                            {rangeText(nutrients[m.key], r1)}
+                            {formatInterval(nutrients[m.key], roundToOneDecimal)}
                             <span className="text-surface-400"> {m.unit}</span>
                         </div>
                     </div>
@@ -96,18 +90,31 @@ export default function EstimateRangePanel({ calculation, explanation, reference
                 </div>
 
                 {per_component.length > 0 && (
-                    <div className="space-y-1.5">
-                        {per_component.map((c) => (
-                            <div key={c.name} className="flex items-baseline justify-between gap-3 text-xs">
-                                <span className="text-white truncate">{c.name}</span>
-                                <span className="text-surface-400 tabular-nums whitespace-nowrap">
-                                    {rangeText(c.consumed_weight_g, r0)} g eaten →{" "}
-                                    <span className="text-surface-300">
-                                        {rangeText(c.contribution.calories, r0)} kcal
-                                    </span>
-                                </span>
-                            </div>
-                        ))}
+                    <div className="space-y-2.5">
+                        {per_component.map((component) => {
+                            // The fraction lives on the persisted component row; match by name.
+                            const fraction = components.find((c) => c.name === component.name)?.consumed_fraction;
+                            return (
+                                <div key={component.name}>
+                                    <div className="flex items-baseline justify-between gap-3 text-xs">
+                                        <span className="text-white font-medium truncate">{component.name}</span>
+                                        <span className="text-surface-400 tabular-nums whitespace-nowrap">
+                                            {formatInterval(component.consumed_weight_g, roundToWhole)} g eaten
+                                            {fraction !== undefined && <> · {Math.round(fraction * 100)}%</>}
+                                            {" → "}
+                                            <span className="text-surface-300">
+                                                {formatInterval(component.contribution.calories, roundToWhole)} kcal
+                                            </span>
+                                        </span>
+                                    </div>
+                                    <div className="text-[11px] text-surface-400 tabular-nums mt-0.5">
+                                        P {formatInterval(component.contribution.protein, roundToOneDecimal)} g · C{" "}
+                                        {formatInterval(component.contribution.carbs, roundToOneDecimal)} g · F{" "}
+                                        {formatInterval(component.contribution.fat, roundToOneDecimal)} g
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
 
