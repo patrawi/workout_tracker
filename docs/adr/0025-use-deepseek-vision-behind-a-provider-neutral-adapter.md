@@ -1,0 +1,3 @@
+# Use DeepSeek vision behind a provider-neutral adapter
+
+The V1 VLM baseline is DeepSeek vision behind a thin provider-neutral adapter that matches the structured-output contract, and the optional interpreter ablation uses the same DeepSeek model in both roles so accuracy, correction burden, latency, and cost differences are attributable to the interpreter role rather than model differences, sharpening ADR 0010's attribution. We chose this over mixing providers because DeepSeek is already integrated, supports image input and JSON output, and same-model pairing removes a confound, while the adapter keeps the pipeline free to swap models later.

@@ -30,6 +30,9 @@ export const COACH_NUTRITION_DAYS = 7; // days of nutrition to average
 export const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 export const DEEPSEEK_COACH_MODEL = "deepseek-v4-flash";
 export const DEEPSEEK_PARSER_MODEL = "deepseek-v4-flash";
+// Vision baseline for Nutrition Estimation V1 (ADR 0025) — same model in both
+// interpreter and VLM roles so ablation differences are attributable (ADR 0010).
+export const DEEPSEEK_VISION_MODEL = "deepseek-flash";
 export const DEEPSEEK_TEMPERATURE = 0.1;
 
 // Food Catalog — embeddings + retrieval (RAG nutrition parse)
@@ -70,6 +73,9 @@ export const DEFAULT_EMPTY_STRING = "";
 export const DEFAULT_NUMBER = 0;
 export const DEFAULT_BOOLEAN_FALSE = false;
 export const DEFAULT_TAGS: string[] = [];
+
+// Meal types shared by nutrition routes (nutrition_logs + Meal Observations).
+export const MEAL_VALUES = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
 
 // Static Assets
 export const STATIC_ASSETS_PREFIX = "/assets";

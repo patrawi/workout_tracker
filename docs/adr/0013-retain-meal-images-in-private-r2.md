@@ -1,0 +1,3 @@
+# Retain meal images in private R2
+
+Retain privacy-sanitized meal images by default in a private Cloudflare R2 Standard bucket, while PostgreSQL stores object keys, checksums, capture metadata, consent state, and lifecycle status rather than image binaries. Strip EXIF location metadata before upload, expose user deletion/export controls, and keep retention separate from evaluation eligibility so accumulated images are useful without silently treating every stored photo as labeled experiment data. Capture roles remain deliberately simple: one before image, an after image when leftovers matter, and optional label/menu evidence; a separate detail-shot requirement is excluded.

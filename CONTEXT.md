@@ -179,3 +179,109 @@ _Avoid_: Immediate weight jump at 10 reps
 **Isolation Rep Ladder**:
 The default isolation progression cycle: use one higher-rep range such as 12 to 15 reps, add weight after the user reaches the saved top range across all planned sets, then reset to the same range at the new weight.
 _Avoid_: Compound rep promotion
+
+## Nutrition Estimation Language
+
+**Meal Observation**:
+A consumed meal submitted with a user-provided menu name, detail photo, and portion evidence. Portion evidence may be measured or estimated.
+_Avoid_: Photo-only identification, exact recipe
+
+**Measured Portion Weight**:
+Portion mass recorded with a food scale, including separately measured components when available.
+_Avoid_: Visual estimate, assumed serving
+
+**Estimated Portion Weight**:
+A bounded portion-mass estimate used when no scale measurement is available. It carries greater uncertainty than Measured Portion Weight.
+_Avoid_: Measured grams, exact weight
+
+**Reviewed Weight Estimate**:
+An Estimated Portion Weight that the user has accepted or adjusted during review. It remains estimated unless replaced by an actual scale measurement.
+_Avoid_: Measured weight, ground truth
+
+**Portion Component**:
+A coarse, observable part of a Meal Observation that may have distinct weight or consumption evidence, such as rice, main dish, solids, or broth. It is not a recipe ingredient list.
+_Avoid_: Ingredient, full recipe decomposition
+
+**Consumed Fraction**:
+The share of a Portion Component that was actually eaten, expressed coarsely such as all, three quarters, half, or a quarter. AI may propose it by comparing before and after images, but it becomes evidence only when the user confirms or corrects it.
+_Avoid_: Observed fact, AI truth, leftover guess
+
+**Latent Recipe Factor**:
+An ingredient or preparation detail that is not separately observed or weighed, such as starch, cooking oil, sugar, or rendered pork fat. Its effect belongs in estimate uncertainty rather than user-entered Portion Components.
+_Avoid_: Required component, known ingredient quantity
+
+**Known Ingredient Evidence**:
+An optional known quantity for an ingredient contained within a Portion Component. It constrains how that component is allocated and does not add weight on top of the component total.
+_Avoid_: Required recipe entry, additional portion weight
+
+**Ingredient Evidence Source**:
+The provenance of Known Ingredient Evidence: separately measured, declared by a label/menu/vendor, or estimated by the user. The source determines how strongly the quantity constrains the estimate.
+_Avoid_: Uniform confidence, source-free weight
+
+**Ingredient Weight Basis**:
+Whether Known Ingredient Evidence describes raw weight, served weight, or an unknown preparation stage. Unknown basis preserves more uncertainty than an explicitly known basis.
+_Avoid_: Assuming declared weight is cooked, silent raw-to-served conversion
+
+**Nutrition Reference Baseline**:
+The per-100-gram composition from ThaiFCD used as the starting point for an estimate. It represents reference food composition, not the exact composition of the served meal.
+_Avoid_: Ground truth, exact recipe
+
+**ThaiFCD Reference Snapshot**:
+A versioned collection of ThaiFCD food-composition records available for local matching and lookup while preserving their original food codes and source attribution.
+_Avoid_: Live ThaiFCD service, personal food catalog
+
+**Nutrition Reference Catalog**:
+The single normalized, locally queryable catalog through which nutrition reference records from ThaiFCD and future providers are accessed. Each record retains its original provider, identifier, version, and attribution.
+_Avoid_: Provider-blind merged data, separate cuisine silos
+
+**Reference Coverage Gap**:
+The absence of a sufficiently relevant nutrition reference for a Meal Observation. It must not be hidden by forcing a semantically similar but compositionally inappropriate match.
+_Avoid_: Nearest-vector-as-truth, fabricated reference
+
+**Reference-Pending Meal**:
+A saved Meal Observation whose nutrition calculation is deferred because no suitable reference is available. It preserves the original evidence without fabricating macros and may be resolved when an appropriate reference is added or selected.
+_Avoid_: Failed log, zero-macro meal
+
+**Nutrition Estimate Revision**:
+A newly confirmed calculation for an existing Meal Observation, linked to the reference provider and version that produced it. It supersedes the displayed estimate without erasing earlier confirmed or pending history.
+_Avoid_: Silent overwrite, catalog-driven history mutation
+
+**Weekly Menu Prior**:
+The announced canteen dishes used to rank likely meal matches for a particular week. It is a strong hint, not an exhaustive constraint on what the user may eat. Deferred from V1: V1 matching does not consume this prior, and a day-by-day menu photo is treated only as label_or_menu image evidence.
+_Avoid_: Mandatory menu, hard closed set, V1 ranking input
+
+**Off-Menu Meal**:
+A consumed meal that is absent from the Weekly Menu Prior, including a substitute chosen because the announced dish was skipped.
+_Avoid_: Invalid meal, matching failure
+
+**Meal Source**:
+The optional preparation context for a Meal Observation, such as the office canteen, a restaurant, home, or unknown. It scopes future calibration without requiring identification of an individual cook.
+_Avoid_: Mandatory location, assumed cook identity
+
+**Source-Specific Calibration**:
+An evidence-backed adjustment learned for a particular Meal Source and dish. It must fall back to a broader reference for other sources rather than being treated as universally valid.
+_Avoid_: Global recipe truth, cross-source adjustment
+
+**Reviewed Meal Label**:
+Observable meal evidence that the user accepted or corrected after seeing an AI proposal. It is useful operational feedback but may contain anchoring bias and is not nutrient ground truth.
+_Avoid_: Blind label, laboratory truth
+
+**Gold Meal Label**:
+An independently reviewed label for observable meal evidence created without seeing the competing model outputs first. It supports model comparison but still does not prove hidden recipe composition or final nutrient values.
+_Avoid_: AI-confirmed label, nutrition ground truth
+
+**Retained Meal Image**:
+A privacy-sanitized image kept in private object storage and linked to its Meal Observation through metadata. Retention alone does not authorize its use as evaluation data.
+_Avoid_: Public image, database binary
+
+**Evaluation-Eligible Image**:
+A Retained Meal Image explicitly marked for model evaluation and paired with sufficient evidence, provenance, and labels for the intended test.
+_Avoid_: Every stored image, unlabeled training truth
+
+**Meal Image Capture Role**:
+The meaning of a Retained Meal Image: before eating, after eating, or label/menu evidence. A separate detail-photo role is deliberately excluded to keep capture simple.
+_Avoid_: Unclassified image, required detail shot
+
+**Plausible Nutrition Range**:
+A low, central, and high nutrient estimate derived from explicit but not yet calibrated assumptions. It preserves uncertainty without claiming percentile coverage or exact composition.
+_Avoid_: P10–P90, calibrated interval, exact macros

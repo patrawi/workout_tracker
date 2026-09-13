@@ -142,4 +142,5 @@ Bun auto-loads `.env` files, but the project also uses `dotenv/config` imports.
 - Drizzle migrations are applied via `bun run src/migrate.ts` on Railway.
 - Add indexes via the third argument of `pgTable` (the callback form): `(table) => [index("name").on(table.column)]`
 - Always use regular (unclustered) B-tree indexes — PostgreSQL only allows one clustered index (the primary key).
+- pgvector similarity columns are the documented exception and use HNSW indexes (not B-tree), since the rule targets clustered B-tree indexes.
 - Current indexes: `workouts_created_at_idx`, `workouts_exercise_name_idx`, `rest_days_created_at_idx`, `nutrition_logs_date_idx`
