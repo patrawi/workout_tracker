@@ -10,3 +10,4 @@ export { waterApi } from "./water";
 export { foodCatalogApi, type CatalogSyncResult } from "./food-catalog";
 export { historyApi, type HistoryDate } from "./history";
 export { coachApi } from "./coach";
+export { mealObservationApi } from "./mealObservations";

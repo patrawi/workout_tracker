@@ -5,10 +5,14 @@ import "react-day-picker/style.css";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useNutrition } from "@/features/nutrition/hooks/useNutrition";
 import { useWater } from "@/features/nutrition/hooks/useWater";
+import { useMealObservations } from "@/features/nutrition-estimation/hooks/useMealObservations";
 import NutritionReviewModal from "@/components/NutritionReviewModal";
+import LogMealModal from "@/components/LogMealModal";
+import PendingMealDialog from "@/components/PendingMealDialog";
 import { queryKeys } from "@/lib/query-keys";
 import { nutritionApi, foodCatalogApi } from "@/lib/api";
-import type { NutritionRow, NutritionItem, MealType } from "@/types";
+import { formatDate } from "@/lib/date-utils";
+import type { NutritionRow, NutritionItem, MealType, PendingObservation } from "@/types";
 
 // ——— Local aliases mapped to the app's global theme tokens (keeps this page
 // consistent with the rest of the app; only macro colors stay custom). ———
@@ -61,6 +65,7 @@ function Icon({ name, size = 18, style }: { name: string; size?: number; style?:
         arrowR: <path d="M9 6l6 6-6 6" />,
         sync: <><path d="M4 12a8 8 0 0 1 13.7-5.7L20 8M20 4v4h-4" /><path d="M20 12a8 8 0 0 1-13.7 5.7L4 16M4 20v-4h4" /></>,
         calendar: <><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" /></>,
+        camera: <><path d="M8.5 7l1.3-2.2h4.4L15.5 7" /><rect x="3.5" y="7" width="17" height="12.5" rx="2.5" /><circle cx="12" cy="13" r="3.4" /></>,
         edit: <><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" /><path d="M13.5 6.5l3 3" /></>,
     };
     return (
@@ -347,8 +352,8 @@ function WaterCard({ glasses, goal, onSave, isSaving }: { glasses: number; goal:
 }
 
 // ——— AI paste input ———
-function AIInput({ dateLabel, value, setValue, onParse, onManual, isParsing }: {
-    dateLabel: string; value: string; setValue: (s: string) => void; onParse: () => void; onManual: () => void; isParsing: boolean;
+function AIInput({ dateLabel, value, setValue, onParse, onManual, onPhotoLog, isParsing }: {
+    dateLabel: string; value: string; setValue: (s: string) => void; onParse: () => void; onManual: () => void; onPhotoLog: () => void; isParsing: boolean;
 }) {
     const taRef = useRef<HTMLTextAreaElement>(null);
     const [focused, setFocused] = useState(false);
@@ -393,9 +398,14 @@ function AIInput({ dateLabel, value, setValue, onParse, onManual, isParsing }: {
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
                 <span style={{ fontSize: 12, color: "var(--faint)" }}>Paste in Thai or English · <span style={{ color: "var(--dim)" }}>Enter</span> to parse, <span style={{ color: "var(--dim)" }}>Shift+Enter</span> for newline.</span>
-                <button className="nut-tap" onClick={onManual} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: "1px dashed var(--border)", background: "transparent", color: "var(--dim)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                    <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Add a food manually
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <button className="nut-tap" onClick={onPhotoLog} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: "1px solid var(--accent-line)", background: "var(--accent-soft)", color: "var(--accent)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                        <Icon name="camera" size={15} /> Log meal with photo
+                    </button>
+                    <button className="nut-tap" onClick={onManual} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: "1px dashed var(--border)", background: "transparent", color: "var(--dim)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                        <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Add a food manually
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -538,6 +548,49 @@ function MealSection({ meal, emoji, items, onAdd, onRemove, onEdit }: {
     );
 }
 
+// ——— Pending meals (Nutrition Estimation V1, design spec §7) ———
+function PendingStatusBadge({ row }: { row: PendingObservation }) {
+    const isReferencePending = row.status === "reference_pending";
+    const style: React.CSSProperties = isReferencePending
+        ? { background: "oklch(0.8 0.16 80 / 0.12)", color: "oklch(0.82 0.16 80)", border: "1px solid oklch(0.8 0.16 80 / 0.35)" }
+        : { background: "var(--accent-soft)", color: "var(--accent)", border: "1px solid var(--accent-line)" };
+    return (
+        <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 999, whiteSpace: "nowrap", ...style }}>
+            {isReferencePending ? "Needs reference" : "Estimate ready"}
+        </span>
+    );
+}
+
+function PendingMeals({ rows, isLoading, onOpen }: { rows: PendingObservation[]; isLoading: boolean; onOpen: (id: number) => void }) {
+    return (
+        <Card style={{ padding: "18px 20px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text)" }}>Pending meals</h2>
+                <span style={{ fontSize: 12, color: "var(--faint)" }}>Waiting for a reference or your confirmation</span>
+            </div>
+            {isLoading ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                    <div className="skeleton" style={{ height: 54, borderRadius: 12 }} />
+                    <div className="skeleton" style={{ height: 54, borderRadius: 12 }} />
+                </div>
+            ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                    {rows.map((p) => (
+                        <button key={p.id} className="nut-tap" onClick={() => onOpen(p.id)}
+                            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, width: "100%", padding: "11px 14px", borderRadius: 12, border: "1px solid var(--border)", background: "transparent", cursor: "pointer", textAlign: "left" }}>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.menu_name}</div>
+                                <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }}>{formatDate(p.date)} · {p.meal_type}</div>
+                            </div>
+                            <PendingStatusBadge row={p} />
+                        </button>
+                    ))}
+                </div>
+            )}
+        </Card>
+    );
+}
+
 // ——— Page ———
 export default function NutritionPage() {
     const [searchParams] = useSearchParams();
@@ -550,6 +603,13 @@ export default function NutritionPage() {
     } = useNutrition(initialDate);
 
     const { glasses, saveWater, isSaving: isSavingWater } = useWater(selectedDate);
+
+    // Meal observations (Nutrition Estimation V1): pending queue + photo logging modal.
+    const { pending, isPendingLoading } = useMealObservations();
+    const [logModal, setLogModal] = useState<{ open: boolean; nonce: number }>({ open: false, nonce: 0 });
+    const openLogModal = useCallback(() => setLogModal((m) => ({ open: true, nonce: m.nonce + 1 })), []);
+    const closeLogModal = useCallback(() => setLogModal((m) => ({ ...m, open: false })), []);
+    const [resolveId, setResolveId] = useState<number | null>(null);
 
     const [text, setText] = useState("");
     const [toast, setToast] = useState("");
@@ -712,7 +772,7 @@ export default function NutritionPage() {
                 </div>
 
                 {/* Input */}
-                <AIInput dateLabel={dateLabel} value={text} setValue={setText} onParse={handleSubmit} onManual={() => openModal("Breakfast", null)} isParsing={isParsing} />
+                <AIInput dateLabel={dateLabel} value={text} setValue={setText} onParse={handleSubmit} onManual={() => openModal("Breakfast", null)} onPhotoLog={openLogModal} isParsing={isParsing} />
 
                 {/* Food log */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
@@ -740,11 +800,24 @@ export default function NutritionPage() {
                         ))}
                     </div>
                 )}
+
+                {/* Pending meals — reference-pending + unconfirmed drafts (design spec §7) */}
+                {(isPendingLoading || pending.length > 0) && (
+                    <PendingMeals rows={pending} isLoading={isPendingLoading} onOpen={setResolveId} />
+                )}
             </main>
 
             <AddFoodModal key={modal.nonce} open={modal.open} meal={modal.meal} initial={modal.editing}
                 onClose={closeModal}
                 onSave={handleModalSave} isSaving={isConfirming} />
+
+            <LogMealModal key={`log-${logModal.nonce}`} open={logModal.open}
+                defaultDate={selectedDate} onClose={closeLogModal} onLogged={flash} />
+
+            {resolveId !== null && (
+                <PendingMealDialog key={resolveId} observationId={resolveId}
+                    onClose={() => setResolveId(null)} onLogged={flash} />
+            )}
 
             <Toast msg={toast} />
 
