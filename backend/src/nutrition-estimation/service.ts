@@ -24,7 +24,7 @@ import type {
   PersistedRevision,
   NutritionEstimationRepository,
 } from "../repositories/nutrition-estimation.repository";
-import type { ReferenceRow } from "./matching/matcher";
+import { scoreReference, type ReferenceRow } from "./matching/matcher";
 import { ValidationError, NotFoundError, ConflictError } from "../lib/errors";
 import type { InterpretOutcome } from "./vlm/deepseek-vision";
 
@@ -110,6 +110,51 @@ export interface ObservationExplanation {
 
 function todayDateString(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+// ——— Reference search (pending-meal resolution picker, design spec §7) ———
+
+/** Flat search-result item; snake_case to match the catalog's API surface. */
+export interface ReferenceSearchItem {
+  id: number;
+  provider: string;
+  provider_food_code: string;
+  version: string;
+  name_th: string | null;
+  name_en: string | null;
+  protein: number;
+  carbs: number;
+  fat: number;
+  alcohol: number;
+  calories: number;
+}
+
+export interface ReferenceSearchResult {
+  items: ReferenceSearchItem[];
+}
+
+const SEARCH_DEFAULT_LIMIT = 10;
+const SEARCH_MAX_LIMIT = 25;
+
+function clampSearchLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return SEARCH_DEFAULT_LIMIT;
+  return Math.min(SEARCH_MAX_LIMIT, Math.max(1, Math.trunc(limit)));
+}
+
+function toSearchItem(row: ReferenceRow): ReferenceSearchItem {
+  return {
+    id: row.id,
+    provider: row.provider,
+    provider_food_code: row.providerFoodCode,
+    version: row.version,
+    name_th: row.nameTh,
+    name_en: row.nameEn,
+    protein: row.per100.protein,
+    carbs: row.per100.carbs,
+    fat: row.per100.fat,
+    alcohol: row.per100.alcohol,
+    calories: row.per100.calories,
+  };
 }
 
 /**
@@ -590,6 +635,41 @@ export function createNutritionEstimationService(deps: {
     return await repo.listPending();
   }
 
+  /**
+   * Reference search for the pending-meal resolution picker (design spec §7).
+   * The catalog is small (~314 rows), so scoring runs in memory over the full
+   * pool from listReferences(): an exact case-insensitive provider_food_code
+   * match leads the list (tier 0, score 1), then lexical token overlap via
+   * scoreReference (score > 0 only, sorted descending). Empty/whitespace
+   * queries return an empty result — not an error — so the picker can render
+   * its idle state.
+   */
+  async function searchReferences(
+    query: string,
+    limit?: number,
+  ): Promise<ReferenceSearchResult> {
+    const trimmed = typeof query === "string" ? query.trim() : "";
+    if (!trimmed) return { items: [] };
+
+    const cap = clampSearchLimit(limit);
+    const pool = await repo.listReferences();
+
+    const codeMatch = pool.find(
+      (row) => row.providerFoodCode.toLowerCase() === trimmed.toLowerCase(),
+    );
+    const lexical = pool
+      .filter((row) => row !== codeMatch)
+      .map((row) => ({ row, score: scoreReference(trimmed, row) }))
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((s) => toSearchItem(s.row));
+
+    const items = codeMatch
+      ? [toSearchItem(codeMatch), ...lexical].slice(0, cap)
+      : lexical.slice(0, cap);
+    return { items };
+  }
+
   /** Thin pass-through; never throws on failure states (ADR 0017). */
   async function interpret(input: {
     menuName: string;
@@ -609,6 +689,7 @@ export function createNutritionEstimationService(deps: {
     resolveReference,
     getObservation,
     listPending,
+    searchReferences,
     interpret,
   };
 }

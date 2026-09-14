@@ -37,4 +37,12 @@ export const queryKeys = {
         dates: () => [...queryKeys.history.all, "dates"] as const,
         detail: (date: string) => [...queryKeys.history.all, "detail", date] as const,
     },
+    mealObservations: {
+        all: ["mealObservations"] as const,
+        pending: () => [...queryKeys.mealObservations.all, "pending"] as const,
+        /** id may be null while the consuming query is disabled — never a fake id. */
+        detail: (id: number | null) => [...queryKeys.mealObservations.all, "detail", id] as const,
+        referenceSearch: (q: string) =>
+            [...queryKeys.mealObservations.all, "referenceSearch", q] as const,
+    },
 };

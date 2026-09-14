@@ -835,3 +835,124 @@ describe("explanation payload (spec §6)", () => {
     expect(result.explanation.relaxed).toBe(false);
   });
 });
+
+// ——— searchReferences (pending-meal resolution picker, design spec §7) ———
+
+describe("searchReferences", () => {
+  const FRIED_RICE: ReferenceRow = {
+    ...REF,
+    id: 201,
+    providerFoodCode: "TFC-201",
+    nameEn: "Fried rice with shrimp",
+    nameTh: "ข้าวผัดกุ้ง",
+  };
+  const RICE_SOUP: ReferenceRow = {
+    ...REF,
+    id: 202,
+    providerFoodCode: "TFC-202",
+    nameEn: "Rice soup",
+    nameTh: "ข้าวต้ม",
+  };
+  const GREEN_CURRY: ReferenceRow = {
+    ...REF,
+    id: 203,
+    providerFoodCode: "TFC-203",
+    nameEn: "Green curry chicken",
+    nameTh: "แกงเขียวหวานไก่",
+  };
+
+  function searchRepo(references: ReferenceRow[] = []) {
+    const { repo, state } = createFakeRepo();
+    for (const row of references) state.references.set(row.id, row);
+    return { repo, state };
+  }
+
+  test("exact case-insensitive provider_food_code match leads the results", async () => {
+    const CODE_MATCH: ReferenceRow = {
+      ...REF,
+      id: 204,
+      providerFoodCode: "RICE-01",
+      nameEn: "Special fried rice",
+      nameTh: "ข้าวผัดพิเศษ",
+    };
+    const { repo } = searchRepo([FRIED_RICE, CODE_MATCH]);
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    const result = await service.searchReferences("rice-01");
+
+    expect(result.items).toHaveLength(2);
+    // Flat snake_case shape the resolution picker renders.
+    expect(result.items[0]).toEqual({
+      id: 204,
+      provider: "thaifcd",
+      provider_food_code: "RICE-01",
+      version: "2024.1",
+      name_th: "ข้าวผัดพิเศษ",
+      name_en: "Special fried rice",
+      protein: 10,
+      carbs: 20,
+      fat: 5,
+      alcohol: 0,
+      calories: 200,
+    });
+    // Lexical follow-up: "rice" token overlaps "Fried rice with shrimp".
+    expect(result.items[1]!.id).toBe(201);
+  });
+
+  test("orders lexical matches by score descending", async () => {
+    const { repo } = searchRepo([RICE_SOUP, FRIED_RICE, GREEN_CURRY]);
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    const result = await service.searchReferences("Fried Rice");
+
+    // "fried rice": FRIED_RICE covers both tokens (1.0), RICE_SOUP one (0.5).
+    expect(result.items.map((item) => item.id)).toEqual([201, 202]);
+  });
+
+  test("excludes zero-score rows", async () => {
+    const { repo } = searchRepo([FRIED_RICE, GREEN_CURRY]);
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    const result = await service.searchReferences("fried rice");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.id).toBe(201);
+  });
+
+  test("empty or whitespace query returns empty items without loading the pool", async () => {
+    const { repo } = searchRepo([FRIED_RICE]);
+    let listCalls = 0;
+    const countingRepo = {
+      ...repo,
+      listReferences: async () => {
+        listCalls++;
+        return [];
+      },
+    } as unknown as NutritionEstimationRepository;
+    const service = createNutritionEstimationService({
+      repo: countingRepo,
+      matcher: gapMatcher(),
+    });
+
+    expect(await service.searchReferences("")).toEqual({ items: [] });
+    expect(await service.searchReferences("   ")).toEqual({ items: [] });
+    expect(listCalls).toBe(0);
+  });
+
+  test("limit defaults to 10 and clamps into 1..25", async () => {
+    const pool: ReferenceRow[] = Array.from({ length: 30 }, (_, i) => ({
+      ...REF,
+      id: 300 + i,
+      providerFoodCode: `TFC-${300 + i}`,
+      nameEn: `Fried rice ${i + 1}`,
+      nameTh: null,
+    }));
+    const { repo } = searchRepo(pool);
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    expect((await service.searchReferences("fried rice")).items).toHaveLength(10);
+    expect((await service.searchReferences("fried rice", 999)).items).toHaveLength(25);
+    expect((await service.searchReferences("fried rice", 2)).items).toHaveLength(2);
+    expect((await service.searchReferences("fried rice", 0)).items).toHaveLength(1);
+  });
+});
