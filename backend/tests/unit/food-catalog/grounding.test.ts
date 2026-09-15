@@ -49,6 +49,21 @@ const EGG = {
   source_row_id: "row_2",
 };
 
+const BEER = {
+  id: "beer-birra-moretti",
+  name: "Beer Birra Moretti Premium Lager",
+  brand: "Birra Moretti",
+  product_type: "beer",
+  per_amount: 100,
+  per_unit: "ml",
+  calories: 38,
+  protein: 0.3,
+  carbs: 3.2,
+  fat: 0.1,
+  source: "google_sheet",
+  source_row_id: "row_beer",
+};
+
 describe("groundNutritionItems", () => {
   test("leaves items that already have macros untouched", async () => {
     const catalog = catalogWith([{ ...EGG, distance: 0.01 }]);
@@ -67,6 +82,20 @@ describe("groundNutritionItems", () => {
     expect(out.fat).toBeCloseTo(18, 1);
     expect(out.calories).toBeCloseTo(25.2 * 4 + 0 * 4 + 18 * 9, 0);
     expect(out.matched_food_name).toBe("Lidl Free Range Eggs");
+  });
+
+  test("infers and scales alcohol from alcoholic catalog calorie gap", async () => {
+    const catalog = catalogWith([{ ...BEER, distance: 0.02 }]);
+    const out = await groundOne(item({ food_name: "beer", amount: 440, unit: "ml" }), catalog);
+
+    expect(out.has_missing_macros).toBe(false);
+    expect(out.uncertain).toBe(false);
+    expect(out.protein).toBe(1.3);
+    expect(out.carbs).toBe(14.1);
+    expect(out.fat).toBe(0.4);
+    expect(out.alcohol).toBe(14.6);
+    expect(out.calories).toBe(167.2);
+    expect(out.catalog?.alcohol).toBe(3.3);
   });
 
   test("flags uncertain when nearest match is beyond the distance threshold", async () => {

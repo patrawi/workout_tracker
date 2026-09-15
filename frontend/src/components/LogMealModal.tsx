@@ -10,6 +10,10 @@ import {
     estimateFromCreateOutcome,
     estimateFromRecalculation,
 } from "@/features/nutrition-estimation/estimate";
+import {
+    compareMeasuredToProposal,
+    type PhotoCheckResult,
+} from "@/features/nutrition-estimation/photoCheck";
 import { useRowList } from "@/features/nutrition-estimation/row-list";
 import { cn } from "@/lib/utils";
 import type {
@@ -75,7 +79,7 @@ interface MeasuredRow {
     grams: string;
 }
 
-type Step = "form" | "review" | "result";
+type Step = "form" | "photoCheck" | "review" | "result";
 
 // ——— Helpers ———
 
@@ -154,6 +158,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const [vlmDishName, setVlmDishName] = useState<string | null>(null);
     const [dishNameUsed, setDishNameUsed] = useState(false);
     const [changeReferenceOpen, setChangeReferenceOpen] = useState(false);
+    /** Measured-mode photo cross-check; null = no photo or analysis failed. */
+    const [measuredPhotoCheck, setMeasuredPhotoCheck] = useState<PhotoCheckResult | null>(null);
 
     const hasAfterImage = afterImage !== null;
 
@@ -186,6 +192,30 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
     // ——— Submission ———
 
+    /** Measured-mode create: point weights, no image fields on the payload. */
+    const createMeasured = useCallback(async () => {
+        setError(null);
+        try {
+            const res = await create({
+                date,
+                meal,
+                menu_name: menuName.trim(),
+                portion_mode: "measured",
+                ...(mealSource.trim() ? { meal_source: mealSource.trim() } : {}),
+                components: measuredList.rows.map(({ row }) => ({
+                    name: row.name.trim(),
+                    kind: row.kind,
+                    weight_g: Number(row.grams),
+                    consumed_fraction: 1,
+                })),
+            });
+            setOutcome(res);
+            setStep("result");
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to save the meal.");
+        }
+    }, [menuName, date, meal, mealSource, measuredList, create]);
+
     /** Form → review: run the VLM on the photos (estimated) or save directly (measured). */
     const handleFormContinue = useCallback(async () => {
         setError(null);
@@ -195,7 +225,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             return;
         }
         if (mode === "measured") {
-            // Measured mode: exact grams, no photos, straight to create.
+            // Measured mode: exact grams. The optional photo is an aid for dish
+            // matching and a cross-check, never a gate (ADR 0017).
             if (measuredList.rows.length === 0) {
                 setError("Add at least one component.");
                 return;
@@ -212,25 +243,31 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                     return;
                 }
             }
-            try {
-                const res = await create({
-                    date,
-                    meal,
-                    menu_name: name,
-                    portion_mode: "measured",
-                    ...(mealSource.trim() ? { meal_source: mealSource.trim() } : {}),
-                    components: measuredList.rows.map(({ row }) => ({
-                        name: row.name.trim(),
-                        kind: row.kind,
-                        weight_g: Number(row.grams),
-                        consumed_fraction: 1,
-                    })),
-                });
-                setOutcome(res);
-                setStep("result");
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to save the meal.");
+            if (beforeImage) {
+                // Photo check only when the VLM answers; failure saves directly
+                // with the measured weights untouched (ADR 0017).
+                try {
+                    const result = await interpret(name, beforeImage.base64);
+                    if (result.status === "ok") {
+                        setVlmDishName(result.proposal.dish_name.trim() || null);
+                        setMeasuredPhotoCheck(
+                            compareMeasuredToProposal(
+                                measuredList.rows.map(({ row }) => ({
+                                    name: row.name.trim(),
+                                    grams: Number(row.grams),
+                                })),
+                                result.proposal,
+                            ),
+                        );
+                        setDishNameUsed(false);
+                        setStep("photoCheck");
+                        return;
+                    }
+                } catch {
+                    // fall through to create
+                }
             }
+            await createMeasured();
             return;
         }
 
@@ -262,19 +299,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             setVlmDishName(null);
             setStep("review");
         }
-    }, [
-        menuName,
-        mode,
-        measuredList,
-        beforeImage,
-        afterImage,
-        date,
-        meal,
-        mealSource,
-        create,
-        interpret,
-        componentList,
-    ]);
+    }, [menuName, mode, measuredList, beforeImage, afterImage, interpret, componentList, createMeasured]);
 
     /** Review → create (estimated mode, editable proposal or manual rows). */
     const handleReviewSubmit = useCallback(async () => {
@@ -384,8 +409,31 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
     if (!open) return null;
 
+    /** VLM dish-name proposal chip — shared by the photo-check and review steps. */
+    const dishNameChip = vlmDishName ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-surface-300/20 bg-surface-100/50 px-4 py-2.5 text-sm">
+            <span className="text-surface-400">AI sees:</span>
+            <span className="text-white font-medium">{vlmDishName}</span>
+            {dishNameUsed ? (
+                <span className="text-xs text-emerald-400">used for matching</span>
+            ) : (
+                <button
+                    type="button"
+                    onClick={() => {
+                        setMenuName(vlmDishName);
+                        setDishNameUsed(true);
+                    }}
+                    className="text-xs font-medium text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline"
+                >
+                    Use
+                </button>
+            )}
+        </div>
+    ) : null;
+
     const stepLabels: Record<Step, string> = {
         form: "Step 1 of 3 — Details",
+        photoCheck: "Photo check — advisory only",
         review: "Step 2 of 3 — Review estimate",
         result: "Step 3 of 3 — Result",
     };
@@ -535,11 +583,28 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         )}
                                     </div>
                                 ) : (
-                                    /* Measured mode: exact component weights */
+                                    /* Measured mode: exact component weights + optional photo */
                                     <div className="space-y-3">
                                         <p className="text-xs text-surface-400">
-                                            Enter each component's scale-measured weight — no photos needed.
+                                            Enter each component's scale-measured weight. A photo is optional —
+                                            it helps the AI match the dish to the right reference.
                                         </p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <ImageSlot
+                                                label="Before photo"
+                                                hint="Optional — used for dish matching and a cross-check"
+                                                inputLabel="Before photo"
+                                                image={beforeImage}
+                                                onAttach={setBeforeImage}
+                                                onRemove={() => setBeforeImage(null)}
+                                                onError={setImageError}
+                                            />
+                                        </div>
+                                        {imageError && (
+                                            <p role="alert" className="text-xs text-amber-400">
+                                                {imageError}
+                                            </p>
+                                        )}
                                         {measuredList.rows.map((entry, i) => (
                                             <div key={entry.id} className="flex items-end gap-2">
                                                 <div className="flex-1">
@@ -618,6 +683,37 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                         </>
                     )}
 
+                    {/* ——— Step: photo check (measured mode, advisory) ——— */}
+                    {step === "photoCheck" && (
+                        <>
+                            <p className="text-sm text-surface-400">
+                                Photo checked against your measured weights — everything below is advisory;
+                                your measured grams are what gets saved.
+                            </p>
+                            {dishNameChip}
+                            {measuredPhotoCheck &&
+                            (measuredPhotoCheck.unseenComponents.length > 0 ||
+                                measuredPhotoCheck.weightMismatches.length > 0) ? (
+                                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                                    <ul className="list-disc list-inside space-y-1">
+                                        {measuredPhotoCheck.unseenComponents.map((name) => (
+                                            <li key={`unseen-${name}`}>
+                                                Photo shows “{name}” — not among your components.
+                                            </li>
+                                        ))}
+                                        {measuredPhotoCheck.weightMismatches.map((m) => (
+                                            <li key={`mismatch-${m.name}`}>
+                                                {m.name}: measured {m.measuredGrams} g, photo suggests
+                                                ~{m.proposedCentralGrams} g.
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ) : null}
+                            {/* No findings → silence; the dish chip and Save button are the step. */}
+                        </>
+                    )}
+
                     {/* ——— Step: review (estimated) ——— */}
                     {step === "review" && (
                         <>
@@ -636,26 +732,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                             )}
 
                             {/* VLM dish-name proposal — user-owned menu name; adopting is optional (spec §2). */}
-                            {vlmDishName && (
-                                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-surface-300/20 bg-surface-100/50 px-4 py-2.5 text-sm">
-                                    <span className="text-surface-400">AI sees:</span>
-                                    <span className="text-white font-medium">{vlmDishName}</span>
-                                    {dishNameUsed ? (
-                                        <span className="text-xs text-emerald-400">used for matching</span>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setMenuName(vlmDishName);
-                                                setDishNameUsed(true);
-                                            }}
-                                            className="text-xs font-medium text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline"
-                                        >
-                                            Use
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+                            {dishNameChip}
 
                             <div className="space-y-3">
                                 {componentList.rows.map((entry, i) => (
@@ -914,6 +991,30 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 className="btn-primary text-sm flex items-center gap-2"
                             >
                                 {mode === "estimated" ? "Analyze photo" : "Save estimate"}
+                            </BusyButton>
+                        </>
+                    )}
+
+                    {step === "photoCheck" && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setError(null);
+                                    setStep("form");
+                                }}
+                                className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition-colors"
+                            >
+                                Back
+                            </button>
+                            <BusyButton
+                                onClick={createMeasured}
+                                busy={isCreating}
+                                busyLabel="Saving…"
+                                disabled={busy}
+                                className="btn-primary text-sm flex items-center gap-2"
+                            >
+                                Save estimate
                             </BusyButton>
                         </>
                     )}

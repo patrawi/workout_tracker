@@ -566,8 +566,15 @@ function PendingMeals({ rows, isLoading, onOpen }: { rows: PendingObservation[];
     return (
         <Card style={{ padding: "18px 20px" }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text)" }}>Pending meals</h2>
-                <span style={{ fontSize: 12, color: "var(--faint)" }}>Waiting for a reference or your confirmation</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text)" }}>Pending meals</h2>
+                    {!isLoading && rows.length > 0 && (
+                        <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "var(--accent-soft)", color: "var(--accent)", border: "1px solid var(--accent-line)", whiteSpace: "nowrap" }}>
+                            {rows.length} to review
+                        </span>
+                    )}
+                </div>
+                <span style={{ fontSize: 12, color: "var(--faint)" }}>Tap a meal — waiting for a reference or your confirmation</span>
             </div>
             {isLoading ? (
                 <div style={{ display: "grid", gap: 8 }}>
@@ -577,13 +584,16 @@ function PendingMeals({ rows, isLoading, onOpen }: { rows: PendingObservation[];
             ) : (
                 <div style={{ display: "grid", gap: 8 }}>
                     {rows.map((p) => (
-                        <button key={p.id} className="nut-tap" onClick={() => onOpen(p.id)}
+                        <button key={p.id} className="nut-tap" onClick={() => onOpen(p.id)} aria-label={`Review ${p.menu_name}`}
                             style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, width: "100%", padding: "11px 14px", borderRadius: 12, border: "1px solid var(--border)", background: "transparent", cursor: "pointer", textAlign: "left" }}>
                             <div style={{ minWidth: 0 }}>
                                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.menu_name}</div>
                                 <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }}>{formatDate(p.date)} · {p.meal_type}</div>
                             </div>
-                            <PendingStatusBadge row={p} />
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                                <PendingStatusBadge row={p} />
+                                <span aria-hidden style={{ color: "var(--faint)", fontSize: 18, lineHeight: 1 }}>›</span>
+                            </div>
                         </button>
                     ))}
                 </div>
@@ -774,6 +784,13 @@ export default function NutritionPage() {
 
                 {/* Input */}
                 <AIInput dateLabel={dateLabel} value={text} setValue={setText} onParse={handleSubmit} onManual={() => openModal("Breakfast", null)} onPhotoLog={openLogModal} isParsing={isParsing} />
+
+                {/* Pointer to the pending queue — the card lives near the page bottom */}
+                {!isPendingLoading && pending.length > 0 && (
+                    <div style={{ fontSize: 12, color: "var(--faint)", marginTop: -4 }}>
+                        {pending.length} meal{pending.length === 1 ? "" : "s"} waiting for review — see “Pending meals” below.
+                    </div>
+                )}
 
                 {/* Food log */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>

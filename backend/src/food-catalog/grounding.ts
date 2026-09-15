@@ -1,13 +1,25 @@
 import { CATALOG_TOPK, CATALOG_UNCERTAIN_DISTANCE } from "../constants";
-import { roundTo1 } from "../nutrition-ai/normalizers";
+import { isAlcoholicItemName, roundTo1 } from "../nutrition-ai/normalizers";
 import type { NutritionItem } from "../types";
 import type { FoodCatalogService } from "../services/food-catalog.service";
 import { createChildLogger } from "../lib/logger";
 
 const logger = createChildLogger("nutrition-grounding");
 
-function caloriesFrom(protein: number, carbs: number, fat: number): number {
-  return roundTo1(protein * 4 + carbs * 4 + fat * 9);
+function macroCalories(protein: number, carbs: number, fat: number): number {
+  return protein * 4 + carbs * 4 + fat * 9;
+}
+
+function caloriesFrom(protein: number, carbs: number, fat: number, alcohol = 0): number {
+  return roundTo1(macroCalories(protein, carbs, fat) + alcohol * 7);
+}
+
+function catalogCaloriesPresent(calories: number | null | undefined): calories is number {
+  return typeof calories === "number" && Number.isFinite(calories) && calories > 0;
+}
+
+function alcoholFromCalorieGap(protein: number, carbs: number, fat: number, calories: number): number {
+  return roundTo1(Math.max(0, calories - macroCalories(protein, carbs, fat)) / 7);
 }
 
 // Metric mass/volume units → grams. Food density ≈ 1, so g and ml are
@@ -134,13 +146,29 @@ export async function groundNutritionItems(
       const protein = roundTo1(best.protein * scale);
       const carbs = roundTo1(best.carbs * scale);
       const fat = roundTo1(best.fat * scale);
+      const alcoholIdentity = [item.food_name, best.name, best.brand, best.product_type].join(" ");
+      const isAlcoholicCatalogMatch = isAlcoholicItemName(alcoholIdentity);
+      const hasCatalogCalories = catalogCaloriesPresent(best.calories);
+      const labelCalories = hasCatalogCalories ? roundTo1(best.calories * scale) : null;
+      const catalogAlcohol =
+        isAlcoholicCatalogMatch && hasCatalogCalories
+          ? alcoholFromCalorieGap(best.protein, best.carbs, best.fat, best.calories)
+          : 0;
+      const alcohol =
+        isAlcoholicCatalogMatch && labelCalories !== null
+          ? alcoholFromCalorieGap(protein, carbs, fat, labelCalories)
+          : 0;
 
       return {
         ...item,
         protein,
         carbs,
         fat,
-        calories: caloriesFrom(protein, carbs, fat),
+        ...(isAlcoholicCatalogMatch ? { alcohol } : {}),
+        calories:
+          isAlcoholicCatalogMatch && labelCalories !== null
+            ? labelCalories
+            : caloriesFrom(protein, carbs, fat),
         has_missing_macros: false,
         matched_food_name: best.name,
         matched_food_id: best.id,
@@ -152,6 +180,7 @@ export async function groundNutritionItems(
           protein: best.protein,
           carbs: best.carbs,
           fat: best.fat,
+          ...(isAlcoholicCatalogMatch ? { alcohol: catalogAlcohol } : {}),
         },
       };
     }),

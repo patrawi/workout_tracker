@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monte Carlo ช่วยระบบโภชนาการเมื่อไร</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <main>
+    <h1>Monte Carlo ช่วยระบบโภชนาการเมื่อไร</h1>
+    <p class="callout"><strong>คำตอบสั้น:</strong> Monte Carlo ไม่ได้ค้นพบข้อมูลใหม่ มันนำ uncertainty ของ input หลายตัวผ่านสูตรคำนวณ เพื่อดู uncertainty ของ output</p>
+
+    <h2>1. Theorem และ logic ที่อยู่ข้างใต้</h2>
+    <p>เริ่มจาก measurement model <code>Y = f(X₁, …, Xₙ)</code>. ในมื้ออาหาร <code>X</code> อาจเป็นน้ำหนัก portion, สัดส่วนเนื้อ, น้ำมัน และปริมาณที่กิน ส่วน <code>Y</code> คือโปรตีนหรือแคลอรี</p>
+    <p>Monte Carlo สุ่มชุด <code>X</code>, คำนวณ <code>f(X)</code>, แล้วทำซ้ำ กฎจำนวนมาก (law of large numbers) ทำให้ empirical output เข้าใกล้ distribution ที่เกิดจาก input model เมื่อจำนวนตัวอย่างเพิ่มขึ้น โดยความคลาดเคลื่อนเชิงการสุ่มลดลงประมาณตาม <code>1/√M</code>. นี่ไม่ลด model error จาก prior ที่ผิด</p>
+
+    <h2>2. ตัวอย่างในระบบนี้</h2>
+    <pre>AI calls once → visual evidence + structured factors
+Database once → ThaiFCD reference
+
+Local loop only:
+  sample oil, meat fraction, consumed fraction
+  calories = deterministic_formula(inputs)
+  save calories
+
+summarize local results</pre>
+    <p>ไม่มี API call ภายใน loop และภาพเดียวไม่ถูกส่งซ้ำ 10,000 ครั้ง</p>
+
+    <h2>3. Logic ที่เหมาะกับ V1</h2>
+    <p>ใช้ constrained interval calculation กับสมการสารอาหารที่เกือบเป็นเชิงเส้น:</p>
+    <pre>N = Σ(mᵢ × nutrient_densityᵢ / 100)
+
+constraints:
+  Σmᵢ = component_mass
+  mᵢ ≥ 0
+  known ingredient weight ≤ component_mass</pre>
+    <p>ค่า low ของสารอาหารคือค่าต่ำสุดของ <code>N</code> ที่ยังไม่ละเมิด constraints; ค่า high คือค่าสูงสุด; central ใช้ best estimates. เมื่อ variables และ constraints เป็นเชิงเส้น ปัญหานี้คือ linear programming และไม่ต้องสุ่ม</p>
+
+    <h2>4. ประโยชน์เทียบกับ V1</h2>
+    <table>
+      <thead>
+        <tr><th>วิธี</th><th>เหมาะเมื่อ</th><th>ข้อจำกัด</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Low / central / high</td><td>สมมติฐานยังเป็น heuristic และต้องการคำอธิบายง่าย</td><td>อาจพลาด interaction บางชุด</td></tr>
+        <tr><td>Monte Carlo</td><td>มี input distributions ที่เชื่อถือได้, nonlinear/skewed factors และต้องการ coverage interval</td><td>ซับซ้อนขึ้นและยังผิดได้หาก prior ผิด</td></tr>
+      </tbody>
+    </table>
+
+    <h2>5. คำตัดสินสำหรับโปรเจกต์</h2>
+    <p>V1 ควรใช้ deterministic constrained low/central/high. น้ำหนักที่ชั่งจริงทำให้ component-mass constraint แคบลง แต่ไม่ลบ uncertainty ของสูตรอาหาร อย่างไรก็ตามยังไม่มีเหตุผลให้สุ่ม 10,000 ครั้งจนกว่า recipe priors จะได้รับการ calibrate.</p>
+
+    <details>
+      <summary>Self-check: เพิ่มจำนวน samples จาก 10,000 เป็น 1,000,000 แก้ prior น้ำมันที่ตั้งผิดได้ไหม?</summary>
+      <p>ไม่ได้ จำนวน samples ลด sampling noise เท่านั้น แต่ทุก sample ยังมาจาก prior น้ำมันที่ผิดเหมือนเดิม</p>
+    </details>
+
+    <h2>แหล่งหลัก</h2>
+    <p><a href="https://www.bipm.org/en/doi/10.59161/jcgm101-2008">BIPM JCGM 101:2008</a> อธิบายการ propagate probability distributions ผ่าน mathematical measurement model และ <a href="https://www.nist.gov/itl/sed/topic-areas/measurement-uncertainty">NIST Measurement Uncertainty</a> เปรียบเทียบ analytical กับ Monte Carlo approaches.</p>
+    <p>หากส่วนใดยังไม่ชัด ให้ถามต่อด้วยตัวอย่างเมนูจริงหนึ่งจานได้</p>
+  </main>
+</body>
+</html>
