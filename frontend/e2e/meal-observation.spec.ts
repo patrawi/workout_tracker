@@ -159,6 +159,30 @@ const PROPOSAL = {
   },
 };
 
+// Measured-mode photo check: VLM sees more than the user typed and its Rice
+// central (200 g) deviates > 50% from the measured 320 g → both warnings fire.
+const MEASURED_PROPOSAL = {
+  status: "ok",
+  proposal: {
+    dish_name: "Khao man gai",
+    dish_name_confidence: "high",
+    components: [
+      {
+        name: "Rice",
+        kind: "rice",
+        weight_g: { low: 160, central: 200, high: 240 },
+        component_confidence: "high",
+      },
+      {
+        name: "Fried egg",
+        kind: "main",
+        weight_g: { low: 40, central: 50, high: 60 },
+        component_confidence: "medium",
+      },
+    ],
+  },
+};
+
 const PENDING_ROW = {
   id: 7,
   date: "2026-09-12",
@@ -434,6 +458,71 @@ test("failed interpret never blocks — drops into manual entry (ADR 0017)", asy
   await expect(page.getByText("Plausible Nutrition Range")).toBeVisible();
 });
 
+test("measured mode without a photo goes straight to create", async ({ authedPage: page, mock }) => {
+  await mockPendingEmpty(page);
+  await mock("**/api/meal-observations", ok(CALCULATED_OUTCOME));
+  await mock("**/api/meal-observations/101/confirm", ok(RESOLVE_OUTCOME));
+
+  await openLogModal(page);
+  await page.getByLabel("Menu name *").fill("Khao man gai");
+  await page.getByRole("button", { name: "Measured" }).click();
+  await page.getByLabel("Component 1").fill("Rice");
+  await page.getByLabel("Grams").fill("209");
+
+  const createReq = page.waitForRequest("**/api/meal-observations");
+  await page.getByRole("button", { name: "Save estimate" }).click();
+  const createBody = (await createReq).postDataJSON();
+  expect(createBody.portion_mode).toBe("measured");
+  expect(createBody.components[0]).toMatchObject({
+    name: "Rice",
+    weight_g: 209,
+    consumed_fraction: 1,
+  });
+
+  await expect(page.getByText("Step 3 of 3 — Result")).toBeVisible();
+  const confirmReq = page.waitForRequest("**/api/meal-observations/101/confirm");
+  await page.getByRole("button", { name: "Confirm & log" }).click();
+  await confirmReq;
+  await expect(page.getByText("Logged — daily totals updated")).toBeVisible();
+});
+
+test("measured mode with a before photo: advisory photo check, then save", async ({ authedPage: page, mock }) => {
+  await mockPendingEmpty(page);
+  await mock("**/api/meal-observations/interpret", ok(MEASURED_PROPOSAL));
+  await mock("**/api/meal-observations", ok(CALCULATED_OUTCOME));
+  await mock("**/api/meal-observations/101/confirm", ok(RESOLVE_OUTCOME));
+
+  await openLogModal(page);
+  await page.getByLabel("Menu name *").fill("My lunch");
+  await page.getByRole("button", { name: "Measured" }).click();
+  await page.getByLabel("Component 1").fill("Rice");
+  await page.getByLabel("Grams").fill("320");
+  await attachBeforePhoto(page);
+
+  await page.getByRole("button", { name: "Save estimate" }).click();
+
+  // Photo check step: advisory only — dish proposal adoptable + soft warnings.
+  await expect(page.getByText("Photo check — advisory only")).toBeVisible();
+  await expect(page.getByText("AI sees:")).toBeVisible();
+  await page.getByRole("button", { name: "Use", exact: true }).click();
+  await expect(page.getByText(/measured 320 g, photo suggests ~200 g/)).toBeVisible();
+  await expect(page.getByText(/Photo shows “Fried egg”/)).toBeVisible();
+
+  // Measured weights win: point weights, no image fields on the payload.
+  const createReq = page.waitForRequest("**/api/meal-observations");
+  await page.getByRole("button", { name: "Save estimate" }).click();
+  const createBody = (await createReq).postDataJSON();
+  expect(createBody.menu_name).toBe("Khao man gai");
+  expect(createBody.portion_mode).toBe("measured");
+  expect(createBody.components[0]).toMatchObject({ name: "Rice", weight_g: 320, consumed_fraction: 1 });
+
+  await expect(page.getByText("Step 3 of 3 — Result")).toBeVisible();
+  const confirmReq = page.waitForRequest("**/api/meal-observations/101/confirm");
+  await page.getByRole("button", { name: "Confirm & log" }).click();
+  await confirmReq;
+  await expect(page.getByText("Logged — daily totals updated")).toBeVisible();
+});
+
 test("ambiguous match → pick a candidate → resolve → confirm", async ({ authedPage: page, mock }) => {
   await mockPendingEmpty(page);
   await mock("**/api/meal-observations/interpret", ok(PROPOSAL));
@@ -508,7 +597,7 @@ test("pending meals: row → dialog → search → resolve → confirm → row d
   await page.goto("/nutrition");
 
   // Pending section renders with a status badge; click opens the resolve dialog.
-  await expect(page.getByText("Pending meals")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pending meals" })).toBeVisible();
   await expect(page.getByText("Needs reference")).toBeVisible();
   await page.getByRole("button", { name: /Green curry/ }).click();
 

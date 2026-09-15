@@ -38,7 +38,7 @@ Alcohol should not have a target or goal in the profile. It is tracked as intake
 
 ## Decision 3: Infer Alcohol From Calorie Gap For Alcoholic Drinks
 
-When a nutrition label gives total calories but does not give alcohol grams, the parser should estimate alcohol grams from the unexplained calorie gap if the item is clearly alcoholic.
+When a nutrition label or catalog row gives total calories but does not give alcohol grams, deterministic code should estimate alcohol grams from the unexplained calorie gap if the item is clearly alcoholic.
 
 ```text
 alcohol_g = (label_calories - (protein_g * 4 + carbs_g * 4 + fat_g * 9)) / 7
@@ -50,7 +50,7 @@ The inference should be guarded by item identity. A normal food with mismatched 
 
 ## Decision 4: Preserve Label Calories When Provided
 
-When a label provides total calories, saved `calories` should preserve the label calories after scaling to the consumed amount.
+When a label or catalog row provides total calories for an alcoholic drink, saved `calories` should preserve those calories after scaling to the consumed amount.
 
 Macro-derived calories should be used only when label calories are missing.
 
@@ -147,5 +147,4 @@ Old rows should not be backfilled because they do not preserve the original labe
 
 ## Open Questions
 
-- Should calorie totals use label calories when supplied, or always recompute from macros plus alcohol?
 - Should alcohol have a daily target/limit, or only be logged as consumed grams and calories?

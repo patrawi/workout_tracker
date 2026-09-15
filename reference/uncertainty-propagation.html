@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Uncertainty propagation — quick reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <main>
+    <h1>Uncertainty propagation: quick reference</h1>
+    <p><strong>Measurement model:</strong> <code>Y = f(X₁, …, Xₙ)</code>. For this project, <code>Y</code> is a nutrient result and the <code>X</code> values include portion mass, recipe composition, added oil, and consumed fraction.</p>
+
+    <h2>V1: deterministic scenarios</h2>
+    <ul>
+      <li>Calculate a central estimate, then minimize and maximize each nutrient subject to mass-balance and evidence constraints.</li>
+      <li>Use when priors are uncalibrated and the output is a Plausible Nutrition Range.</li>
+      <li>Never call an AI API inside the scenario calculation.</li>
+    </ul>
+
+    <pre>N = Σ(mᵢ × nutrient_densityᵢ / 100)
+subject to:
+  Σmᵢ = component_mass
+  mᵢ ≥ 0
+  known ingredient bounds are respected</pre>
+
+    <h2>Future: Monte Carlo propagation</h2>
+    <ul>
+      <li>Sample uncertain inputs locally, then run the same deterministic function repeatedly.</li>
+      <li>Use when input distributions and dependencies are defensible and output coverage will be validated.</li>
+      <li>Use a reproducible seed and cache by input, reference-data, and estimator versions.</li>
+    </ul>
+
+    <h2>Decision rule</h2>
+    <p>Use constrained interval calculation while the model is mostly linear and priors are heuristic. Monte Carlo becomes valuable for defensible nonlinear, skewed, or correlated uncertainty; it cannot rescue incorrect input assumptions, and more samples do not create new evidence.</p>
+  </main>
+</body>
+</html>
