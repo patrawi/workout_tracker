@@ -14,7 +14,9 @@ function createMockDb() {
         limit: mock(async () => []),
       })),
       where: mock(() => ({
-        orderBy: mock(async () => []),
+        orderBy: mock(() => ({
+          limit: mock(async () => []),
+        })),
       })),
     })),
     $dynamic: mock(() => ({})),

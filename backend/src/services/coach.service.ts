@@ -31,8 +31,8 @@ export type CoachStreamEvent =
   | { type: "session_prescription"; prescription: CoachSessionPrescription };
 
 export interface CoachService {
-  chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal; prescription?: CoachSessionPrescription }>;
-  chatStream(messages: CoachMessage[]): AsyncGenerator<CoachStreamEvent>;
+  chat(messages: CoachMessage[], userId?: number): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal; prescription?: CoachSessionPrescription }>;
+  chatStream(messages: CoachMessage[], userId?: number): AsyncGenerator<CoachStreamEvent>;
   getPlan(): Promise<CoachPlanGrouped>;
   savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
   listKnowledge(): Promise<CoachKnowledgeRow[]>;
@@ -58,14 +58,14 @@ const round = (n: number) => Math.round(n);
  * Assemble a compact, bounded grounding summary from the user's recent logs.
  * Reuses existing services — no new queries. Summarizes, never dumps rows.
  */
-async function buildContext(deps: CoachServiceDeps): Promise<string> {
+async function buildContext(deps: CoachServiceDeps, userId: number = 1): Promise<string> {
   const { analyticsService, nutritionService, bodyweightService, profileService } = deps;
 
   const [profile, volume, bodyweightLogs, nutritionDates] = await Promise.all([
-    profileService.get(),
-    analyticsService.getVolume(COACH_CONTEXT_DAYS),
-    bodyweightService.getLogs(COACH_CONTEXT_DAYS),
-    nutritionService.getDates(),
+    profileService.get(userId),
+    analyticsService.getVolume(COACH_CONTEXT_DAYS, userId),
+    bodyweightService.getLogs(COACH_CONTEXT_DAYS, userId),
+    nutritionService.getDates(userId),
   ]);
 
   // Targets
@@ -90,7 +90,7 @@ async function buildContext(deps: CoachServiceDeps): Promise<string> {
   const recentDates = nutritionDates.slice(0, COACH_NUTRITION_DAYS);
   let nutritionLine = "No nutrition logged recently.";
   if (recentDates.length) {
-    const days = await Promise.all(recentDates.map((d) => nutritionService.getByDate(d)));
+    const days = await Promise.all(recentDates.map((d) => nutritionService.getByDate(d, userId)));
     const totals = days.map((rows) =>
       rows.reduce(
         (acc, r) => ({
@@ -171,7 +171,7 @@ export function createCoachService(
   const provider = config.llmProvider === "deepseek" && config.deepseekApiKey ? "DeepSeek" : "Gemini";
 
   return {
-    async chat(messages: CoachMessage[]): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal; prescription?: CoachSessionPrescription }> {
+    async chat(messages: CoachMessage[], userId: number = 1): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal; prescription?: CoachSessionPrescription }> {
       if (!client) {
         throw new ExternalServiceError(provider, "No LLM API key is set");
       }
@@ -180,7 +180,7 @@ export function createCoachService(
       }
       try {
         const [contextSummary, knowledge] = await Promise.all([
-          buildContext(deps),
+          buildContext(deps, userId),
           loadCoachKnowledgeFromDB(deps.coachKnowledgeRepo),
         ]);
         const systemPrompt = buildCoachSystemPrompt({
@@ -189,7 +189,7 @@ export function createCoachService(
           today: getLocalDateString(),
         });
         const tools = config.llmProvider === "deepseek" && config.deepseekApiKey
-          ? buildCoachTools(deps)
+          ? buildCoachTools(deps, userId)
           : undefined;
         const chatClient = tools
           ? createDeepSeekCoachClient(config.deepseekApiKey, DEEPSEEK_COACH_MODEL, tools)
@@ -204,7 +204,7 @@ export function createCoachService(
       }
     },
 
-    async *chatStream(messages: CoachMessage[]): AsyncGenerator<CoachStreamEvent> {
+    async *chatStream(messages: CoachMessage[], userId: number = 1): AsyncGenerator<CoachStreamEvent> {
       if (!config.deepseekApiKey) {
         throw new ExternalServiceError("DeepSeek", "DEEPSEEK_API_KEY is not set");
       }
@@ -213,7 +213,7 @@ export function createCoachService(
       }
       try {
         const [contextSummary, knowledge] = await Promise.all([
-          buildContext(deps),
+          buildContext(deps, userId),
           loadCoachKnowledgeFromDB(deps.coachKnowledgeRepo),
         ]);
         const systemPrompt = buildCoachSystemPrompt({
@@ -231,7 +231,7 @@ export function createCoachService(
         // Agentic streaming loop: stream a round, and if it ends in tool_calls,
         // run the tools, append the results, and stream the next round. Without
         // this the model's tool-call turn produced no answer and the UI hung.
-        const tools = buildCoachTools(deps);
+        const tools = buildCoachTools(deps, userId);
         for (let i = 0; i < MAX_TOOL_ITERS; i++) {
           const result = yield* deepseekChatStream({
             apiKey: config.deepseekApiKey,

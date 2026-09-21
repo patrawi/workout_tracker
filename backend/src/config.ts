@@ -12,6 +12,7 @@ export const config = {
   masterPassword: configService.masterPassword,
   jwtSecret: configService.jwtSecret,
   geminiApiKey: configService.geminiApiKey,
+  googleClientId: configService.googleClientId,
   VAPID_PUBLIC_KEY: configService.VAPID_PUBLIC_KEY,
   VAPID_PRIVATE_KEY: configService.VAPID_PRIVATE_KEY,
   VAPID_SUBJECT: configService.VAPID_SUBJECT,

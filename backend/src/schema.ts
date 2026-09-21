@@ -27,6 +27,20 @@ import type {
 // Embedding dimension for the food catalog (Gemini text-embedding-004).
 export const EMBEDDING_DIMENSIONS = 768;
 
+// ——— Users Table (Google login; multi-user foundation, ticket B-001) ———
+// Row id=1 is seeded by migration as the placeholder owner
+// (google_sub='pending-owner'); the first real Google login claims it so all
+// legacy single-user data transfers to the owner account.
+export const users = pgTable("users", {
+    id: serial("id").primaryKey(),
+    google_sub: text("google_sub").notNull().unique(),
+    email: text("email").notNull(),
+    name: text("name").notNull(),
+    picture: text("picture"),
+    is_owner: boolean("is_owner").notNull().default(false),
+    created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+});
+
 // ——— Enums ———
 export const mealTypeEnum = pgEnum("meal_type", [
     "Breakfast",
@@ -47,6 +61,9 @@ export const sessionTypeEnum = pgEnum("session_type", [
 // ——— Sessions Table ———
 export const sessions = pgTable("sessions", {
     id: serial("id").primaryKey(),
+    user_id: integer("user_id")
+        .notNull()
+        .references(() => users.id),
     raw_input: text("raw_input").notNull(),
     walked_10k: boolean("walked_10k").default(false),
     did_liss: boolean("did_liss").default(false),
@@ -61,6 +78,9 @@ export const sessions = pgTable("sessions", {
 // ——— Workouts Table ———
 export const workouts = pgTable("workouts", {
     id: serial("id").primaryKey(),
+    user_id: integer("user_id")
+        .notNull()
+        .references(() => users.id),
     session_id: integer("session_id")
         .notNull()
         .references(() => sessions.id),
@@ -116,9 +136,15 @@ export const coachKnowledge = pgTable("coach_knowledge", {
     index("coach_knowledge_position_idx").on(table.position),
 ]);
 
-// ——— Profile Table (single row, id always = 1) ———
+// ——— Profile Table ———
+// Was a singleton (id always = 1); now per-user rows keyed by the unique
+// user_id (owner is user 1 — legacy data backfilled to it by migration).
 export const profile = pgTable("profile", {
     id: integer("id").primaryKey().default(1),
+    user_id: integer("user_id")
+        .notNull()
+        .unique()
+        .references(() => users.id),
     weight_kg: real("weight_kg").default(0),
     height_cm: real("height_cm").default(0),
     tdee: real("tdee").default(0),
@@ -133,29 +159,41 @@ export const profile = pgTable("profile", {
 // ——— Rest Days Table ———
 export const restDays = pgTable("rest_days", {
     id: serial("id").primaryKey(),
-    date: text("date").notNull().unique(),              // "YYYY-MM-DD"
+    user_id: integer("user_id")
+        .notNull()
+        .references(() => users.id),
+    date: text("date").notNull(),                      // "YYYY-MM-DD" (unique per user)
     walked_10k: boolean("walked_10k").default(false),
     did_liss: boolean("did_liss").default(false),
     did_stretch: boolean("did_stretch").default(false),
     notes: text("notes").default(""),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
 }, (table) => [
+    uniqueIndex("rest_days_user_date_idx").on(table.user_id, table.date),
     index("rest_days_created_at_idx").on(table.created_at),
 ]);
 
 // ——— Bodyweight Logs Table ———
 export const bodyweightLogs = pgTable("bodyweight_logs", {
     id: serial("id").primaryKey(),
-    date: text("date").notNull().unique(), // "YYYY-MM-DD"
+    user_id: integer("user_id")
+        .notNull()
+        .references(() => users.id),
+    date: text("date").notNull(), // "YYYY-MM-DD" (unique per user)
     weight_kg: real("weight_kg").notNull(),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
-});
+}, (table) => [
+    uniqueIndex("bodyweight_logs_user_date_idx").on(table.user_id, table.date),
+]);
 
 // ——— Nutrition Logs Table ———
 export const nutritionLogs = pgTable(
     "nutrition_logs",
     {
         id: serial("id").primaryKey(),
+        user_id: integer("user_id")
+            .notNull()
+            .references(() => users.id),
         date: text("date").notNull(),                          // "YYYY-MM-DD"
         meal: mealTypeEnum("meal").notNull(),                  // "Breakfast" | "Lunch" | "Dinner" | "Snack"
         food_name: text("food_name").notNull(),
@@ -364,13 +402,18 @@ export const nutritionEstimateRevisions = pgTable(
     ],
 );
 
-// ——— Water Logs Table (one row per date; glasses of 250ml) ———
+// ——— Water Logs Table (one row per user per date; glasses of 250ml) ———
 export const waterLogs = pgTable("water_logs", {
     id: serial("id").primaryKey(),
-    date: text("date").notNull().unique(),                 // "YYYY-MM-DD"
+    user_id: integer("user_id")
+        .notNull()
+        .references(() => users.id),
+    date: text("date").notNull(),                          // "YYYY-MM-DD" (unique per user)
     glasses: integer("glasses").default(0).notNull(),      // 250ml each
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
-});
+}, (table) => [
+    uniqueIndex("water_logs_user_date_idx").on(table.user_id, table.date),
+]);
 
 // ——— Food Catalog Table (embedded reference catalog for RAG nutrition parse) ———
 // Macros are stored per `per_amount` `per_unit` (e.g. per 100 g). Scaling to the

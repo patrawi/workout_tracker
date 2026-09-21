@@ -9,8 +9,8 @@ export function registerRestDayRoutes(app: any, ctx: AppContext): void {
   const { restDayService } = ctx;
 
   app
-    .post("/rest-days", routeHandlerCtx(async ({ body }) => {
-      return await restDayService.upsert(body);
+    .post("/rest-days", routeHandlerCtx(async ({ body, user_id }: any) => {
+      return await restDayService.upsert(body, user_id);
     }), {
       body: t.Object({
         date: t.String(),
@@ -20,8 +20,8 @@ export function registerRestDayRoutes(app: any, ctx: AppContext): void {
         notes: t.Optional(t.String()),
       }),
     })
-    .delete("/rest-days/:date", routeHandlerCtx(async ({ params }) => {
-      const deleted = await restDayService.delete(params.date);
+    .delete("/rest-days/:date", routeHandlerCtx(async ({ params, user_id }: any) => {
+      const deleted = await restDayService.delete(params.date, user_id);
       if (!deleted) {
         throw new ValidationError("Rest day not found.");
       }

@@ -77,6 +77,9 @@ function mapWorkoutRowWithSession(
 
 // ─── Factory Pattern ─────────────────────────────────────────────────────────
 
+// Legacy default: all pre-multi-user data belongs to the owner (user 1).
+const DEFAULT_USER_ID = 1;
+
 export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
   async function hydrateSessions(
     sess: { id: number; created_at: string | null; session_type: SessionType; gym_profile: string }[],
@@ -114,7 +117,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
   }
 
   return {
-    async getRecent(limit = 50): Promise<WorkoutRow[]> {
+    async getRecent(limit = 50, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow[]> {
       const rows = await dbInstance
         .select({
           workout: workouts,
@@ -123,6 +126,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         })
         .from(workouts)
         .innerJoin(sessions, eq(workouts.session_id, sessions.id))
+        .where(eq(workouts.user_id, userId))
         .orderBy(desc(workouts.created_at), desc(workouts.id))
         .limit(limit);
 
@@ -134,7 +138,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       );
     },
 
-    async getByDate(date: string): Promise<WorkoutRow[]> {
+    async getByDate(date: string, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow[]> {
       const rows = await dbInstance
         .select({
           workout: workouts,
@@ -143,7 +147,12 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         })
         .from(workouts)
         .innerJoin(sessions, eq(workouts.session_id, sessions.id))
-        .where(eq(sql`DATE(${workouts.created_at})`, date))
+        .where(
+          and(
+            eq(workouts.user_id, userId),
+            eq(sql`DATE(${workouts.created_at})`, date),
+          ),
+        )
         .orderBy(asc(workouts.id));
 
       return rows.map((row) =>
@@ -154,10 +163,11 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       );
     },
 
-    async getDates(): Promise<string[]> {
+    async getDates(userId: number = DEFAULT_USER_ID): Promise<string[]> {
       const result = await dbInstance.execute(sql`
         SELECT DISTINCT DATE(created_at) as date_val
         FROM workouts
+        WHERE user_id = ${userId}
         ORDER BY date_val DESC
       `);
 
@@ -169,7 +179,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         .filter(Boolean);
     },
 
-    async create(item: WorkoutData, createdAt: string, existingSessionId?: number): Promise<WorkoutRow> {
+    async create(item: WorkoutData, createdAt: string, existingSessionId?: number, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow> {
       return dbInstance.transaction(async (tx) => {
         let sessionId: number;
 
@@ -178,7 +188,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         } else {
           const [session] = await tx
             .insert(sessions)
-            .values({ raw_input: "[manual entry]", created_at: createdAt, gym_profile: DEFAULT_GYM_PROFILE })
+            .values({ user_id: userId, raw_input: "[manual entry]", created_at: createdAt, gym_profile: DEFAULT_GYM_PROFILE })
             .returning({ id: sessions.id });
 
           if (!session) {
@@ -192,6 +202,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
         const [inserted] = await tx
           .insert(workouts)
           .values({
+            user_id: userId,
             session_id: sessionId,
             exercise_name: defaulted.exercise_name,
             weight: defaulted.weight,
@@ -217,7 +228,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       });
     },
 
-    async update(id: number, data: WorkoutUpdateData): Promise<WorkoutRow | null> {
+    async update(id: number, data: WorkoutUpdateData, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow | null> {
       const updateObj: Record<string, unknown> = {};
 
       if (data.exercise_name !== undefined)
@@ -245,26 +256,27 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       const [updated] = await dbInstance
         .update(workouts)
         .set(updateObj)
-        .where(eq(workouts.id, id))
+        .where(and(eq(workouts.id, id), eq(workouts.user_id, userId)))
         .returning();
 
       return updated ? mapWorkoutRow(updated) : null;
     },
 
-    async delete(id: number): Promise<boolean> {
+    async delete(id: number, userId: number = DEFAULT_USER_ID): Promise<boolean> {
       const deleted = await dbInstance
         .delete(workouts)
-        .where(eq(workouts.id, id))
+        .where(and(eq(workouts.id, id), eq(workouts.user_id, userId)))
         .returning({ id: workouts.id });
 
       return deleted.length > 0;
     },
 
-    async createBatch(rawInput: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData): Promise<WorkoutRow[]> {
+    async createBatch(rawInput: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow[]> {
       return dbInstance.transaction(async (tx) => {
         const [session] = await tx
           .insert(sessions)
           .values({
+            user_id: userId,
             raw_input: rawInput,
             created_at: createdAt,
             walked_10k: activity?.walked_10k ?? false,
@@ -288,6 +300,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
           const [inserted] = await tx
             .insert(workouts)
             .values({
+              user_id: userId,
               session_id: session.id,
               exercise_name: defaulted.exercise_name,
               weight: defaulted.weight,
@@ -316,17 +329,21 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       });
     },
 
-    async getDistinctExercises(): Promise<string[]> {
+    async getDistinctExercises(userId: number = DEFAULT_USER_ID): Promise<string[]> {
       const rows = await dbInstance
         .selectDistinct({ exercise_name: workouts.exercise_name })
         .from(workouts)
+        .where(eq(workouts.user_id, userId))
         .orderBy(workouts.exercise_name);
 
       return rows.map((row) => row.exercise_name);
     },
 
-    async getByExercise(exercise: string, daysBack = 0): Promise<WorkoutRow[]> {
-      const conditions = [eq(workouts.exercise_name, exercise)];
+    async getByExercise(exercise: string, daysBack = 0, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow[]> {
+      const conditions = [
+        eq(workouts.user_id, userId),
+        eq(workouts.exercise_name, exercise),
+      ];
 
       if (daysBack > 0) {
         conditions.push(daysBackCondition(daysBack));
@@ -343,7 +360,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
 
     // Recent sessions, each with its workout rows — used to derive day-type and
     // pull the latest actual sets for a given Push/Pull/Legs session.
-    async getRecentSessionsWithWorkouts(limit = 30): Promise<SessionWithWorkouts[]> {
+    async getRecentSessionsWithWorkouts(limit = 30, userId: number = DEFAULT_USER_ID): Promise<SessionWithWorkouts[]> {
       const sess = await dbInstance
         .select({
           id: sessions.id,
@@ -352,13 +369,14 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
           gym_profile: sessions.gym_profile,
         })
         .from(sessions)
+        .where(eq(sessions.user_id, userId))
         .orderBy(desc(sessions.created_at), desc(sessions.id))
         .limit(limit);
 
       return hydrateSessions(sess);
     },
 
-    async getSessionWithWorkouts(sessionId: number): Promise<SessionWithWorkouts | null> {
+    async getSessionWithWorkouts(sessionId: number, userId: number = DEFAULT_USER_ID): Promise<SessionWithWorkouts | null> {
       const sess = await dbInstance
         .select({
           id: sessions.id,
@@ -367,17 +385,17 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
           gym_profile: sessions.gym_profile,
         })
         .from(sessions)
-        .where(eq(sessions.id, sessionId))
+        .where(and(eq(sessions.id, sessionId), eq(sessions.user_id, userId)))
         .limit(1);
 
       return (await hydrateSessions(sess))[0] ?? null;
     },
 
-    async getSessionsBefore(sessionId: number, scanLimit = 80): Promise<SessionWithWorkouts[]> {
+    async getSessionsBefore(sessionId: number, scanLimit = 80, userId: number = DEFAULT_USER_ID): Promise<SessionWithWorkouts[]> {
       const [boundary] = await dbInstance
         .select({ id: sessions.id, created_at: sessions.created_at })
         .from(sessions)
-        .where(eq(sessions.id, sessionId))
+        .where(and(eq(sessions.id, sessionId), eq(sessions.user_id, userId)))
         .limit(1);
 
       if (!boundary) return [];
@@ -390,7 +408,12 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
           gym_profile: sessions.gym_profile,
         })
         .from(sessions)
-        .where(sql`(${sessions.created_at}, ${sessions.id}) < (${boundary.created_at}, ${boundary.id})`)
+        .where(
+          and(
+            eq(sessions.user_id, userId),
+            sql`(${sessions.created_at}, ${sessions.id}) < (${boundary.created_at}, ${boundary.id})`,
+          ),
+        )
         .orderBy(desc(sessions.created_at), desc(sessions.id))
         .limit(scanLimit);
 
@@ -403,17 +426,21 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       exercise: string | string[],
       sessionLimit = 12,
       asOfSessionId?: number,
+      userId: number = DEFAULT_USER_ID,
     ): Promise<ExerciseSessionContext[]> {
       const exercises = Array.isArray(exercise) ? exercise : [exercise];
-      const conditions = exercises.length === 1
-        ? [eq(workouts.exercise_name, exercises[0]!)]
-        : [inArray(workouts.exercise_name, exercises)];
+      const conditions = [
+        eq(workouts.user_id, userId),
+        exercises.length === 1
+          ? eq(workouts.exercise_name, exercises[0]!)
+          : inArray(workouts.exercise_name, exercises),
+      ];
 
       if (asOfSessionId !== undefined) {
         const [boundary] = await dbInstance
           .select({ id: sessions.id, created_at: sessions.created_at })
           .from(sessions)
-          .where(eq(sessions.id, asOfSessionId))
+          .where(and(eq(sessions.id, asOfSessionId), eq(sessions.user_id, userId)))
           .limit(1);
 
         if (!boundary) return [];
@@ -468,12 +495,13 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       return order.slice(0, sessionLimit).map((id) => grouped.get(id)!);
     },
 
-    async getRecentNotes(exercise: string, limit = 5): Promise<WorkoutRow[]> {
+    async getRecentNotes(exercise: string, limit = 5, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow[]> {
       const rows = await dbInstance
         .select()
         .from(workouts)
         .where(
           and(
+            eq(workouts.user_id, userId),
             eq(workouts.exercise_name, exercise),
             sql`(${workouts.notes_thai} != '' OR ${workouts.notes_english} != '')`,
           ),

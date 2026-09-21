@@ -149,6 +149,12 @@ export interface UpsertNutritionLogInput {
   alcohol: number;
   calories: number;
   observation_id: number;
+  /**
+   * Owning user for the dual-written nutrition_logs row. Optional for
+   * transition: callers that do not pass it (nutrition-estimation service, not
+   * yet user-aware) fall back to the owner (user 1).
+   */
+  user_id?: number;
 }
 
 export interface UpdateEstimateInput {
@@ -401,6 +407,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
      * confirmed revision supersedes the previous write.
      */
     async upsertNutritionLogLink(input: UpsertNutritionLogInput): Promise<number> {
+      const userId = input.user_id ?? 1;
       const [existing] = await dbInstance
         .select({ id: nutritionLogs.id })
         .from(nutritionLogs)
@@ -433,6 +440,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
       const [inserted] = await dbInstance
         .insert(nutritionLogs)
         .values({
+          user_id: userId,
           date: input.date,
           meal: input.meal,
           food_name: input.food_name,

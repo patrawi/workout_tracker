@@ -29,8 +29,8 @@ export function registerCoachRoutes(app: any, ctx: AppContext): void {
   app
     .post(
       "/coach/chat",
-      routeHandlerCtx(async ({ body }) => {
-        return await coachService.chat(body.messages);
+      routeHandlerCtx(async ({ body, user_id }: any) => {
+        return await coachService.chat(body.messages, user_id);
       }),
       {
         body: t.Object({
@@ -45,14 +45,14 @@ export function registerCoachRoutes(app: any, ctx: AppContext): void {
     )
     .post(
       "/coach/chat/stream",
-      ({ body }: { body: { messages: { role: "user" | "coach"; text: string }[] } }) => {
+      ({ body, user_id }: { body: { messages: { role: "user" | "coach"; text: string }[] }; user_id?: number }) => {
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           async start(controller) {
             const send = (obj: unknown) =>
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
             try {
-              for await (const delta of coachService.chatStream(body.messages)) {
+              for await (const delta of coachService.chatStream(body.messages, user_id)) {
                 send(delta);
               }
               send({ done: true });

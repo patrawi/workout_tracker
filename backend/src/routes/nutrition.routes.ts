@@ -11,15 +11,15 @@ export function registerNutritionRoutes(app: any, ctx: AppContext): void {
   const { nutritionService } = ctx;
 
   app
-    .post("/nutrition/parse", routeHandlerCtx(async ({ body }) => {
+    .post("/nutrition/parse", routeHandlerCtx(async ({ body }: any) => {
       return await nutritionService.parse(body.raw_text);
     }), {
       body: t.Object({
         raw_text: t.String(),
       }),
     })
-    .post("/nutrition/confirm", routeHandlerCtx(async ({ body }) => {
-      return await nutritionService.log(body.items, body.date);
+    .post("/nutrition/confirm", routeHandlerCtx(async ({ body, user_id }: any) => {
+      return await nutritionService.log(body.items, body.date, user_id);
     }), {
       body: t.Object({
         date: t.String(),
@@ -42,15 +42,15 @@ export function registerNutritionRoutes(app: any, ctx: AppContext): void {
         ),
       }),
     })
-    .get("/nutrition/date/:date", routeHandlerCtx(async ({ params }) => {
-      return await nutritionService.getByDate(params.date);
+    .get("/nutrition/date/:date", routeHandlerCtx(async ({ params, user_id }: any) => {
+      return await nutritionService.getByDate(params.date, user_id);
     }))
-    .get("/nutrition/dates", routeHandler(async () => {
-      return await nutritionService.getDates();
+    .get("/nutrition/dates", routeHandler(async ({ user_id }: any) => {
+      return await nutritionService.getDates(user_id);
     }))
-    .put("/nutrition/:id", routeHandlerCtx(async ({ params, body }) => {
+    .put("/nutrition/:id", routeHandlerCtx(async ({ params, body, user_id }: any) => {
       const id = Number(params.id);
-      const updated = await nutritionService.update(id, body);
+      const updated = await nutritionService.update(id, body, user_id);
       if (!updated) {
         throw new ValidationError("Item not found");
       }
@@ -66,12 +66,12 @@ export function registerNutritionRoutes(app: any, ctx: AppContext): void {
         calories: t.Optional(t.Number()),
       }),
     })
-    .delete("/nutrition/:id", routeHandlerCtx(async ({ params }) => {
-      await nutritionService.deleteItem(Number(params.id));
+    .delete("/nutrition/:id", routeHandlerCtx(async ({ params, user_id }: any) => {
+      await nutritionService.deleteItem(Number(params.id), user_id);
       return { deleted: true };
     }))
-    .delete("/nutrition/date/:date", routeHandlerCtx(async ({ params }) => {
-      await nutritionService.deleteByDate(params.date);
+    .delete("/nutrition/date/:date", routeHandlerCtx(async ({ params, user_id }: any) => {
+      await nutritionService.deleteByDate(params.date, user_id);
       return { deleted: true };
     }));
 }

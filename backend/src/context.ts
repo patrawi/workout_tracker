@@ -31,6 +31,7 @@ import { createCoachService } from "./services/coach.service";
 import type { CoachService } from "./services/coach.service";
 import { createEmbeddingClient } from "./embeddings/client";
 import { createAuthService } from "./services/auth.service";
+import { createUsersRepository } from "./repositories/users.repository";
 import type { AnalyticsService } from "./services/analytics.service";
 import type { BodyweightService } from "./services/bodyweight.service";
 import type { RestDayService } from "./services/rest-day.service";
@@ -108,7 +109,8 @@ export function createAppContext(
   });
   const waterService = createWaterService(waterRepo);
   const profileService = createProfileService(profileRepo, bodyweightService);
-  const authService = createAuthService(config);
+  const usersRepo = createUsersRepository(db);
+  const authService = createAuthService(config, { usersRepo });
   const coachService = createCoachService(config, {
     analyticsService,
     nutritionService,

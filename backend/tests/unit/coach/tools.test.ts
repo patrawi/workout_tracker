@@ -113,7 +113,7 @@ describe("buildCoachTools", () => {
             "2026-06-25",
             "2026-06-18",
         ]);
-        expect(deps.workoutRepo.getRecentSessionsWithWorkouts).toHaveBeenCalledWith(40);
+        expect(deps.workoutRepo.getRecentSessionsWithWorkouts).toHaveBeenCalledWith(40, 1);
     });
 
     test("day-type history schema does not expose limit selection to the LLM", () => {
@@ -143,7 +143,7 @@ describe("buildCoachTools", () => {
             20260618,
             20260611,
         ]);
-        expect(deps.workoutRepo.getSessionsBefore).toHaveBeenCalledWith(20260701, 80);
+        expect(deps.workoutRepo.getSessionsBefore).toHaveBeenCalledWith(20260701, 80, 1);
     });
 
     test("overload assessment passes as_of_session_id through to the repository", async () => {
@@ -152,7 +152,7 @@ describe("buildCoachTools", () => {
 
         await tools.run("get_overload_assessment", { exercise_name: "Bench Press", as_of_session_id: 123 });
 
-        expect(deps.workoutRepo.getExerciseSetsWithContext).toHaveBeenCalledWith(["Bench Press"], 12, 123);
+        expect(deps.workoutRepo.getExerciseSetsWithContext).toHaveBeenCalledWith(["Bench Press"], 12, 123, 1);
     });
 
     test("overload assessment resolves slash-separated plan aliases to logged exercise names", async () => {
@@ -167,6 +167,7 @@ describe("buildCoachTools", () => {
             ["Pull Up / Assisted Pull Up", "Pull Up", "Assisted Pull Up"],
             12,
             96,
+            1,
         );
     });
 

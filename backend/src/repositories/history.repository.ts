@@ -2,6 +2,9 @@ import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { workouts, restDays, nutritionLogs } from "../schema";
 
+// Legacy default: all pre-multi-user data belongs to the owner (user 1).
+const DEFAULT_USER_ID = 1;
+
 export interface HistoryDate {
   date: string;
   hasWorkout: boolean;
@@ -17,10 +20,10 @@ export interface HistoryDate {
 export function createHistoryRepository(dbInstance: PostgresJsDatabase) {
   return {
     /**
-     * Get all unique dates that have workout, rest day, or nutrition activity.
-     * Returns macro totals for dates with nutrition data.
+     * Get all unique dates that have workout, rest day, or nutrition activity
+     * for one user. Returns macro totals for dates with nutrition data.
      */
-    async getDates(): Promise<HistoryDate[]> {
+    async getDates(userId: number = DEFAULT_USER_ID): Promise<HistoryDate[]> {
       const rows = await dbInstance.execute<{
         date: string;
         has_workout: boolean;
@@ -43,22 +46,22 @@ export function createHistoryRepository(dbInstance: PostgresJsDatabase) {
           COALESCE(n.total_alcohol, 0) AS total_alcohol,
           COALESCE(n.total_calories, 0) AS total_calories
         FROM (
-          SELECT DISTINCT DATE(${workouts.created_at})::text AS date FROM ${workouts}
+          SELECT DISTINCT DATE(${workouts.created_at})::text AS date FROM ${workouts} WHERE ${workouts.user_id} = ${userId}
           UNION
-          SELECT DISTINCT ${restDays.date} AS date FROM ${restDays}
+          SELECT DISTINCT ${restDays.date} AS date FROM ${restDays} WHERE ${restDays.user_id} = ${userId}
           UNION
-          SELECT DISTINCT ${nutritionLogs.date} AS date FROM ${nutritionLogs}
+          SELECT DISTINCT ${nutritionLogs.date} AS date FROM ${nutritionLogs} WHERE ${nutritionLogs.user_id} = ${userId}
         ) d
         LEFT JOIN LATERAL (
           SELECT true AS has_workout
           FROM ${workouts}
-          WHERE DATE(${workouts.created_at})::text = d.date
+          WHERE ${workouts.user_id} = ${userId} AND DATE(${workouts.created_at})::text = d.date
           LIMIT 1
         ) w ON true
         LEFT JOIN LATERAL (
           SELECT true AS has_rest_day
           FROM ${restDays}
-          WHERE ${restDays.date} = d.date
+          WHERE ${restDays.user_id} = ${userId} AND ${restDays.date} = d.date
           LIMIT 1
         ) r ON true
         LEFT JOIN LATERAL (
@@ -70,7 +73,7 @@ export function createHistoryRepository(dbInstance: PostgresJsDatabase) {
             SUM(${nutritionLogs.alcohol})::real AS total_alcohol,
             SUM(${nutritionLogs.calories})::real AS total_calories
           FROM ${nutritionLogs}
-          WHERE ${nutritionLogs.date} = d.date
+          WHERE ${nutritionLogs.user_id} = ${userId} AND ${nutritionLogs.date} = d.date
           HAVING COUNT(*) > 0
         ) n ON true
         ORDER BY d.date DESC
