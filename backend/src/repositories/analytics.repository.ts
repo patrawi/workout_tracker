@@ -1,6 +1,9 @@
-import { desc, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { restDays, workouts } from "../schema";
+
+// Legacy default: all pre-multi-user data belongs to the owner (user 1).
+const DEFAULT_USER_ID = 1;
 
 export interface HeatmapDay {
   date: string;
@@ -30,20 +33,30 @@ export interface VolumeTrendData {
 
 export function createAnalyticsRepository(dbInstance: PostgresJsDatabase) {
   return {
-    async getHeatmap(): Promise<HeatmapDay[]> {
+    async getHeatmap(userId: number = DEFAULT_USER_ID): Promise<HeatmapDay[]> {
       const workoutRows = await dbInstance
         .select({
           date: sql<string>`DATE(${workouts.created_at})`.as("date"),
           count: sql<number>`COUNT(*)::int`.as("count"),
         })
         .from(workouts)
-        .where(gte(workouts.created_at, sql`now() - interval '365 days'`))
+        .where(
+          and(
+            eq(workouts.user_id, userId),
+            gte(workouts.created_at, sql`now() - interval '365 days'`),
+          ),
+        )
         .groupBy(sql`DATE(${workouts.created_at})`);
 
       const restRows = await dbInstance
         .select()
         .from(restDays)
-        .where(gte(restDays.created_at, sql`now() - interval '365 days'`));
+        .where(
+          and(
+            eq(restDays.user_id, userId),
+            gte(restDays.created_at, sql`now() - interval '365 days'`),
+          ),
+        );
 
       const dayMap = new Map<string, HeatmapDay>();
 
@@ -81,7 +94,7 @@ export function createAnalyticsRepository(dbInstance: PostgresJsDatabase) {
       return Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     },
 
-    async getVolume(daysBack = 7): Promise<VolumeData[]> {
+    async getVolume(daysBack = 7, userId: number = DEFAULT_USER_ID): Promise<VolumeData[]> {
       const rows = await dbInstance
         .select({
           muscle_group: workouts.muscle_group,
@@ -89,7 +102,10 @@ export function createAnalyticsRepository(dbInstance: PostgresJsDatabase) {
         })
         .from(workouts)
         .where(
-          gte(workouts.created_at, sql`now() - interval '${sql.raw(String(daysBack))} days'`),
+          and(
+            eq(workouts.user_id, userId),
+            gte(workouts.created_at, sql`now() - interval '${sql.raw(String(daysBack))} days'`),
+          ),
         )
         .groupBy(workouts.muscle_group)
         .orderBy(desc(sql`COUNT(*)`));
@@ -100,7 +116,7 @@ export function createAnalyticsRepository(dbInstance: PostgresJsDatabase) {
       }));
     },
 
-    async getVolumeTrend(daysBack = 14): Promise<VolumeTrendData[]> {
+    async getVolumeTrend(daysBack = 14, userId: number = DEFAULT_USER_ID): Promise<VolumeTrendData[]> {
       const n = sql.raw(String(daysBack));
       const twoN = sql.raw(String(daysBack * 2));
       const inCurrent = sql`${workouts.created_at} >= now() - interval '${n} days'`;
@@ -119,7 +135,12 @@ export function createAnalyticsRepository(dbInstance: PostgresJsDatabase) {
           previous_sets: sql<number>`COUNT(*) FILTER (WHERE ${inPrevious})::int`.as("previous_sets"),
         })
         .from(workouts)
-        .where(gte(workouts.created_at, sql`now() - interval '${twoN} days'`))
+        .where(
+          and(
+            eq(workouts.user_id, userId),
+            gte(workouts.created_at, sql`now() - interval '${twoN} days'`),
+          ),
+        )
         .groupBy(workouts.muscle_group)
         .orderBy(desc(sql`COALESCE(SUM(${workouts.weight} * ${workouts.reps}) FILTER (WHERE ${inCurrent}), 0)`));
 

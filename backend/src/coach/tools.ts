@@ -186,7 +186,7 @@ const sessionPrescriptionExerciseSchema = {
     required: [...planExerciseSchema.required, "source_day_type"],
 };
 
-export function buildCoachTools(deps: CoachServiceDeps): {
+export function buildCoachTools(deps: CoachServiceDeps, userId: number = 1): {
     schemas: ToolSchemas;
     run: ToolRunner;
     drainPlanProposals: () => CoachPlanProposal[];
@@ -344,10 +344,10 @@ export function buildCoachTools(deps: CoachServiceDeps): {
         switch (name) {
             case "get_daily_nutrition": {
                 const days = parseDays(args.days, 7);
-                const dates = (await deps.nutritionService.getDates()).slice(0, days);
+                const dates = (await deps.nutritionService.getDates(userId)).slice(0, days);
                 const rows = await Promise.all(
                     dates.map(async (date) => {
-                        const meals = await deps.nutritionService.getByDate(date);
+                        const meals = await deps.nutritionService.getByDate(date, userId);
                         const totals = meals.reduce(
                             (a, r) => ({
                                 calories: a.calories + r.calories,
@@ -365,7 +365,7 @@ export function buildCoachTools(deps: CoachServiceDeps): {
             case "get_nutrition_by_date": {
                 const date = parseDate(args.date);
                 if (!date) return JSON.stringify({ error: "Invalid date, use YYYY-MM-DD" });
-                const meals = await deps.nutritionService.getByDate(date);
+                const meals = await deps.nutritionService.getByDate(date, userId);
                 return JSON.stringify(
                     meals.map((m) => ({
                         food_name: m.food_name,
@@ -379,7 +379,7 @@ export function buildCoachTools(deps: CoachServiceDeps): {
             }
             case "get_workout_sessions": {
                 const limit = parseLimit(args.limit, 5);
-                const sessions = await deps.workoutRepo.getRecentSessionsWithWorkouts(limit);
+                const sessions = await deps.workoutRepo.getRecentSessionsWithWorkouts(limit, userId);
                 return JSON.stringify(
                     sessions.map((s) => ({
                         session_id: s.session_id,
@@ -399,17 +399,17 @@ export function buildCoachTools(deps: CoachServiceDeps): {
             }
             case "get_bodyweight_logs": {
                 const daysBack = parseDays(args.daysBack, 14);
-                const logs = await deps.bodyweightService.getLogs(daysBack);
+                const logs = await deps.bodyweightService.getLogs(daysBack, userId);
                 return JSON.stringify(logs.map((l) => ({ date: l.date, weight_kg: l.weight_kg })));
             }
             case "get_volume": {
                 const daysBack = parseDays(args.daysBack, 7);
-                const volume = await deps.analyticsService.getVolume(daysBack);
+                const volume = await deps.analyticsService.getVolume(daysBack, userId);
                 return JSON.stringify(volume);
             }
             case "get_volume_trend": {
                 const daysBack = parseDays(args.daysBack, 14);
-                const trend = await deps.analyticsService.getVolumeTrend(daysBack);
+                const trend = await deps.analyticsService.getVolumeTrend(daysBack, userId);
                 return JSON.stringify(trend);
             }
             case "get_plan": {
@@ -439,11 +439,11 @@ export function buildCoachTools(deps: CoachServiceDeps): {
             case "get_day_type_history": {
                 const sessionId = parseSessionId(args.session_id);
                 if (sessionId !== null) {
-                    const reviewed = await deps.workoutRepo.getSessionWithWorkouts(sessionId);
+                    const reviewed = await deps.workoutRepo.getSessionWithWorkouts(sessionId, userId);
                     if (!reviewed) return JSON.stringify({ error: `session_id ${sessionId} not found` });
 
                     const day = classifySession(reviewed.workouts.map((w) => w.muscle_group));
-                    const previous = await deps.workoutRepo.getSessionsBefore(sessionId, 80);
+                    const previous = await deps.workoutRepo.getSessionsBefore(sessionId, 80, userId);
                     const matching = previous
                         .filter((s) => classifySession(s.workouts.map((w) => w.muscle_group)) === day)
                         .slice(0, DAY_TYPE_HISTORY_LIMIT);
@@ -459,7 +459,7 @@ export function buildCoachTools(deps: CoachServiceDeps): {
 
                 const day = parseDayType(args.day_type);
                 if (!day) return JSON.stringify({ error: "day_type must be Push, Pull, or Legs, or pass session_id" });
-                const sessions = await deps.workoutRepo.getRecentSessionsWithWorkouts(40);
+                const sessions = await deps.workoutRepo.getRecentSessionsWithWorkouts(40, userId);
                 const matching = sessions
                     .filter((s) => classifySession(s.workouts.map((w) => w.muscle_group)) === day)
                     .slice(0, DAY_TYPE_HISTORY_LIMIT);
@@ -484,6 +484,7 @@ export function buildCoachTools(deps: CoachServiceDeps): {
                     historyExerciseNames,
                     12,
                     asOfSessionId ?? undefined,
+                    userId,
                 );
                 const isDumbbell = exercise.toLowerCase().includes("dumbbell");
                 const assessment = assessExercise(

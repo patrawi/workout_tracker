@@ -10,12 +10,12 @@ export function registerBodyweightRoutes(app: any, ctx: AppContext): void {
   const { bodyweightService } = ctx;
 
   app
-    .get("/bodyweight", routeHandlerCtx(async ({ query }) => {
+    .get("/bodyweight", routeHandlerCtx(async ({ query, user_id }: any) => {
       const days = parseDaysBack(query.days, BODYWEIGHT_DEFAULT_DAYS_BACK);
-      return await bodyweightService.getLogs(days);
+      return await bodyweightService.getLogs(days, user_id);
     }))
-    .post("/bodyweight", routeHandlerCtx(async ({ body }) => {
-      await bodyweightService.log(body.date, body.weight_kg);
+    .post("/bodyweight", routeHandlerCtx(async ({ body, user_id }: any) => {
+      await bodyweightService.log(body.date, body.weight_kg, user_id);
       return { success: true };
     }), {
       body: t.Object({

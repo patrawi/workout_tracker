@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { restDays } from "../schema";
 
@@ -20,6 +20,9 @@ export interface RestDayRow {
   created_at: string;
 }
 
+// Legacy default: all pre-multi-user data belongs to the owner (user 1).
+const DEFAULT_USER_ID = 1;
+
 function mapRestDayRow(row: typeof restDays.$inferSelect): RestDayRow {
   return {
     id: row.id,
@@ -34,10 +37,11 @@ function mapRestDayRow(row: typeof restDays.$inferSelect): RestDayRow {
 
 export function createRestDayRepository(dbInstance: PostgresJsDatabase) {
   return {
-    async upsert(data: RestDayInput): Promise<RestDayRow> {
+    async upsert(data: RestDayInput, userId: number = DEFAULT_USER_ID): Promise<RestDayRow> {
       const [row] = await dbInstance
         .insert(restDays)
         .values({
+          user_id: userId,
           date: data.date,
           walked_10k: data.walked_10k ?? false,
           did_liss: data.did_liss ?? false,
@@ -45,7 +49,7 @@ export function createRestDayRepository(dbInstance: PostgresJsDatabase) {
           notes: data.notes ?? "",
         })
         .onConflictDoUpdate({
-          target: restDays.date,
+          target: [restDays.user_id, restDays.date],
           set: {
             walked_10k: data.walked_10k ?? false,
             did_liss: data.did_liss ?? false,
@@ -62,10 +66,10 @@ export function createRestDayRepository(dbInstance: PostgresJsDatabase) {
       return mapRestDayRow(row);
     },
 
-    async delete(date: string): Promise<boolean> {
+    async delete(date: string, userId: number = DEFAULT_USER_ID): Promise<boolean> {
       const deleted = await dbInstance
         .delete(restDays)
-        .where(eq(restDays.date, date))
+        .where(and(eq(restDays.user_id, userId), eq(restDays.date, date)))
         .returning({ id: restDays.id });
 
       return deleted.length > 0;

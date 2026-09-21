@@ -14,6 +14,8 @@ export interface AppConfig {
   CRON_SECRET: string;
   googleSheetsId: string;
   googleCredentialsJson: string;
+  /** Google OAuth client ID — audience check for Google ID-token login (optional). */
+  googleClientId: string;
   allowedOrigins: string[];
 }
 
@@ -52,6 +54,7 @@ export class ConfigService {
       CRON_SECRET: getOptionalEnv(env, "CRON_SECRET"),
       googleSheetsId: getOptionalEnv(env, "GOOGLE_SHEETS_ID"),
       googleCredentialsJson: getOptionalEnv(env, "GOOGLE_CREDENTIALS_JSON"),
+      googleClientId: getOptionalEnv(env, "GOOGLE_CLIENT_ID"),
       allowedOrigins: getListEnv(env, "ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGINS),
     });
   }
@@ -71,6 +74,7 @@ export class ConfigService {
       CRON_SECRET: "test-cron-secret",
       googleSheetsId: "",
       googleCredentialsJson: "",
+      googleClientId: "",
       allowedOrigins: DEFAULT_ALLOWED_ORIGINS,
       ...overrides,
     });
@@ -89,6 +93,7 @@ export class ConfigService {
   get CRON_SECRET() { return this.config.CRON_SECRET; }
   get googleSheetsId() { return this.config.googleSheetsId; }
   get googleCredentialsJson() { return this.config.googleCredentialsJson; }
+  get googleClientId() { return this.config.googleClientId; }
   get allowedOrigins() { return this.config.allowedOrigins; }
   get isAuthEnabled() { return this.config.masterPassword.length > 0; }
 }

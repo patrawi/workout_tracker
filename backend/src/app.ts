@@ -133,10 +133,25 @@ export function createApp(ctx: AppContext) {
               }),
           },
         )
+        .post(
+          "/auth/google",
+          async ({ body, jwt, cookie: { auth } }) =>
+            authService.handleGoogleLogin(body as { id_token: string }, jwt, auth),
+          {
+            body: authService.googleLoginBodySchema,
+          },
+        )
         .post("/auth/logout", ({ cookie: { auth } }) => authService.handleLogout(auth))
         .get("/auth/verify", async ({ jwt, cookie: { auth } }) =>
           authService.handleVerify(jwt, auth),
         )
+        // Resolve the scoped user id (from the JWT; 1 = owner/legacy) once per
+        // request so route handlers can pass it down to services/repositories.
+        // Must run before the auth guard rejects anonymous requests — for those
+        // it just resolves to 1 and the guard 401s anyway.
+        .resolve(async ({ jwt, cookie: { auth } }) => ({
+          user_id: await authService.resolveUserId(jwt, auth),
+        }))
         .onBeforeHandle(async ({ jwt, cookie: { auth }, path, set }) => {
           if (authService.isPublicPath(path)) {
             return;

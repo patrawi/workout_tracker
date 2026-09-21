@@ -2,6 +2,8 @@
 
 import { t } from "elysia";
 import type { ConfigService } from "./config.service";
+import type { UsersRepository, UserRow } from "../repositories/users.repository";
+import { verifyGoogleIdToken, type FetchLike } from "../lib/google-token";
 import { ok, fail } from "../lib/api";
 import { AUTH_COOKIE_MAX_AGE_SECONDS } from "../constants";
 import { createChildLogger } from "../lib/logger";
@@ -11,6 +13,7 @@ const logger = createChildLogger("auth-service");
 export const AUTH_PUBLIC_PATHS = new Set([
   "/",
   "/api/auth/login",
+  "/api/auth/google",
   "/api/auth/logout",
   "/api/auth/verify",
   "/health",
@@ -40,6 +43,26 @@ type JwtService = {
   verify(token: string): Promise<unknown>;
 };
 
+/** JWT payload shape issued by both login flows. */
+export interface AuthJwtPayload {
+  role: string;
+  user_id: number;
+  email?: string;
+  name?: string;
+}
+
+/** Extract the scoped user id from a verified JWT payload (legacy tokens → 1). */
+export function resolveUserIdFromPayload(payload: unknown): number {
+  if (typeof payload === "object" && payload !== null && "user_id" in payload) {
+    const userId = (payload as { user_id?: unknown }).user_id;
+    if (typeof userId === "number" && Number.isInteger(userId) && userId > 0) {
+      return userId;
+    }
+  }
+  // Legacy master-password tokens (role: "owner") predate multi-user — owner is user 1.
+  return 1;
+}
+
 type AuthCookie = {
   value?: unknown;
   set(options: {
@@ -67,17 +90,72 @@ const authCookieOptions = {
 
 export interface AuthService {
   authLoginBodySchema: ReturnType<typeof t.Object>;
+  googleLoginBodySchema: ReturnType<typeof t.Object>;
   isAuthEnabled: boolean;
   isPublicPath(path: string): boolean;
   handleLogin(body: { password: string }, jwt: JwtService, auth?: AuthCookie): Promise<Record<string, unknown>>;
+  handleGoogleLogin(body: { id_token: string }, jwt: JwtService, auth?: AuthCookie): Promise<Record<string, unknown>>;
   handleLogout(auth?: AuthCookie): Record<string, unknown>;
   handleVerify(jwt: JwtService, auth?: AuthCookie): Promise<Record<string, unknown>>;
+  resolveUserId(jwt: JwtService, auth?: AuthCookie): Promise<number>;
   requireAuth(jwt: JwtService, auth?: AuthCookie, set?: StatusSetter): Promise<void | Record<string, unknown>>;
 }
 
-export function createAuthService(config: ConfigService): AuthService {
+export interface AuthServiceDeps {
+  usersRepo?: UsersRepository;
+  fetchImpl?: FetchLike;
+}
+
+const googleLoginBodySchema = t.Object({
+  id_token: t.String(),
+});
+
+export function createAuthService(config: ConfigService, deps: AuthServiceDeps = {}): AuthService {
+  const { usersRepo, fetchImpl } = deps;
+
+  /**
+   * Upsert a Google-login user by google_sub. Special claim-first-login rule:
+   * when the account is NEW and the seeded owner row (id=1) still carries the
+   * placeholder google_sub='pending-owner', claim that row instead of creating
+   * a new one — this transfers all legacy single-user data to the owner.
+   */
+  async function upsertGoogleUser(profile: {
+    sub: string;
+    email: string;
+    name: string;
+    picture: string | null;
+  }): Promise<UserRow> {
+    if (!usersRepo) {
+      throw new Error("Users repository is not available.");
+    }
+
+    const input = {
+      google_sub: profile.sub,
+      email: profile.email,
+      name: profile.name,
+      picture: profile.picture,
+    };
+
+    const existing = await usersRepo.findByGoogleSub(profile.sub);
+    if (existing) {
+      await usersRepo.updateProfile(existing.id, input);
+      return { ...existing, ...input };
+    }
+
+    if (await usersRepo.ownerIsPending()) {
+      const claimed = await usersRepo.claimPendingOwner(input);
+      if (claimed) {
+        logger.info("Google login claimed pending owner row", { user_id: claimed.id });
+        return claimed;
+      }
+    }
+
+    return usersRepo.create(input);
+  }
+
   return {
     authLoginBodySchema,
+    googleLoginBodySchema,
     get isAuthEnabled() {
       return config.masterPassword.length > 0;
     },
@@ -99,7 +177,8 @@ export function createAuthService(config: ConfigService): AuthService {
         return fail("Wrong password.");
       }
 
-      const token = await jwt.sign({ role: "owner" });
+      // Master-password login is the owner bypass — always user 1.
+      const token = await jwt.sign({ role: "owner", user_id: 1 } satisfies AuthJwtPayload);
 
       auth.set({
         value: token,
@@ -108,6 +187,51 @@ export function createAuthService(config: ConfigService): AuthService {
 
       logger.info("User logged in");
       return { success: true };
+    },
+
+    async handleGoogleLogin(
+      body: { id_token: string },
+      jwt: JwtService,
+      auth?: AuthCookie
+    ): Promise<Record<string, unknown>> {
+      if (!auth) {
+        return fail("Cookie not available.");
+      }
+
+      const verified = await verifyGoogleIdToken(body.id_token, {
+        clientId: config.googleClientId,
+        fetchImpl,
+      });
+
+      if (!verified.ok) {
+        return fail(verified.message);
+      }
+
+      let user: UserRow;
+      try {
+        user = await upsertGoogleUser(verified.profile);
+      } catch (error) {
+        logger.error("Google login upsert failed", { error: String(error) });
+        return fail("Google login failed. Please try again.");
+      }
+
+      const token = await jwt.sign({
+        role: "user",
+        user_id: user.id,
+        email: user.email,
+        name: user.name,
+      } satisfies AuthJwtPayload);
+
+      auth.set({
+        value: token,
+        ...authCookieOptions,
+      });
+
+      logger.info("User logged in with Google", { user_id: user.id });
+      return {
+        success: true,
+        user: { id: user.id, email: user.email, name: user.name, picture: user.picture },
+      };
     },
 
     handleLogout(auth?: AuthCookie): Record<string, unknown> {
@@ -134,9 +258,41 @@ export function createAuthService(config: ConfigService): AuthService {
 
       try {
         const payload = await jwt.verify(auth.value);
-        return ok({ authenticated: !!payload });
+        if (!payload) {
+          return ok({ authenticated: false });
+        }
+
+        const userId = resolveUserIdFromPayload(payload);
+        let user: { id: number; email: string; name: string; picture: string | null } | undefined;
+        if (usersRepo) {
+          const row = await usersRepo.findById(userId);
+          if (row) {
+            user = { id: row.id, email: row.email, name: row.name, picture: row.picture };
+          }
+        }
+
+        return ok({ authenticated: true, user_id: userId, user });
       } catch {
         return ok({ authenticated: false });
+      }
+    },
+
+    async resolveUserId(jwt: JwtService, auth?: AuthCookie): Promise<number> {
+      // Auth disabled (no MASTER_PASSWORD) — single-user legacy mode, owner only.
+      if (!this.isAuthEnabled) {
+        return 1;
+      }
+
+      if (!auth?.value || typeof auth.value !== "string") {
+        return 1; // Guard (requireAuth) rejects this request before handlers run.
+      }
+
+      try {
+        const payload = await jwt.verify(auth.value);
+        if (!payload) return 1;
+        return resolveUserIdFromPayload(payload);
+      } catch {
+        return 1;
       }
     },
 

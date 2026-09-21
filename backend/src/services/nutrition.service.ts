@@ -9,14 +9,17 @@ import { createChildLogger } from "../lib/logger";
 
 const logger = createChildLogger("nutrition-service");
 
+// Legacy default: all pre-multi-user data belongs to the owner (user 1).
+const DEFAULT_USER_ID = 1;
+
 export interface NutritionService {
   parse(rawText: string): Promise<NutritionItem[]>;
-  log(items: NutritionItem[], date: string): Promise<NutritionRow[]>;
-  getByDate(date: string): Promise<NutritionRow[]>;
-  getDates(): Promise<string[]>;
-  update(id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>): Promise<NutritionRow | null>;
-  deleteItem(id: number): Promise<void>;
-  deleteByDate(date: string): Promise<void>;
+  log(items: NutritionItem[], date: string, userId?: number): Promise<NutritionRow[]>;
+  getByDate(date: string, userId?: number): Promise<NutritionRow[]>;
+  getDates(userId?: number): Promise<string[]>;
+  update(id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>, userId?: number): Promise<NutritionRow | null>;
+  deleteItem(id: number, userId?: number): Promise<void>;
+  deleteByDate(date: string, userId?: number): Promise<void>;
 }
 
 export function createNutritionService(
@@ -47,32 +50,32 @@ export function createNutritionService(
       }
     },
 
-    async log(items: NutritionItem[], date: string): Promise<NutritionRow[]> {
+    async log(items: NutritionItem[], date: string, userId: number = DEFAULT_USER_ID): Promise<NutritionRow[]> {
       if (!items || items.length === 0) {
         throw new ValidationError("No nutrition items to save");
       }
-      logger.info("Logging nutrition", { date, itemCount: items.length });
-      return repo.insertBatch(date, items);
+      logger.info("Logging nutrition", { date, itemCount: items.length, userId });
+      return repo.insertBatch(date, items, userId);
     },
 
-    async getByDate(date: string): Promise<NutritionRow[]> {
-      return repo.getByDate(date);
+    async getByDate(date: string, userId: number = DEFAULT_USER_ID): Promise<NutritionRow[]> {
+      return repo.getByDate(date, userId);
     },
 
-    async getDates(): Promise<string[]> {
-      return repo.getDates();
+    async getDates(userId: number = DEFAULT_USER_ID): Promise<string[]> {
+      return repo.getDates(userId);
     },
 
-    async update(id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>): Promise<NutritionRow | null> {
-      return repo.update(id, updates);
+    async update(id: number, updates: Partial<Pick<NutritionRow, "food_name" | "meal" | "protein" | "carbs" | "fat" | "alcohol" | "calories">>, userId: number = DEFAULT_USER_ID): Promise<NutritionRow | null> {
+      return repo.update(id, updates, userId);
     },
 
-    async deleteItem(id: number): Promise<void> {
-      return repo.deleteItem(id);
+    async deleteItem(id: number, userId: number = DEFAULT_USER_ID): Promise<void> {
+      return repo.deleteItem(id, userId);
     },
 
-    async deleteByDate(date: string): Promise<void> {
-      return repo.deleteByDate(date);
+    async deleteByDate(date: string, userId: number = DEFAULT_USER_ID): Promise<void> {
+      return repo.deleteByDate(date, userId);
     },
   };
 }

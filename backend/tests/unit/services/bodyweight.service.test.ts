@@ -23,6 +23,6 @@ describe("createBodyweightService", () => {
 
     await service.log("2024-01-15", 75.5);
 
-    expect(mockRepo.insert).toHaveBeenCalledWith("2024-01-15", 75.5);
+    expect(mockRepo.insert).toHaveBeenCalledWith("2024-01-15", 75.5, 1);
   });
 });

@@ -56,7 +56,11 @@ Layered architecture with clear separation:
 - **`repositories/`** - Database queries (one file per domain entity)
 - **`services/`** - Business logic (`auth.service.ts` handles JWT auth with optional master password, `profile.service.ts`)
 
-**Auth flow**: Authentication is optional. If `MASTER_PASSWORD` env var is set, all `/api` routes (except `/api/auth/*`) require a valid JWT cookie. Login validates against the master password.
+**Auth flow**: Google login (multi-user) plus a master-password owner bypass. If `MASTER_PASSWORD` env var is set, all `/api` routes (except `/api/auth/*`) require a valid JWT cookie. Two login flows issue the JWT:
+- `POST /api/auth/google` with `{ id_token }` — verifies the Google ID token via the tokeninfo endpoint (one network round trip per login; logins are rare — see `backend/src/lib/google-token.ts`), validates issuer/audience(`GOOGLE_CLIENT_ID`)/exp/email_verified, upserts a `users` row by `google_sub`, and issues a JWT carrying `user_id`. **Claim-first-login rule**: a brand-new Google account takes over the seeded placeholder owner row (id=1, `google_sub='pending-owner'`) on the first login, transferring all legacy single-user data to the owner.
+- `POST /api/auth/login` with the master password — owner bypass; its JWT carries `user_id: 1`.
+
+All per-user queries (workouts, sessions, rest days, bodyweight, nutrition, water, profile, history, analytics) are scoped by `user_id`, resolved from the JWT in `app.ts` (defaults to 1 for legacy tokens and when auth is disabled). The food catalog and nutrition references are global (shared).
 
 **AI parsing flow**: Raw text -> `POST /api/workouts/parse` -> Gemini AI -> structured JSON array -> returned to frontend for human review -> `POST /api/workouts/confirm` saves to DB.
 
@@ -79,12 +83,12 @@ Vite dev server proxies `/api` requests to `http://localhost:3000` with path rew
 
 ### Database
 
-PostgreSQL with Drizzle ORM. Schema in `backend/src/schema.ts`, migrations in `backend/drizzle/`. The `profile` table is a singleton (id always = 1, ensured on startup).
+PostgreSQL with Drizzle ORM. Schema in `backend/src/schema.ts`, migrations in `backend/drizzle/`. The `profile` table is per-user (`user_id` unique; legacy row backfilled to user 1, auto-seeded per user on first access; startup `ensure()` remains as an owner-row fallback). Date-uniqueness on `rest_days`, `bodyweight_logs`, `water_logs` is per user — `(user_id, date)` composite unique indexes; upserts target that pair.
 
 ### Environment Variables
 
 Required: `DATABASE_URL`
-Optional: `PORT` (default 3000), `MASTER_PASSWORD`, `JWT_SECRET`, `GEMINI_API_KEY`
+Optional: `PORT` (default 3000), `MASTER_PASSWORD`, `JWT_SECRET`, `GEMINI_API_KEY`, `GOOGLE_CLIENT_ID` (enables Google login; when unset the endpoint returns "Google login is not configured")
 
 For web push notifications: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`
 
@@ -92,10 +96,11 @@ Bun auto-loads `.env` files, but the project also uses `dotenv/config` imports.
 
 ### Security Notes
 
-**Auth model**: Single-user master password + JWT cookie. No user registration or multi-tenancy.
-- `MASTER_PASSWORD` — the only credential; set to a strong value in production
+**Auth model**: Google multi-user login + single master-password owner bypass, JWT cookie. No self-service registration beyond Google sign-in.
+- `MASTER_PASSWORD` — owner bypass credential; set to a strong value in production
+- `GOOGLE_CLIENT_ID` — audience check for Google ID tokens (optional; Google login is disabled when unset)
 - `JWT_SECRET` — must be a random string (min 32 chars); **never use the default fallback**
-- JWT cookie is `httpOnly`, `sameSite: lax`, `secure: true` — correct settings, do not weaken
+- JWT payload carries `user_id` (Google logins) or `user_id: 1` (master-password bypass); cookie is `httpOnly`, `sameSite: lax`, `secure: true` — correct settings, do not weaken
 - `/api/notifications/*` and `/cron/*` are public by design (browser subscription + cron health check)
 - `/cron/check-notifications` uses `Authorization: Bearer $CRON_SECRET` header for auth
 - `backend/.env` is gitignored — never commit secrets

@@ -15,14 +15,29 @@ export interface ProfileUpdateInput {
   water_target_glasses: number;
 }
 
+// Legacy default: the profile table was a singleton owned by user 1; the
+// migration backfilled all rows to user_id = 1. Startup ensure() seeds that row.
+const DEFAULT_USER_ID = 1;
+
 export function createProfileRepository(dbInstance: PostgresJsDatabase) {
   return {
+    /** Fallback seed for the owner profile row (user 1) on startup. */
     async ensure(): Promise<void> {
-      await dbInstance.insert(profile).values({ id: 1 }).onConflictDoNothing();
+      await dbInstance.insert(profile).values({ id: 1, user_id: 1 }).onConflictDoNothing();
     },
 
-    async get(): Promise<ProfileRow> {
-      const [row] = await dbInstance.select().from(profile).where(eq(profile.id, 1));
+    async get(userId: number = DEFAULT_USER_ID): Promise<ProfileRow> {
+      // Per-user rows: seed defaults on first access, then read. The legacy
+      // id column stays the PK — new rows set id = user_id (no sequence).
+      await dbInstance
+        .insert(profile)
+        .values({ id: userId, user_id: userId })
+        .onConflictDoNothing({ target: profile.user_id });
+
+      const [row] = await dbInstance
+        .select()
+        .from(profile)
+        .where(eq(profile.user_id, userId));
 
       if (!row) {
         throw new Error("Profile row not found. Was ensureProfileRow() called?");
@@ -31,7 +46,7 @@ export function createProfileRepository(dbInstance: PostgresJsDatabase) {
       return mapProfileRow(row);
     },
 
-    async update(data: ProfileUpdateInput): Promise<void> {
+    async update(data: ProfileUpdateInput, userId: number = DEFAULT_USER_ID): Promise<void> {
       await dbInstance
         .update(profile)
         .set({
@@ -45,7 +60,7 @@ export function createProfileRepository(dbInstance: PostgresJsDatabase) {
           water_target_glasses: data.water_target_glasses,
           updated_at: sql`now()`,
         })
-        .where(eq(profile.id, 1));
+        .where(eq(profile.user_id, userId));
     },
   };
 }

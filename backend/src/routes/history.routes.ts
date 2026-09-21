@@ -7,7 +7,7 @@ export function registerHistoryRoutes(app: any, ctx: AppContext): void {
   const { historyService } = ctx;
 
   app
-    .get("/history/dates", routeHandler(async () => {
-      return await historyService.getDates();
+    .get("/history/dates", routeHandler(async ({ user_id }: any) => {
+      return await historyService.getDates(user_id);
     }));
 }

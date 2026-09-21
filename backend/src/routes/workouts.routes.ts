@@ -11,12 +11,12 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
   const { workoutService } = ctx;
 
   app
-    .get("/workouts", routeHandler(async () => {
-      return await workoutService.getRecent(DEFAULT_WORKOUT_LIMIT);
+    .get("/workouts", routeHandler(async ({ user_id }: any) => {
+      return await workoutService.getRecent(DEFAULT_WORKOUT_LIMIT, user_id);
     }))
-    .post("/workouts", routeHandlerCtx(async ({ body }) => {
+    .post("/workouts", routeHandlerCtx(async ({ body, user_id }: any) => {
       const { created_at, session_id, ...item } = body;
-      return await workoutService.create(item, created_at, session_id);
+      return await workoutService.create(item, created_at, session_id, user_id);
     }), {
       body: t.Object({
         exercise_name: t.String(),
@@ -35,16 +35,16 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
         session_id: t.Optional(t.Number()),
       }),
     })
-    .get("/workouts/dates", routeHandler(async () => {
-      return await workoutService.getDates();
+    .get("/workouts/dates", routeHandler(async ({ user_id }: any) => {
+      return await workoutService.getDates(user_id);
     }))
-    .get("/workouts/date/:date", routeHandlerCtx(async ({ params }) => {
+    .get("/workouts/date/:date", routeHandlerCtx(async ({ params, user_id }: any) => {
       if (!isValidDateString(params.date)) {
         throw new ValidationError("Invalid date format. Use YYYY-MM-DD.");
       }
-      return await workoutService.getByDate(params.date);
+      return await workoutService.getByDate(params.date, user_id);
     }))
-    .post("/parse", routeHandlerCtx(async ({ body }) => {
+    .post("/parse", routeHandlerCtx(async ({ body }: any) => {
       if (!isNonEmptyString(body.raw_text)) {
         throw new ValidationError("raw_text cannot be empty.");
       }
@@ -52,12 +52,13 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
     }), {
       body: t.Object({ raw_text: t.String() }),
     })
-    .post("/confirm", routeHandlerCtx(async ({ body }) => {
+    .post("/confirm", routeHandlerCtx(async ({ body, user_id }: any) => {
       return await workoutService.confirmSession(
         body.raw_text,
         body.items,
         body.created_at,
-        body.activity
+        body.activity,
+        user_id
       );
     }), {
       body: t.Object({
@@ -87,12 +88,12 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
         })),
       }),
     })
-    .patch("/workouts/:id", routeHandlerCtx(async ({ params, body }) => {
+    .patch("/workouts/:id", routeHandlerCtx(async ({ params, body, user_id }: any) => {
       const id = parseNumericId(params.id);
       if (id === null) {
         throw new ValidationError("Invalid workout id.");
       }
-      const updated = await workoutService.update(id, body);
+      const updated = await workoutService.update(id, body, user_id);
       if (!updated) {
         throw new ValidationError("Workout not found or no fields to update.");
       }
@@ -112,12 +113,12 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
         tags: t.Optional(t.Array(t.String())),
       }),
     })
-    .delete("/workouts/:id", routeHandlerCtx(async ({ params }) => {
+    .delete("/workouts/:id", routeHandlerCtx(async ({ params, user_id }: any) => {
       const id = parseNumericId(params.id);
       if (id === null) {
         throw new ValidationError("Invalid workout id.");
       }
-      const deleted = await workoutService.delete(id);
+      const deleted = await workoutService.delete(id, user_id);
       if (!deleted) {
         throw new ValidationError("Workout not found.");
       }
