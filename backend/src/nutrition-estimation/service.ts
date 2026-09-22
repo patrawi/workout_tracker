@@ -157,6 +157,18 @@ function toSearchItem(row: ReferenceRow): ReferenceSearchItem {
   };
 }
 
+// ponytail: fixed 0.5 for raw substring hits in the search picker — enough to
+// rank them below full token overlap without touching matcher thresholds.
+// Semantic recall stays with the pgvector fallback (ADR 0014, matcher blend).
+const SUBSTRING_SCORE = 0.5;
+
+function substringScore(row: ReferenceRow, trimmed: string, lowered: string): number {
+  if (row.nameTh?.includes(trimmed) || row.nameEn?.toLowerCase().includes(lowered)) {
+    return SUBSTRING_SCORE;
+  }
+  return 0;
+}
+
 /**
  * Explanation payload for an observation detail (design spec §6): the reference
  * used with provider and version, and the per-observation flags. Persisted
@@ -640,7 +652,8 @@ export function createNutritionEstimationService(deps: {
    * The catalog is small (~314 rows), so scoring runs in memory over the full
    * pool from listReferences(): an exact case-insensitive provider_food_code
    * match leads the list (tier 0, score 1), then lexical token overlap via
-   * scoreReference (score > 0 only, sorted descending). Empty/whitespace
+   * scoreReference, with a raw substring fallback so partial Thai/English
+   * names still resolve (score > 0 only, sorted descending). Empty/whitespace
    * queries return an empty result — not an error — so the picker can render
    * its idle state.
    */
@@ -652,14 +665,18 @@ export function createNutritionEstimationService(deps: {
     if (!trimmed) return { items: [] };
 
     const cap = clampSearchLimit(limit);
+    const lowered = trimmed.toLowerCase();
     const pool = await repo.listReferences();
 
     const codeMatch = pool.find(
-      (row) => row.providerFoodCode.toLowerCase() === trimmed.toLowerCase(),
+      (row) => row.providerFoodCode.toLowerCase() === lowered,
     );
     const lexical = pool
       .filter((row) => row !== codeMatch)
-      .map((row) => ({ row, score: scoreReference(trimmed, row) }))
+      .map((row) => ({
+        row,
+        score: scoreReference(trimmed, row) || substringScore(row, trimmed, lowered),
+      }))
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
       .map((s) => toSearchItem(s.row));

@@ -10,10 +10,6 @@ import {
     estimateFromCreateOutcome,
     estimateFromRecalculation,
 } from "@/features/nutrition-estimation/estimate";
-import {
-    compareMeasuredToProposal,
-    type PhotoCheckResult,
-} from "@/features/nutrition-estimation/photoCheck";
 import { useRowList } from "@/features/nutrition-estimation/row-list";
 import { cn } from "@/lib/utils";
 import type {
@@ -77,9 +73,11 @@ interface MeasuredRow {
     name: string;
     kind: ComponentKind;
     grams: string;
+    /** Quartile string ("1" default) — no free input without an after image (ADR 0015). */
+    fraction: string;
 }
 
-type Step = "form" | "photoCheck" | "review" | "result";
+type Step = "form" | "review" | "result";
 
 // ——— Helpers ———
 
@@ -88,7 +86,43 @@ function emptyComponent(): EditableComponent {
 }
 
 function emptyMeasuredRow(): MeasuredRow {
-    return { name: "", kind: "main", grams: "" };
+    return { name: "", kind: "main", grams: "", fraction: "1" };
+}
+
+/**
+ * Fixed quartile eaten-fraction buttons (ADR 0015 — the only values the backend
+ * accepts when there is no after image to confirm against). Shared by the
+ * measured-mode form rows and the estimated-mode review rows.
+ */
+function FractionQuartilePicker({
+    value,
+    onChange,
+    label,
+}: {
+    value: string;
+    onChange: (fraction: string) => void;
+    label: string;
+}) {
+    const isActive = (q: { value: number }) =>
+        Number.isFinite(Number(value)) && value.trim() !== "" && Math.abs(Number(value) - q.value) < 1e-9;
+    return (
+        <div className="inline-flex rounded-xl border border-surface-300/30 p-1 gap-1" role="group" aria-label={label}>
+            {QUARTILES.map((q) => (
+                <button
+                    key={q.label}
+                    type="button"
+                    onClick={() => onChange(String(q.value))}
+                    aria-pressed={isActive(q)}
+                    className={cn(
+                        "px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                        isActive(q) ? "bg-white/10 text-white" : "text-surface-400 hover:text-white",
+                    )}
+                >
+                    {q.label}
+                </button>
+            ))}
+        </div>
+    );
 }
 
 /** VLM proposal → editable rows. A stripped (low-confidence) fraction stays empty. */
@@ -158,8 +192,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const [vlmDishName, setVlmDishName] = useState<string | null>(null);
     const [dishNameUsed, setDishNameUsed] = useState(false);
     const [changeReferenceOpen, setChangeReferenceOpen] = useState(false);
-    /** Measured-mode photo cross-check; null = no photo or analysis failed. */
-    const [measuredPhotoCheck, setMeasuredPhotoCheck] = useState<PhotoCheckResult | null>(null);
 
     const hasAfterImage = afterImage !== null;
 
@@ -192,30 +224,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
     // ——— Submission ———
 
-    /** Measured-mode create: point weights, no image fields on the payload. */
-    const createMeasured = useCallback(async () => {
-        setError(null);
-        try {
-            const res = await create({
-                date,
-                meal,
-                menu_name: menuName.trim(),
-                portion_mode: "measured",
-                ...(mealSource.trim() ? { meal_source: mealSource.trim() } : {}),
-                components: measuredList.rows.map(({ row }) => ({
-                    name: row.name.trim(),
-                    kind: row.kind,
-                    weight_g: Number(row.grams),
-                    consumed_fraction: 1,
-                })),
-            });
-            setOutcome(res);
-            setStep("result");
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save the meal.");
-        }
-    }, [menuName, date, meal, mealSource, measuredList, create]);
-
     /** Form → review: run the VLM on the photos (estimated) or save directly (measured). */
     const handleFormContinue = useCallback(async () => {
         setError(null);
@@ -225,8 +233,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             return;
         }
         if (mode === "measured") {
-            // Measured mode: exact grams. The optional photo is an aid for dish
-            // matching and a cross-check, never a gate (ADR 0017).
+            // Measured mode: exact grams, no photos, straight to create.
             if (measuredList.rows.length === 0) {
                 setError("Add at least one component.");
                 return;
@@ -243,31 +250,25 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                     return;
                 }
             }
-            if (beforeImage) {
-                // Photo check only when the VLM answers; failure saves directly
-                // with the measured weights untouched (ADR 0017).
-                try {
-                    const result = await interpret(name, beforeImage.base64);
-                    if (result.status === "ok") {
-                        setVlmDishName(result.proposal.dish_name.trim() || null);
-                        setMeasuredPhotoCheck(
-                            compareMeasuredToProposal(
-                                measuredList.rows.map(({ row }) => ({
-                                    name: row.name.trim(),
-                                    grams: Number(row.grams),
-                                })),
-                                result.proposal,
-                            ),
-                        );
-                        setDishNameUsed(false);
-                        setStep("photoCheck");
-                        return;
-                    }
-                } catch {
-                    // fall through to create
-                }
+            try {
+                const res = await create({
+                    date,
+                    meal,
+                    menu_name: name,
+                    portion_mode: "measured",
+                    ...(mealSource.trim() ? { meal_source: mealSource.trim() } : {}),
+                    components: measuredList.rows.map(({ row }) => ({
+                        name: row.name.trim(),
+                        kind: row.kind,
+                        weight_g: Number(row.grams),
+                        consumed_fraction: Number(row.fraction),
+                    })),
+                });
+                setOutcome(res);
+                setStep("result");
+            } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to save the meal.");
             }
-            await createMeasured();
             return;
         }
 
@@ -299,7 +300,19 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             setVlmDishName(null);
             setStep("review");
         }
-    }, [menuName, mode, measuredList, beforeImage, afterImage, interpret, componentList, createMeasured]);
+    }, [
+        menuName,
+        mode,
+        measuredList,
+        beforeImage,
+        afterImage,
+        date,
+        meal,
+        mealSource,
+        create,
+        interpret,
+        componentList,
+    ]);
 
     /** Review → create (estimated mode, editable proposal or manual rows). */
     const handleReviewSubmit = useCallback(async () => {
@@ -409,33 +422,12 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
     if (!open) return null;
 
-    /** VLM dish-name proposal chip — shared by the photo-check and review steps. */
-    const dishNameChip = vlmDishName ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-surface-300/20 bg-surface-100/50 px-4 py-2.5 text-sm">
-            <span className="text-surface-400">AI sees:</span>
-            <span className="text-white font-medium">{vlmDishName}</span>
-            {dishNameUsed ? (
-                <span className="text-xs text-emerald-400">used for matching</span>
-            ) : (
-                <button
-                    type="button"
-                    onClick={() => {
-                        setMenuName(vlmDishName);
-                        setDishNameUsed(true);
-                    }}
-                    className="text-xs font-medium text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline"
-                >
-                    Use
-                </button>
-            )}
-        </div>
-    ) : null;
-
+    // Measured mode skips the review step, so its flow counts two steps, not three.
+    const totalSteps = mode === "measured" ? 2 : 3;
     const stepLabels: Record<Step, string> = {
-        form: "Step 1 of 3 — Details",
-        photoCheck: "Photo check — advisory only",
+        form: `Step 1 of ${totalSteps} — Details`,
         review: "Step 2 of 3 — Review estimate",
-        result: "Step 3 of 3 — Result",
+        result: `Step ${totalSteps} of ${totalSteps} — Result`,
     };
 
     const busy = isInterpreting || isCreating || isConfirming || isResolving;
@@ -583,85 +575,78 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         )}
                                     </div>
                                 ) : (
-                                    /* Measured mode: exact component weights + optional photo */
+                                    /* Measured mode: exact component weights + how much was eaten */
                                     <div className="space-y-3">
                                         <p className="text-xs text-surface-400">
-                                            Enter each component's scale-measured weight. A photo is optional —
-                                            it helps the AI match the dish to the right reference.
+                                            Enter each component's scale-measured weight and how much was eaten — no photos needed.
                                         </p>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <ImageSlot
-                                                label="Before photo"
-                                                hint="Optional — used for dish matching and a cross-check"
-                                                inputLabel="Before photo"
-                                                image={beforeImage}
-                                                onAttach={setBeforeImage}
-                                                onRemove={() => setBeforeImage(null)}
-                                                onError={setImageError}
-                                            />
-                                        </div>
-                                        {imageError && (
-                                            <p role="alert" className="text-xs text-amber-400">
-                                                {imageError}
-                                            </p>
-                                        )}
                                         {measuredList.rows.map((entry, i) => (
-                                            <div key={entry.id} className="flex items-end gap-2">
-                                                <div className="flex-1">
-                                                    <label htmlFor={`measured-name-${i}`} className="text-xs text-surface-400 block mb-1">
-                                                        Component {i + 1}
-                                                    </label>
-                                                    <input
-                                                        id={`measured-name-${i}`}
-                                                        type="text"
-                                                        value={entry.row.name}
-                                                        onChange={(e) => measuredList.update(i, { name: e.target.value })}
-                                                        placeholder="e.g. Rice"
-                                                        className="glass-input w-full px-3 py-2 text-sm text-white"
+                                            <div key={entry.id} className="rounded-xl border border-surface-300/20 p-3 space-y-2.5">
+                                                <div className="flex items-end gap-2">
+                                                    <div className="flex-1">
+                                                        <label htmlFor={`measured-name-${i}`} className="text-xs text-surface-400 block mb-1">
+                                                            Component {i + 1}
+                                                        </label>
+                                                        <input
+                                                            id={`measured-name-${i}`}
+                                                            type="text"
+                                                            value={entry.row.name}
+                                                            onChange={(e) => measuredList.update(i, { name: e.target.value })}
+                                                            placeholder="e.g. Rice"
+                                                            className="glass-input w-full px-3 py-2 text-sm text-white"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label htmlFor={`measured-kind-${i}`} className="text-xs text-surface-400 block mb-1">
+                                                            Kind
+                                                        </label>
+                                                        <select
+                                                            id={`measured-kind-${i}`}
+                                                            value={entry.row.kind}
+                                                            onChange={(e) => measuredList.update(i, { kind: e.target.value as ComponentKind })}
+                                                            className="glass-input px-2 py-2 text-sm text-white"
+                                                        >
+                                                            {KINDS.map((k) => (
+                                                                <option key={k.value} value={k.value}>
+                                                                    {k.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="w-28">
+                                                        <label htmlFor={`measured-grams-${i}`} className="text-xs text-surface-400 block mb-1">
+                                                            Grams
+                                                        </label>
+                                                        <input
+                                                            id={`measured-grams-${i}`}
+                                                            type="number"
+                                                            inputMode="decimal"
+                                                            min={0}
+                                                            step="any"
+                                                            value={entry.row.grams}
+                                                            onChange={(e) => measuredList.update(i, { grams: e.target.value })}
+                                                            className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums text-right"
+                                                        />
+                                                    </div>
+                                                    {measuredList.rows.length > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => measuredList.remove(i)}
+                                                            className="text-xs text-red-400/60 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-red-500/10"
+                                                            aria-label={`Remove component ${i + 1}`}
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="text-xs text-surface-400">Eaten</span>
+                                                    <FractionQuartilePicker
+                                                        value={entry.row.fraction}
+                                                        onChange={(f) => measuredList.update(i, { fraction: f })}
+                                                        label={`Component ${i + 1} eaten fraction`}
                                                     />
                                                 </div>
-                                                <div>
-                                                    <label htmlFor={`measured-kind-${i}`} className="text-xs text-surface-400 block mb-1">
-                                                        Kind
-                                                    </label>
-                                                    <select
-                                                        id={`measured-kind-${i}`}
-                                                        value={entry.row.kind}
-                                                        onChange={(e) => measuredList.update(i, { kind: e.target.value as ComponentKind })}
-                                                        className="glass-input px-2 py-2 text-sm text-white"
-                                                    >
-                                                        {KINDS.map((k) => (
-                                                            <option key={k.value} value={k.value}>
-                                                                {k.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                                <div className="w-28">
-                                                    <label htmlFor={`measured-grams-${i}`} className="text-xs text-surface-400 block mb-1">
-                                                        Grams
-                                                    </label>
-                                                    <input
-                                                        id={`measured-grams-${i}`}
-                                                        type="number"
-                                                        inputMode="decimal"
-                                                        min={0}
-                                                        step="any"
-                                                        value={entry.row.grams}
-                                                        onChange={(e) => measuredList.update(i, { grams: e.target.value })}
-                                                        className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums text-right"
-                                                    />
-                                                </div>
-                                                {measuredList.rows.length > 1 && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => measuredList.remove(i)}
-                                                        className="text-xs text-red-400/60 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-red-500/10"
-                                                        aria-label={`Remove component ${i + 1}`}
-                                                    >
-                                                        Remove
-                                                    </button>
-                                                )}
                                             </div>
                                         ))}
                                         <button
@@ -683,37 +668,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                         </>
                     )}
 
-                    {/* ——— Step: photo check (measured mode, advisory) ——— */}
-                    {step === "photoCheck" && (
-                        <>
-                            <p className="text-sm text-surface-400">
-                                Photo checked against your measured weights — everything below is advisory;
-                                your measured grams are what gets saved.
-                            </p>
-                            {dishNameChip}
-                            {measuredPhotoCheck &&
-                            (measuredPhotoCheck.unseenComponents.length > 0 ||
-                                measuredPhotoCheck.weightMismatches.length > 0) ? (
-                                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-                                    <ul className="list-disc list-inside space-y-1">
-                                        {measuredPhotoCheck.unseenComponents.map((name) => (
-                                            <li key={`unseen-${name}`}>
-                                                Photo shows “{name}” — not among your components.
-                                            </li>
-                                        ))}
-                                        {measuredPhotoCheck.weightMismatches.map((m) => (
-                                            <li key={`mismatch-${m.name}`}>
-                                                {m.name}: measured {m.measuredGrams} g, photo suggests
-                                                ~{m.proposedCentralGrams} g.
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ) : null}
-                            {/* No findings → silence; the dish chip and Save button are the step. */}
-                        </>
-                    )}
-
                     {/* ——— Step: review (estimated) ——— */}
                     {step === "review" && (
                         <>
@@ -732,7 +686,26 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                             )}
 
                             {/* VLM dish-name proposal — user-owned menu name; adopting is optional (spec §2). */}
-                            {dishNameChip}
+                            {vlmDishName && (
+                                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-surface-300/20 bg-surface-100/50 px-4 py-2.5 text-sm">
+                                    <span className="text-surface-400">AI sees:</span>
+                                    <span className="text-white font-medium">{vlmDishName}</span>
+                                    {dishNameUsed ? (
+                                        <span className="text-xs text-emerald-400">used for matching</span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setMenuName(vlmDishName);
+                                                setDishNameUsed(true);
+                                            }}
+                                            className="text-xs font-medium text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline"
+                                        >
+                                            Use
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="space-y-3">
                                 {componentList.rows.map((entry, i) => (
@@ -843,32 +816,11 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         ) : (
                                             <div>
                                                 <span className="text-xs text-surface-400 block mb-1.5">Eaten fraction</span>
-                                                <div
-                                                    className="inline-flex rounded-xl border border-surface-300/30 p-1 gap-1"
-                                                    role="group"
-                                                    aria-label={`Component ${i + 1} eaten fraction`}
-                                                >
-                                                    {QUARTILES.map((q) => {
-                                                        const active =
-                                                            Number.isFinite(Number(entry.row.fraction)) &&
-                                                            entry.row.fraction.trim() !== "" &&
-                                                            Math.abs(Number(entry.row.fraction) - q.value) < 1e-9;
-                                                        return (
-                                                            <button
-                                                                key={q.label}
-                                                                type="button"
-                                                                onClick={() => componentList.update(i, { fraction: String(q.value) })}
-                                                                aria-pressed={active}
-                                                                className={cn(
-                                                                    "px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                                                                    active ? "bg-white/10 text-white" : "text-surface-400 hover:text-white",
-                                                                )}
-                                                            >
-                                                                {q.label}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
+                                                <FractionQuartilePicker
+                                                    value={entry.row.fraction}
+                                                    onChange={(f) => componentList.update(i, { fraction: f })}
+                                                    label={`Component ${i + 1} eaten fraction`}
+                                                />
                                             </div>
                                         )}
 
@@ -990,31 +942,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 disabled={busy || (mode === "estimated" && !beforeImage)}
                                 className="btn-primary text-sm flex items-center gap-2"
                             >
-                                {mode === "estimated" ? "Analyze photo" : "Save estimate"}
-                            </BusyButton>
-                        </>
-                    )}
-
-                    {step === "photoCheck" && (
-                        <>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setError(null);
-                                    setStep("form");
-                                }}
-                                className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition-colors"
-                            >
-                                Back
-                            </button>
-                            <BusyButton
-                                onClick={createMeasured}
-                                busy={isCreating}
-                                busyLabel="Saving…"
-                                disabled={busy}
-                                className="btn-primary text-sm flex items-center gap-2"
-                            >
-                                Save estimate
+                                {mode === "estimated" ? "Analyze photo" : "Save meal"}
                             </BusyButton>
                         </>
                     )}
