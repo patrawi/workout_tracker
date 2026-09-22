@@ -60,6 +60,8 @@ export interface CreateComponentInput {
 }
 
 export interface CreateObservationInput {
+  /** Owning user (resolved from the JWT in app.ts). */
+  user_id: number;
   date: string;
   meal_type: MealType;
   menu_name: string;
@@ -140,6 +142,8 @@ export interface ObservationDetail extends PersistedObservation {
 }
 
 export interface UpsertNutritionLogInput {
+  /** Owning user for the dual-written nutrition_logs row (requesting user). */
+  user_id: number;
   date: string;
   meal: MealType;
   food_name: string;
@@ -149,12 +153,6 @@ export interface UpsertNutritionLogInput {
   alcohol: number;
   calories: number;
   observation_id: number;
-  /**
-   * Owning user for the dual-written nutrition_logs row. Optional for
-   * transition: callers that do not pass it (nutrition-estimation service, not
-   * yet user-aware) fall back to the owner (user 1).
-   */
-  user_id?: number;
 }
 
 export interface UpdateEstimateInput {
@@ -236,6 +234,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
         const [observation] = await tx
           .insert(mealObservations)
           .values({
+            user_id: input.user_id,
             date: input.date,
             meal_type: input.meal_type,
             menu_name: input.menu_name,
@@ -298,11 +297,11 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
     },
 
     /** Full aggregate: observation + components + evidence + hints + latest revision + reference. */
-    async getObservationDetail(id: number): Promise<ObservationDetail | null> {
+    async getObservationDetail(id: number, userId: number): Promise<ObservationDetail | null> {
       const [observation] = await dbInstance
         .select()
         .from(mealObservations)
-        .where(eq(mealObservations.id, id))
+        .where(and(eq(mealObservations.id, id), eq(mealObservations.user_id, userId)))
         .limit(1);
       if (!observation) return null;
 
@@ -392,11 +391,16 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
     },
 
     /** Pending work queue: reference-pending meals plus unconfirmed drafts. */
-    async listPending(): Promise<PersistedObservation[]> {
+    async listPending(userId: number): Promise<PersistedObservation[]> {
       const rows = await dbInstance
         .select()
         .from(mealObservations)
-        .where(inArray(mealObservations.status, ["reference_pending", "draft"]))
+        .where(
+          and(
+            inArray(mealObservations.status, ["reference_pending", "draft"]),
+            eq(mealObservations.user_id, userId),
+          ),
+        )
         .orderBy(desc(mealObservations.created_at));
       return rows.map(mapObservationRow);
     },
@@ -407,7 +411,6 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
      * confirmed revision supersedes the previous write.
      */
     async upsertNutritionLogLink(input: UpsertNutritionLogInput): Promise<number> {
-      const userId = input.user_id ?? 1;
       const [existing] = await dbInstance
         .select({ id: nutritionLogs.id })
         .from(nutritionLogs)
@@ -415,6 +418,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
           and(
             isNotNull(nutritionLogs.observation_id),
             eq(nutritionLogs.observation_id, input.observation_id),
+            eq(nutritionLogs.user_id, input.user_id),
           ),
         )
         .limit(1);
@@ -440,7 +444,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
       const [inserted] = await dbInstance
         .insert(nutritionLogs)
         .values({
-          user_id: userId,
+          user_id: input.user_id,
           date: input.date,
           meal: input.meal,
           food_name: input.food_name,
@@ -521,15 +525,15 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
       return row ? mapReferenceRow(row) : null;
     },
 
-    async updateObservationStatus(id: number, status: ObservationStatus): Promise<void> {
+    async updateObservationStatus(id: number, status: ObservationStatus, userId: number): Promise<void> {
       await dbInstance
         .update(mealObservations)
         .set({ status, updated_at: sql`now()` })
-        .where(eq(mealObservations.id, id));
+        .where(and(eq(mealObservations.id, id), eq(mealObservations.user_id, userId)));
     },
 
     /** Persist a calculated estimate onto the observation (reference, cached calculation). */
-    async updateObservationEstimate(id: number, update: UpdateEstimateInput): Promise<void> {
+    async updateObservationEstimate(id: number, update: UpdateEstimateInput, userId: number): Promise<void> {
       await dbInstance
         .update(mealObservations)
         .set({
@@ -537,7 +541,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
           calculation: update.calculation,
           updated_at: sql`now()`,
         })
-        .where(eq(mealObservations.id, id));
+        .where(and(eq(mealObservations.id, id), eq(mealObservations.user_id, userId)));
     },
 
     // ——— ReferenceMatcherRepo implementation (ADR 0014 hybrid retrieval) ———

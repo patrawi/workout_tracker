@@ -18,12 +18,13 @@ import type {
   UpsertNutritionLogInput,
 } from "../../../src/repositories/nutrition-estimation.repository";
 import type { ReferenceRow } from "../../../src/nutrition-estimation/matching/matcher";
-import { ValidationError } from "../../../src/lib/errors";
+import { ValidationError, NotFoundError } from "../../../src/lib/errors";
 
 // ——— In-memory fake of the persistence repo (mirrors the real contract) ———
 
 interface State {
-  observations: Array<PersistedObservation & { id: number }>;
+  /** Stored rows carry user_id; the mapped PersistedObservation shape does not. */
+  observations: Array<PersistedObservation & { id: number; user_id: number }>;
   components: any[];
   evidence: any[];
   hints: any[];
@@ -47,8 +48,10 @@ function createFakeRepo() {
 
   const nextId = () => state.nextId++;
 
-  function detailOf(id: number): ObservationDetail | null {
-    const obs = state.observations.find((o) => o.id === id);
+  function detailOf(id: number, userId?: number): ObservationDetail | null {
+    const obs = state.observations.find(
+      (o) => o.id === id && (userId === undefined || o.user_id === userId),
+    );
     if (!obs) return null;
     const components = state.components
       .filter((c) => c.observation_id === id)
@@ -72,6 +75,7 @@ function createFakeRepo() {
       const id = nextId();
       state.observations.push({
         id,
+        user_id: input.user_id,
         date: input.date,
         meal_type: input.meal_type,
         menu_name: input.menu_name,
@@ -108,13 +112,15 @@ function createFakeRepo() {
       return id;
     },
 
-    async getObservationDetail(id: number) {
-      return detailOf(id);
+    async getObservationDetail(id: number, userId: number) {
+      return detailOf(id, userId);
     },
 
-    async listPending(): Promise<PersistedObservation[]> {
+    async listPending(userId: number): Promise<PersistedObservation[]> {
       return state.observations.filter(
-        (o) => o.status === "reference_pending" || o.status === "draft",
+        (o) =>
+          (o.status === "reference_pending" || o.status === "draft") &&
+          o.user_id === userId,
       );
     },
 
@@ -174,16 +180,17 @@ function createFakeRepo() {
       return state.references.get(id) ?? null;
     },
 
-    async updateObservationStatus(id: number, status: string): Promise<void> {
-      const obs = state.observations.find((o) => o.id === id);
+    async updateObservationStatus(id: number, status: string, userId: number): Promise<void> {
+      const obs = state.observations.find((o) => o.id === id && o.user_id === userId);
       if (obs) obs.status = status as PersistedObservation["status"];
     },
 
     async updateObservationEstimate(
       id: number,
       update: { reference_id: number; calculation: CalculationResult },
+      userId: number,
     ): Promise<void> {
-      const obs = state.observations.find((o) => o.id === id);
+      const obs = state.observations.find((o) => o.id === id && o.user_id === userId);
       if (!obs) return;
       obs.reference_id = update.reference_id;
       obs.calculation = update.calculation;
@@ -231,6 +238,7 @@ function gapMatcher(): MatcherLike {
 
 function estimatedInput(overrides: Partial<CreateObservationServiceInput> = {}): CreateObservationServiceInput {
   return {
+    user_id: 1,
     date: "2026-09-13",
     meal: "Lunch",
     menu_name: "ผัดกะเพราหมู",
@@ -351,7 +359,7 @@ describe("confirmEstimate — dual-write (ADR 0022)", () => {
     const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
 
     const created = await service.createObservation(estimatedInput());
-    await service.confirmEstimate(created.observation.id);
+    await service.confirmEstimate(created.observation.id, 1);
 
     expect(state.revisions[0].status).toBe("confirmed");
     expect(state.revisions[0].confirmed_at).not.toBeNull();
@@ -378,15 +386,15 @@ describe("confirmEstimate — dual-write (ADR 0022)", () => {
     const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
 
     const created = await service.createObservation(estimatedInput());
-    await service.confirmEstimate(created.observation.id);
+    await service.confirmEstimate(created.observation.id, 1);
 
     // User changes the reference → new revision → confirm again.
-    await service.calculateForReference(created.observation.id, REF2.id);
+    await service.calculateForReference(created.observation.id, REF2.id, 1);
     const revisions = [...state.revisions].sort((a, b) => a.id - b.id);
     expect(revisions).toHaveLength(2);
     expect(revisions[1].status).toBe("pending_confirmation");
 
-    await service.confirmEstimate(created.observation.id);
+    await service.confirmEstimate(created.observation.id, 1);
 
     const byId = new Map(state.revisions.map((r) => [r.id, r]));
     expect(byId.get(revisions[0].id)!.status).toBe("superseded");
@@ -401,15 +409,15 @@ describe("confirmEstimate — dual-write (ADR 0022)", () => {
     const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
 
     const created = await service.createObservation(estimatedInput());
-    await service.confirmEstimate(created.observation.id);
-    expect(service.confirmEstimate(created.observation.id)).rejects.toThrow(/not pending_confirmation/);
+    await service.confirmEstimate(created.observation.id, 1);
+    expect(service.confirmEstimate(created.observation.id, 1)).rejects.toThrow(/not pending_confirmation/);
   });
 
   test("rejects confirming an observation without revisions", async () => {
     const { repo, state } = createFakeRepo();
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
     const created = await service.createObservation(estimatedInput());
-    expect(service.confirmEstimate(created.observation.id)).rejects.toThrow(/no estimate revision/);
+    expect(service.confirmEstimate(created.observation.id, 1)).rejects.toThrow(/no estimate revision/);
   });
 });
 
@@ -423,7 +431,7 @@ describe("resolveReference", () => {
     const created = await service.createObservation(estimatedInput());
     expect(created.observation.status).toBe("reference_pending");
 
-    const resolved = await service.resolveReference(created.observation.id, REF2.id);
+    const resolved = await service.resolveReference(created.observation.id, REF2.id, 1);
 
     expect(resolved.observation.status).toBe("draft");
     expect(resolved.observation.reference_id).toBe(REF2.id);
@@ -440,6 +448,7 @@ describe("validation (ADR 0016 minimum input)", () => {
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
     expect(
       service.createObservation({
+        user_id: 1,
         meal: "Dinner",
         menu_name: "ข้าวมันไก่",
         portion_mode: "measured",
@@ -453,6 +462,7 @@ describe("validation (ADR 0016 minimum input)", () => {
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
     expect(
       service.createObservation({
+        user_id: 1,
         meal: "Dinner",
         menu_name: "ข้าวมันไก่",
         portion_mode: "measured",
@@ -466,6 +476,7 @@ describe("validation (ADR 0016 minimum input)", () => {
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
     expect(
       service.createObservation({
+        user_id: 1,
         meal: "Dinner",
         menu_name: "ข้าวมันไก่",
         portion_mode: "estimated",
@@ -588,6 +599,7 @@ describe("entry validation — obvious evidence conflicts (spec §5)", () => {
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
     expect(
       service.createObservation({
+        user_id: 1,
         meal: "Dinner",
         menu_name: "ข้าวมันไก่",
         portion_mode: "measured",
@@ -647,6 +659,7 @@ describe("entry validation — obvious evidence conflicts (spec §5)", () => {
     // not an "at every bound" conflict, so the engine-level hard check fires.
     await expect(
       service.createObservation({
+        user_id: 1,
         meal: "Dinner",
         menu_name: "ข้าวมันไก่",
         portion_mode: "measured",
@@ -688,7 +701,7 @@ describe("entry validation — obvious evidence conflicts (spec §5)", () => {
       per100: null,
     });
 
-    expect(service.calculateForReference(created.observation.id, REF.id)).rejects.toThrow(
+    expect(service.calculateForReference(created.observation.id, REF.id, 1)).rejects.toThrow(
       /'sugar'.*exceeds component 'rice'/,
     );
   });
@@ -808,7 +821,7 @@ describe("explanation payload (spec §6)", () => {
     const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
 
     const created = await service.createObservation(estimatedInput());
-    const fetched = await service.getObservation(created.observation.id);
+    const fetched = await service.getObservation(created.observation.id, 1);
 
     expect(fetched.explanation.reference).toEqual({
       id: REF.id,
@@ -825,7 +838,7 @@ describe("explanation payload (spec §6)", () => {
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
 
     const created = await service.createObservation(estimatedInput());
-    const result = await service.calculateForReference(created.observation.id, REF.id);
+    const result = await service.calculateForReference(created.observation.id, REF.id, 1);
 
     expect(result.explanation.reference).toEqual({
       id: REF.id,
@@ -976,5 +989,107 @@ describe("searchReferences", () => {
     // outranks the substring-only hit ("Ricey" contains "rice", score 0.5).
     expect((await service.searchReferences("rice")).items.map((item) => item.id))
       .toEqual([201, 205]);
+  });
+});
+
+// ——— User scoping (B-002) ———
+
+describe("user scoping", () => {
+  test("createObservation persists the requesting user's id", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    await service.createObservation(estimatedInput({ user_id: 7 }));
+
+    expect(state.observations).toHaveLength(1);
+    expect(state.observations[0]!.user_id).toBe(7);
+  });
+
+  test("listPending returns only the requesting user's observations", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    await service.createObservation(estimatedInput({ user_id: 1, menu_name: "user one meal" }));
+    await service.createObservation(estimatedInput({ user_id: 2, menu_name: "user two meal" }));
+
+    const pendingForOne = await service.listPending(1);
+    expect(pendingForOne).toHaveLength(1);
+    expect(pendingForOne[0]!.menu_name).toBe("user one meal");
+    expect(await service.listPending(2)).toHaveLength(1);
+    expect(await service.listPending(3)).toHaveLength(0);
+  });
+
+  test("getObservation hides other users' observations", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    const created = await service.createObservation(estimatedInput({ user_id: 1 }));
+
+    expect((await service.getObservation(created.observation.id, 1)).id)
+      .toBe(created.observation.id);
+    await expect(service.getObservation(created.observation.id, 2))
+      .rejects.toThrow(NotFoundError);
+    await expect(service.getObservation(created.observation.id, 2))
+      .rejects.toThrow(/Meal observation/);
+  });
+
+  test("confirmEstimate dual-write carries the requesting user's id into nutrition_logs", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    const created = await service.createObservation(estimatedInput({ user_id: 7 }));
+    await service.confirmEstimate(created.observation.id, 7);
+
+    expect(state.nutritionLogs).toHaveLength(1);
+    expect(state.nutritionLogs[0]!.user_id).toBe(7);
+    expect(state.nutritionLogs[0]!.observation_id).toBe(created.observation.id);
+  });
+
+  test("confirmEstimate on another user's observation is rejected with no dual-write", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    const created = await service.createObservation(estimatedInput({ user_id: 1 }));
+
+    await expect(service.confirmEstimate(created.observation.id, 2))
+      .rejects.toThrow(NotFoundError);
+    expect(state.nutritionLogs).toHaveLength(0);
+    // The observation itself is untouched — still a pending draft.
+    expect(state.observations[0]!.status).toBe("draft");
+  });
+
+  test("calculateForReference on another user's observation is rejected", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    state.references.set(REF2.id, REF2);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    const created = await service.createObservation(estimatedInput({ user_id: 1 }));
+
+    await expect(service.calculateForReference(created.observation.id, REF2.id, 2))
+      .rejects.toThrow(NotFoundError);
+    // No revision was saved for the cross-user attempt.
+    expect(state.revisions).toHaveLength(1);
+    expect(state.observations[0]!.reference_id).toBe(REF.id);
+  });
+
+  test("resolveReference on another user's observation is rejected", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    state.references.set(REF2.id, REF2);
+    const service = createNutritionEstimationService({ repo, matcher: ambiguousMatcher() });
+
+    const created = await service.createObservation(estimatedInput({ user_id: 1 }));
+    expect(created.observation.status).toBe("reference_pending");
+
+    await expect(service.resolveReference(created.observation.id, REF2.id, 2))
+      .rejects.toThrow(NotFoundError);
+    // Status stays reference_pending for the owner's later resolution.
+    expect(state.observations[0]!.status).toBe("reference_pending");
   });
 });

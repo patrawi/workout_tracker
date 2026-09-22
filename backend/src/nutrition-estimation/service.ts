@@ -56,6 +56,8 @@ export interface ServiceComponentInput {
 }
 
 export interface CreateObservationServiceInput {
+  /** Owning user (resolved from the JWT in app.ts). */
+  user_id: number;
   date?: string;
   meal: MealType;
   menu_name: string;
@@ -432,6 +434,7 @@ export function createNutritionEstimationService(deps: {
       matchTier: MatchTier,
       calculation: CalculationResult | null,
     ): CreateObservationInput => ({
+      user_id: input.user_id,
       date,
       meal_type: mealType,
       menu_name: menuName,
@@ -491,7 +494,7 @@ export function createNutritionEstimationService(deps: {
         reference_version: reference.version,
         calculation,
       });
-      const detail = (await repo.getObservationDetail(observationId))!;
+      const detail = (await repo.getObservationDetail(observationId, input.user_id))!;
       return {
         observation: detail,
         match: { tier, reference },
@@ -506,7 +509,7 @@ export function createNutritionEstimationService(deps: {
       const observationId = await repo.insertObservation(
         toRepoInput("reference_pending", null, match.tier, null),
       );
-      const detail = (await repo.getObservationDetail(observationId))!;
+      const detail = (await repo.getObservationDetail(observationId, input.user_id))!;
       return {
         observation: detail,
         match,
@@ -540,8 +543,9 @@ export function createNutritionEstimationService(deps: {
   async function calculateForReference(
     observationId: number,
     referenceId: number,
+    userId: number,
   ): Promise<CalculateForReferenceResult> {
-    const detail = await repo.getObservationDetail(observationId);
+    const detail = await repo.getObservationDetail(observationId, userId);
     if (!detail) throw new NotFoundError("Meal observation");
     // Re-validate persisted components (spec §5): stored evidence may predate
     // entry validation or conflict with the newly chosen reference.
@@ -564,9 +568,9 @@ export function createNutritionEstimationService(deps: {
     await repo.updateObservationEstimate(observationId, {
       reference_id: reference.id,
       calculation,
-    });
+    }, userId);
 
-    const updated = (await repo.getObservationDetail(observationId))!;
+    const updated = (await repo.getObservationDetail(observationId, userId))!;
     return {
       observation: updated,
       revision,
@@ -580,8 +584,8 @@ export function createNutritionEstimationService(deps: {
    * confirmed ones), set the observation confirmed, and dual-write the central
    * point values into nutrition_logs with provenance markers (ADR 0022).
    */
-  async function confirmEstimate(observationId: number): Promise<CalculateForReferenceResult> {
-    const detail = await repo.getObservationDetail(observationId);
+  async function confirmEstimate(observationId: number, userId: number): Promise<CalculateForReferenceResult> {
+    const detail = await repo.getObservationDetail(observationId, userId);
     if (!detail) throw new NotFoundError("Meal observation");
 
     const revision = detail.latest_revision;
@@ -594,11 +598,14 @@ export function createNutritionEstimationService(deps: {
       );
     }
 
+    // Ownership was already established by the scoped getObservationDetail
+    // above; the revision tables carry no user_id, so this is the boundary.
     await repo.updateRevisionStatus(revision.id, "confirmed");
     await repo.supersedeConfirmedRevisions(observationId, revision.id);
-    await repo.updateObservationStatus(observationId, "confirmed");
+    await repo.updateObservationStatus(observationId, "confirmed", userId);
 
     await repo.upsertNutritionLogLink({
+      user_id: userId,
       date: detail.date,
       meal: detail.meal_type,
       food_name: detail.menu_name,
@@ -610,7 +617,7 @@ export function createNutritionEstimationService(deps: {
       (revision.reference_id ? await repo.getReferenceById(revision.reference_id) : null);
 
     return {
-      observation: (await repo.getObservationDetail(observationId))!,
+      observation: (await repo.getObservationDetail(observationId, userId))!,
       revision: { ...revision, status: "confirmed" },
       reference,
       explanation: buildExplanation(detail, revision.calculation, reference),
@@ -621,15 +628,16 @@ export function createNutritionEstimationService(deps: {
   async function resolveReference(
     observationId: number,
     referenceId: number,
+    userId: number,
   ): Promise<CalculateForReferenceResult> {
-    const detail = await repo.getObservationDetail(observationId);
+    const detail = await repo.getObservationDetail(observationId, userId);
     if (!detail) throw new NotFoundError("Meal observation");
     if (detail.status === "confirmed") {
       throw new ConflictError("Confirmed observations cannot be re-resolved.");
     }
-    const result = await calculateForReference(observationId, referenceId);
-    await repo.updateObservationStatus(observationId, "draft");
-    const observation = (await repo.getObservationDetail(observationId))!;
+    const result = await calculateForReference(observationId, referenceId, userId);
+    await repo.updateObservationStatus(observationId, "draft", userId);
+    const observation = (await repo.getObservationDetail(observationId, userId))!;
     return {
       ...result,
       observation,
@@ -637,14 +645,14 @@ export function createNutritionEstimationService(deps: {
     };
   }
 
-  async function getObservation(id: number): Promise<ObservationDetailWithExplanation> {
-    const detail = await repo.getObservationDetail(id);
+  async function getObservation(id: number, userId: number): Promise<ObservationDetailWithExplanation> {
+    const detail = await repo.getObservationDetail(id, userId);
     if (!detail) throw new NotFoundError("Meal observation");
     return withExplanation(detail);
   }
 
-  async function listPending(): Promise<PersistedObservation[]> {
-    return await repo.listPending();
+  async function listPending(userId: number): Promise<PersistedObservation[]> {
+    return await repo.listPending(userId);
   }
 
   /**

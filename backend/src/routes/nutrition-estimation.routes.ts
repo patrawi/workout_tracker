@@ -73,8 +73,8 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
 
   app
     // Pending list first so the static path wins over /:id.
-    .get("/meal-observations/pending", routeHandlerCtx(async () => {
-      return await nutritionEstimationService.listPending();
+    .get("/meal-observations/pending", routeHandlerCtx(async ({ user_id }: any) => {
+      return await nutritionEstimationService.listPending(user_id);
     }))
     // Reference search for the pending-meal resolution picker (design spec §7).
     // Static path registered before /:id; query params arrive as strings, so
@@ -91,11 +91,12 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
         limit: t.Optional(t.String()),
       }),
     })
-    .get("/meal-observations/:id", routeHandlerCtx(async ({ params }) => {
-      return await nutritionEstimationService.getObservation(Number(params.id));
+    .get("/meal-observations/:id", routeHandlerCtx(async ({ params, user_id }: any) => {
+      return await nutritionEstimationService.getObservation(Number(params.id), user_id);
     }))
-    .post("/meal-observations", routeHandlerCtx(async ({ body }) => {
+    .post("/meal-observations", routeHandlerCtx(async ({ body, user_id }: any) => {
       return await nutritionEstimationService.createObservation({
+        user_id,
         date: body.date,
         meal: body.meal,
         menu_name: body.menu_name,
@@ -128,13 +129,14 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
     }), {
       body: InterpretationSchema,
     })
-    .post("/meal-observations/:id/confirm", routeHandlerCtx(async ({ params }) => {
-      return await nutritionEstimationService.confirmEstimate(Number(params.id));
+    .post("/meal-observations/:id/confirm", routeHandlerCtx(async ({ params, user_id }: any) => {
+      return await nutritionEstimationService.confirmEstimate(Number(params.id), user_id);
     }))
-    .post("/meal-observations/:id/resolve", routeHandlerCtx(async ({ params, body }) => {
+    .post("/meal-observations/:id/resolve", routeHandlerCtx(async ({ params, body, user_id }: any) => {
       return await nutritionEstimationService.resolveReference(
         Number(params.id),
         body.reference_id,
+        user_id,
       );
     }), {
       body: t.Object({

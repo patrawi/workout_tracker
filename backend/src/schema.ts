@@ -278,6 +278,9 @@ export const mealObservations = pgTable(
     "meal_observations",
     {
         id: serial("id").primaryKey(),
+        user_id: integer("user_id")
+            .notNull()
+            .references(() => users.id),
         date: text("date").notNull(),                       // "YYYY-MM-DD"
         meal_type: mealTypeEnum("meal_type").notNull(),
         menu_name: text("menu_name").notNull(),
