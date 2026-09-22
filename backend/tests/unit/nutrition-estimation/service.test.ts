@@ -955,4 +955,26 @@ describe("searchReferences", () => {
     expect((await service.searchReferences("fried rice", 2)).items).toHaveLength(2);
     expect((await service.searchReferences("fried rice", 0)).items).toHaveLength(1);
   });
+
+  test("substring fallback resolves partial names, ranked below full token overlap", async () => {
+    const RICE_NOODLE: ReferenceRow = {
+      ...REF,
+      id: 205,
+      providerFoodCode: "TFC-205",
+      nameEn: "Ricey noodle soup",
+      nameTh: "ก๋วยเตี๋ยวน้ำ",
+    };
+    const { repo } = searchRepo([FRIED_RICE, RICE_NOODLE]);
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    // "ผัดกุ้ง" is no whole token of "ข้าวผัดกุ้ง" (token overlap 0) but is a
+    // raw substring of it — partial Thai input must still resolve.
+    expect((await service.searchReferences("ผัดกุ้ง")).items.map((item) => item.id))
+      .toEqual([201]);
+
+    // Full token overlap ("rice" in "Fried rice with shrimp", score 1.0)
+    // outranks the substring-only hit ("Ricey" contains "rice", score 0.5).
+    expect((await service.searchReferences("rice")).items.map((item) => item.id))
+      .toEqual([201, 205]);
+  });
 });

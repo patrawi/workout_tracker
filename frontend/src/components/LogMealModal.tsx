@@ -73,6 +73,8 @@ interface MeasuredRow {
     name: string;
     kind: ComponentKind;
     grams: string;
+    /** Quartile string ("1" default) — no free input without an after image (ADR 0015). */
+    fraction: string;
 }
 
 type Step = "form" | "review" | "result";
@@ -84,7 +86,43 @@ function emptyComponent(): EditableComponent {
 }
 
 function emptyMeasuredRow(): MeasuredRow {
-    return { name: "", kind: "main", grams: "" };
+    return { name: "", kind: "main", grams: "", fraction: "1" };
+}
+
+/**
+ * Fixed quartile eaten-fraction buttons (ADR 0015 — the only values the backend
+ * accepts when there is no after image to confirm against). Shared by the
+ * measured-mode form rows and the estimated-mode review rows.
+ */
+function FractionQuartilePicker({
+    value,
+    onChange,
+    label,
+}: {
+    value: string;
+    onChange: (fraction: string) => void;
+    label: string;
+}) {
+    const isActive = (q: { value: number }) =>
+        Number.isFinite(Number(value)) && value.trim() !== "" && Math.abs(Number(value) - q.value) < 1e-9;
+    return (
+        <div className="inline-flex rounded-xl border border-surface-300/30 p-1 gap-1" role="group" aria-label={label}>
+            {QUARTILES.map((q) => (
+                <button
+                    key={q.label}
+                    type="button"
+                    onClick={() => onChange(String(q.value))}
+                    aria-pressed={isActive(q)}
+                    className={cn(
+                        "px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                        isActive(q) ? "bg-white/10 text-white" : "text-surface-400 hover:text-white",
+                    )}
+                >
+                    {q.label}
+                </button>
+            ))}
+        </div>
+    );
 }
 
 /** VLM proposal → editable rows. A stripped (low-confidence) fraction stays empty. */
@@ -223,7 +261,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                         name: row.name.trim(),
                         kind: row.kind,
                         weight_g: Number(row.grams),
-                        consumed_fraction: 1,
+                        consumed_fraction: Number(row.fraction),
                     })),
                 });
                 setOutcome(res);
@@ -384,10 +422,12 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
     if (!open) return null;
 
+    // Measured mode skips the review step, so its flow counts two steps, not three.
+    const totalSteps = mode === "measured" ? 2 : 3;
     const stepLabels: Record<Step, string> = {
-        form: "Step 1 of 3 — Details",
+        form: `Step 1 of ${totalSteps} — Details`,
         review: "Step 2 of 3 — Review estimate",
-        result: "Step 3 of 3 — Result",
+        result: `Step ${totalSteps} of ${totalSteps} — Result`,
     };
 
     const busy = isInterpreting || isCreating || isConfirming || isResolving;
@@ -535,68 +575,78 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         )}
                                     </div>
                                 ) : (
-                                    /* Measured mode: exact component weights */
+                                    /* Measured mode: exact component weights + how much was eaten */
                                     <div className="space-y-3">
                                         <p className="text-xs text-surface-400">
-                                            Enter each component's scale-measured weight — no photos needed.
+                                            Enter each component's scale-measured weight and how much was eaten — no photos needed.
                                         </p>
                                         {measuredList.rows.map((entry, i) => (
-                                            <div key={entry.id} className="flex items-end gap-2">
-                                                <div className="flex-1">
-                                                    <label htmlFor={`measured-name-${i}`} className="text-xs text-surface-400 block mb-1">
-                                                        Component {i + 1}
-                                                    </label>
-                                                    <input
-                                                        id={`measured-name-${i}`}
-                                                        type="text"
-                                                        value={entry.row.name}
-                                                        onChange={(e) => measuredList.update(i, { name: e.target.value })}
-                                                        placeholder="e.g. Rice"
-                                                        className="glass-input w-full px-3 py-2 text-sm text-white"
+                                            <div key={entry.id} className="rounded-xl border border-surface-300/20 p-3 space-y-2.5">
+                                                <div className="flex items-end gap-2">
+                                                    <div className="flex-1">
+                                                        <label htmlFor={`measured-name-${i}`} className="text-xs text-surface-400 block mb-1">
+                                                            Component {i + 1}
+                                                        </label>
+                                                        <input
+                                                            id={`measured-name-${i}`}
+                                                            type="text"
+                                                            value={entry.row.name}
+                                                            onChange={(e) => measuredList.update(i, { name: e.target.value })}
+                                                            placeholder="e.g. Rice"
+                                                            className="glass-input w-full px-3 py-2 text-sm text-white"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label htmlFor={`measured-kind-${i}`} className="text-xs text-surface-400 block mb-1">
+                                                            Kind
+                                                        </label>
+                                                        <select
+                                                            id={`measured-kind-${i}`}
+                                                            value={entry.row.kind}
+                                                            onChange={(e) => measuredList.update(i, { kind: e.target.value as ComponentKind })}
+                                                            className="glass-input px-2 py-2 text-sm text-white"
+                                                        >
+                                                            {KINDS.map((k) => (
+                                                                <option key={k.value} value={k.value}>
+                                                                    {k.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="w-28">
+                                                        <label htmlFor={`measured-grams-${i}`} className="text-xs text-surface-400 block mb-1">
+                                                            Grams
+                                                        </label>
+                                                        <input
+                                                            id={`measured-grams-${i}`}
+                                                            type="number"
+                                                            inputMode="decimal"
+                                                            min={0}
+                                                            step="any"
+                                                            value={entry.row.grams}
+                                                            onChange={(e) => measuredList.update(i, { grams: e.target.value })}
+                                                            className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums text-right"
+                                                        />
+                                                    </div>
+                                                    {measuredList.rows.length > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => measuredList.remove(i)}
+                                                            className="text-xs text-red-400/60 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-red-500/10"
+                                                            aria-label={`Remove component ${i + 1}`}
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="text-xs text-surface-400">Eaten</span>
+                                                    <FractionQuartilePicker
+                                                        value={entry.row.fraction}
+                                                        onChange={(f) => measuredList.update(i, { fraction: f })}
+                                                        label={`Component ${i + 1} eaten fraction`}
                                                     />
                                                 </div>
-                                                <div>
-                                                    <label htmlFor={`measured-kind-${i}`} className="text-xs text-surface-400 block mb-1">
-                                                        Kind
-                                                    </label>
-                                                    <select
-                                                        id={`measured-kind-${i}`}
-                                                        value={entry.row.kind}
-                                                        onChange={(e) => measuredList.update(i, { kind: e.target.value as ComponentKind })}
-                                                        className="glass-input px-2 py-2 text-sm text-white"
-                                                    >
-                                                        {KINDS.map((k) => (
-                                                            <option key={k.value} value={k.value}>
-                                                                {k.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                                <div className="w-28">
-                                                    <label htmlFor={`measured-grams-${i}`} className="text-xs text-surface-400 block mb-1">
-                                                        Grams
-                                                    </label>
-                                                    <input
-                                                        id={`measured-grams-${i}`}
-                                                        type="number"
-                                                        inputMode="decimal"
-                                                        min={0}
-                                                        step="any"
-                                                        value={entry.row.grams}
-                                                        onChange={(e) => measuredList.update(i, { grams: e.target.value })}
-                                                        className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums text-right"
-                                                    />
-                                                </div>
-                                                {measuredList.rows.length > 1 && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => measuredList.remove(i)}
-                                                        className="text-xs text-red-400/60 hover:text-red-400 px-2 py-2 rounded-lg hover:bg-red-500/10"
-                                                        aria-label={`Remove component ${i + 1}`}
-                                                    >
-                                                        Remove
-                                                    </button>
-                                                )}
                                             </div>
                                         ))}
                                         <button
@@ -766,32 +816,11 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         ) : (
                                             <div>
                                                 <span className="text-xs text-surface-400 block mb-1.5">Eaten fraction</span>
-                                                <div
-                                                    className="inline-flex rounded-xl border border-surface-300/30 p-1 gap-1"
-                                                    role="group"
-                                                    aria-label={`Component ${i + 1} eaten fraction`}
-                                                >
-                                                    {QUARTILES.map((q) => {
-                                                        const active =
-                                                            Number.isFinite(Number(entry.row.fraction)) &&
-                                                            entry.row.fraction.trim() !== "" &&
-                                                            Math.abs(Number(entry.row.fraction) - q.value) < 1e-9;
-                                                        return (
-                                                            <button
-                                                                key={q.label}
-                                                                type="button"
-                                                                onClick={() => componentList.update(i, { fraction: String(q.value) })}
-                                                                aria-pressed={active}
-                                                                className={cn(
-                                                                    "px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                                                                    active ? "bg-white/10 text-white" : "text-surface-400 hover:text-white",
-                                                                )}
-                                                            >
-                                                                {q.label}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
+                                                <FractionQuartilePicker
+                                                    value={entry.row.fraction}
+                                                    onChange={(f) => componentList.update(i, { fraction: f })}
+                                                    label={`Component ${i + 1} eaten fraction`}
+                                                />
                                             </div>
                                         )}
 
@@ -913,7 +942,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 disabled={busy || (mode === "estimated" && !beforeImage)}
                                 className="btn-primary text-sm flex items-center gap-2"
                             >
-                                {mode === "estimated" ? "Analyze photo" : "Save estimate"}
+                                {mode === "estimated" ? "Analyze photo" : "Save meal"}
                             </BusyButton>
                         </>
                     )}
