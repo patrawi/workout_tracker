@@ -25,15 +25,13 @@ describe("createAnalyticsRepository", () => {
     let call = 0;
     const makeChain = (rows: unknown[], grouped: boolean) => ({
       from: mock(() => ({
-        where: mock(() =>
-          grouped
-            ? {
-                groupBy: mock(() => ({
-                  orderBy: mock(async () => rows),
-                })),
-              }
-            : async () => rows
-        ),
+        where: grouped
+          ? mock(() => ({
+              groupBy: mock(() => ({
+                orderBy: mock(async () => rows),
+              })),
+            }))
+          : mock(async () => rows),
       })),
     });
     const mockDb = {
