@@ -19,6 +19,28 @@ export interface VolumeData {
   sets: number;
 }
 
+// Muscle-detail drill-down (mobile s7): per-group 7-day activity, an 8-week
+// volume series (week = date_trunc('week', created_at), Monday-anchored), and
+// the exercises actually played in the window with their top weight.
+export interface MuscleWeeklyVolume {
+  week_start: string; // "YYYY-MM-DD"
+  volume_load: number;
+}
+
+export interface MuscleExerciseUsage {
+  name: string;
+  top_weight: number;
+  sets: number;
+}
+
+export interface MuscleDetail {
+  muscle_group: string;
+  sets_7d: number;
+  exercises_7d: number;
+  weekly_volume: MuscleWeeklyVolume[];
+  exercises: MuscleExerciseUsage[];
+}
+
 // Spec §4.2: Volume Load = weight × reps × sets. Two adjacent equal windows
 // ([0,N] vs [N,2N]) with the delta computed here (deterministic, §6.2) so the
 // LLM never does the subtraction itself.
@@ -114,6 +136,71 @@ export function createAnalyticsRepository(dbInstance: PostgresJsDatabase) {
         muscle_group: String(row.muscle_group),
         sets: Number(row.sets),
       }));
+    },
+
+    async getMuscleDetail(group: string, userId: number = DEFAULT_USER_ID): Promise<MuscleDetail> {
+      const groupMatch = sql`lower(${workouts.muscle_group}) = lower(${group})`;
+      const weeklyRows = await dbInstance
+        .select({
+          week: sql<string>`to_char(date_trunc('week', ${workouts.created_at}), 'YYYY-MM-DD')`.as("week"),
+          volume: sql<number>`COALESCE(SUM(${workouts.weight} * ${workouts.reps}), 0)`.as("volume"),
+        })
+        .from(workouts)
+        .where(
+          and(
+            eq(workouts.user_id, userId),
+            groupMatch,
+            gte(workouts.created_at, sql`now() - interval '56 days'`),
+          ),
+        )
+        .groupBy(sql`date_trunc('week', ${workouts.created_at})`)
+        .orderBy(sql`date_trunc('week', ${workouts.created_at})`);
+
+      const exerciseRows = await dbInstance
+        .select({
+          name: workouts.exercise_name,
+          top_weight: sql<number>`MAX(${workouts.weight})`.as("top_weight"),
+          sets: sql<number>`COUNT(*)::int`.as("sets"),
+        })
+        .from(workouts)
+        .where(
+          and(
+            eq(workouts.user_id, userId),
+            groupMatch,
+            gte(workouts.created_at, sql`now() - interval '56 days'`),
+          ),
+        )
+        .groupBy(workouts.exercise_name)
+        .orderBy(desc(sql`COUNT(*)`));
+
+      const [recent] = await dbInstance
+        .select({
+          sets: sql<number>`COUNT(*)::int`.as("sets"),
+          exercises: sql<number>`COUNT(DISTINCT ${workouts.exercise_name})::int`.as("exercises"),
+        })
+        .from(workouts)
+        .where(
+          and(
+            eq(workouts.user_id, userId),
+            groupMatch,
+            gte(workouts.created_at, sql`now() - interval '7 days'`),
+          ),
+        );
+
+      return {
+        muscle_group: group,
+        sets_7d: Number(recent?.sets ?? 0),
+        exercises_7d: Number(recent?.exercises ?? 0),
+        weekly_volume: weeklyRows.map((row) => ({
+          week_start: String(row.week),
+          volume_load: Number(row.volume),
+        })),
+        exercises: exerciseRows.map((row) => ({
+          name: String(row.name),
+          top_weight: Number(row.top_weight ?? 0),
+          sets: Number(row.sets),
+        })),
+      };
     },
 
     async getVolumeTrend(daysBack = 14, userId: number = DEFAULT_USER_ID): Promise<VolumeTrendData[]> {
