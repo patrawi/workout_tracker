@@ -6,6 +6,13 @@ function createMockAnalyticsRepo() {
     getHeatmap: mock(async () => []),
     getVolume: mock(async (daysBack: number) => []),
     getVolumeTrend: mock(async (daysBack: number) => []),
+    getMuscleDetail: mock(async (group: string) => ({
+      muscle_group: group,
+      sets_7d: 16,
+      exercises_7d: 4,
+      weekly_volume: [],
+      exercises: [],
+    })),
   };
 }
 
@@ -29,5 +36,17 @@ describe("createAnalyticsService", () => {
     expect(typeof service.getVolumeTrend).toBe("function");
     expect(typeof service.getNotes).toBe("function");
     expect(typeof service.getHeatmap).toBe("function");
+    expect(typeof service.getMuscleDetail).toBe("function");
+  });
+
+  test("getMuscleDetail passes the group and user through to the repository", async () => {
+    const mockAR = createMockAnalyticsRepo();
+    const service = createAnalyticsService(mockAR as any, createMockWorkoutRepo() as any);
+
+    const detail = await service.getMuscleDetail("Chest", 9);
+
+    expect(mockAR.getMuscleDetail).toHaveBeenCalledWith("Chest", 9);
+    expect(detail.muscle_group).toBe("Chest");
+    expect(detail.sets_7d).toBe(16);
   });
 });

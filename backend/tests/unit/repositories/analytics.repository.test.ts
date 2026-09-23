@@ -18,6 +18,41 @@ describe("createAnalyticsRepository", () => {
 
     expect(typeof repo.getHeatmap).toBe("function");
     expect(typeof repo.getVolume).toBe("function");
+    expect(typeof repo.getMuscleDetail).toBe("function");
+  });
+
+  test("getMuscleDetail maps weekly volume, exercises and 7-day stats", async () => {
+    let call = 0;
+    const makeChain = (rows: unknown[], grouped: boolean) => ({
+      from: mock(() => ({
+        where: mock(() =>
+          grouped
+            ? {
+                groupBy: mock(() => ({
+                  orderBy: mock(async () => rows),
+                })),
+              }
+            : async () => rows
+        ),
+      })),
+    });
+    const mockDb = {
+      select: mock(() => {
+        call++;
+        if (call === 1) return makeChain([{ week: "2026-09-07", volume: 1200 }], true);
+        if (call === 2) return makeChain([{ name: "Bench Press", top_weight: 54, sets: 8 }], true);
+        return makeChain([{ sets: 16, exercises: 4 }], false);
+      }),
+    };
+
+    const repo = createAnalyticsRepository(mockDb as any);
+    const detail = await repo.getMuscleDetail("Chest", 7);
+
+    expect(detail.muscle_group).toBe("Chest");
+    expect(detail.sets_7d).toBe(16);
+    expect(detail.exercises_7d).toBe(4);
+    expect(detail.weekly_volume).toEqual([{ week_start: "2026-09-07", volume_load: 1200 }]);
+    expect(detail.exercises).toEqual([{ name: "Bench Press", top_weight: 54, sets: 8 }]);
   });
 
   test("getHeatmap returns empty array", async () => {

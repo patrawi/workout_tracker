@@ -1,6 +1,11 @@
 // src/services/analytics.service.ts
 
-import type { HeatmapDay, VolumeData, VolumeTrendData } from "../repositories/analytics.repository";
+import type {
+  HeatmapDay,
+  MuscleDetail,
+  VolumeData,
+  VolumeTrendData,
+} from "../repositories/analytics.repository";
 import type { WorkoutRow } from "../types";
 import { ANALYTICS_DEFAULT_DAYS_BACK, ANALYTICS_DEFAULT_DAYS_BACK_FOR_EXERCISE, DEFAULT_RECENT_NOTES_LIMIT } from "../constants";
 import { createChildLogger } from "../lib/logger";
@@ -15,6 +20,7 @@ export interface AnalyticsService {
   getAnalytics(exercise: string, daysBack?: number, userId?: number): Promise<WorkoutRow[]>;
   getVolume(daysBack?: number, userId?: number): Promise<VolumeData[]>;
   getVolumeTrend(daysBack?: number, userId?: number): Promise<VolumeTrendData[]>;
+  getMuscleDetail(group: string, userId?: number): Promise<MuscleDetail>;
   getNotes(exercise: string, userId?: number): Promise<WorkoutRow[]>;
   getHeatmap(userId?: number): Promise<HeatmapDay[]>;
 }
@@ -38,6 +44,10 @@ export function createAnalyticsService(
 
     async getVolumeTrend(daysBack = 14, userId: number = DEFAULT_USER_ID): Promise<VolumeTrendData[]> {
       return analyticsRepo.getVolumeTrend(daysBack, userId);
+    },
+
+    async getMuscleDetail(group: string, userId: number = DEFAULT_USER_ID): Promise<MuscleDetail> {
+      return analyticsRepo.getMuscleDetail(group, userId);
     },
 
     async getNotes(exercise: string, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow[]> {

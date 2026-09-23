@@ -1,5 +1,6 @@
 // src/routes/analytics.routes.ts
 
+import { t } from "elysia";
 import { routeHandler, routeHandlerCtx } from "../lib/route-handler";
 import { ValidationError } from "../lib/errors";
 import { isNonEmptyString, parseDaysBack } from "../lib/validation";
@@ -25,6 +26,13 @@ export function registerAnalyticsRoutes(app: any, ctx: AppContext): void {
       const days = parseDaysBack(query.days, ANALYTICS_DEFAULT_DAYS_BACK);
       return await analyticsService.getVolume(days, user_id);
     }))
+    .get("/analytics/muscle/:group", routeHandlerCtx(async ({ params, user_id }: any) => {
+      return await analyticsService.getMuscleDetail(params.group, user_id);
+    }), {
+      params: t.Object({
+        group: t.String({ minLength: 1, maxLength: 40 }),
+      }),
+    })
     .get("/notes", routeHandlerCtx(async ({ query, user_id }: any) => {
       const exercise = query.exercise;
       if (!isNonEmptyString(exercise)) {
