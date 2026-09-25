@@ -103,7 +103,7 @@ function createDeps() {
 describe("buildCoachTools", () => {
     test("day-type history always returns 3 matching sessions even if the LLM asks for 1", async () => {
         const deps = createDeps();
-        const tools = buildCoachTools(deps as any);
+        const tools = buildCoachTools(deps as any, 1);
 
         const result = JSON.parse(await tools.run("get_day_type_history", { day_type: "Legs", limit: 1 }));
 
@@ -117,7 +117,7 @@ describe("buildCoachTools", () => {
     });
 
     test("day-type history schema does not expose limit selection to the LLM", () => {
-        const tools = buildCoachTools(createDeps() as any);
+        const tools = buildCoachTools(createDeps() as any, 1);
         const schema = tools.schemas.find((tool) => tool.function.name === "get_day_type_history");
 
         expect(schema?.function.parameters).toEqual({
@@ -131,7 +131,7 @@ describe("buildCoachTools", () => {
 
     test("session-anchored day-type history excludes the reviewed session", async () => {
         const deps = createDeps();
-        const tools = buildCoachTools(deps as any);
+        const tools = buildCoachTools(deps as any, 1);
 
         const result = JSON.parse(await tools.run("get_day_type_history", { session_id: 20260701 }));
 
@@ -148,16 +148,28 @@ describe("buildCoachTools", () => {
 
     test("overload assessment passes as_of_session_id through to the repository", async () => {
         const deps = createDeps();
-        const tools = buildCoachTools(deps as any);
+        const tools = buildCoachTools(deps as any, 1);
 
         await tools.run("get_overload_assessment", { exercise_name: "Bench Press", as_of_session_id: 123 });
 
         expect(deps.workoutRepo.getExerciseSetsWithContext).toHaveBeenCalledWith(["Bench Press"], 12, 123, 1);
     });
 
+    test("plan lookups read only the owning user's plan", async () => {
+        const deps = createDeps();
+        const tools = buildCoachTools(deps as any, 7);
+
+        await tools.run("get_plan", {});
+        await tools.run("get_plan", { day_type: "Push" });
+        await tools.run("get_overload_assessment", { exercise_name: "Bench Press" });
+
+        expect(deps.coachPlanRepo.getAll).toHaveBeenCalledWith(7);
+        expect(deps.coachPlanRepo.getByDayType).toHaveBeenCalledWith("Push", 7);
+    });
+
     test("overload assessment resolves slash-separated plan aliases to logged exercise names", async () => {
         const deps = createDeps();
-        const tools = buildCoachTools(deps as any);
+        const tools = buildCoachTools(deps as any, 1);
 
         const result = JSON.parse(await tools.run("get_overload_assessment", { exercise_name: "Pull Up", as_of_session_id: 96 }));
 
@@ -172,7 +184,7 @@ describe("buildCoachTools", () => {
     });
 
     test("exposes propose_plan instead of save_plan", () => {
-        const tools = buildCoachTools(createDeps() as any);
+        const tools = buildCoachTools(createDeps() as any, 1);
         const names = tools.schemas.map((tool) => tool.function.name);
 
         expect(names).toContain("propose_plan");
@@ -182,7 +194,7 @@ describe("buildCoachTools", () => {
 
     test("propose_plan returns a proposal without replacing saved plan rows", async () => {
         const deps = createDeps();
-        const tools = buildCoachTools(deps as any);
+        const tools = buildCoachTools(deps as any, 1);
 
         const result = JSON.parse(await tools.run("propose_plan", {
             day_type: "Push",
@@ -213,7 +225,7 @@ describe("buildCoachTools", () => {
 
     test("propose_session_prescription returns a one-off Upper Flex without replacing saved plans", async () => {
         const deps = createDeps();
-        const tools = buildCoachTools(deps as any);
+        const tools = buildCoachTools(deps as any, 1);
 
         const result = JSON.parse(await tools.run("propose_session_prescription", {
             kind: "upper_flex",

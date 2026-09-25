@@ -186,7 +186,7 @@ const sessionPrescriptionExerciseSchema = {
     required: [...planExerciseSchema.required, "source_day_type"],
 };
 
-export function buildCoachTools(deps: CoachServiceDeps, userId: number = 1): {
+export function buildCoachTools(deps: CoachServiceDeps, userId: number): {
     schemas: ToolSchemas;
     run: ToolRunner;
     drainPlanProposals: () => CoachPlanProposal[];
@@ -415,8 +415,8 @@ export function buildCoachTools(deps: CoachServiceDeps, userId: number = 1): {
             case "get_plan": {
                 const day = parseDayType(args.day_type);
                 const rows = day
-                    ? await deps.coachPlanRepo.getByDayType(day)
-                    : await deps.coachPlanRepo.getAll();
+                    ? await deps.coachPlanRepo.getByDayType(day, userId)
+                    : await deps.coachPlanRepo.getAll(userId);
                 return JSON.stringify(
                     rows.map((r) => ({
                         day_type: r.day_type,
@@ -473,7 +473,7 @@ export function buildCoachTools(deps: CoachServiceDeps, userId: number = 1): {
                 const asOfSessionId = parseSessionId(args.as_of_session_id);
 
                 // Plan target supplies the rep range that defines "top of range" (§4.3).
-                const plan = await deps.coachPlanRepo.getAll();
+                const plan = await deps.coachPlanRepo.getAll(userId);
                 const target = plan.find((p) => namesMatch(p.exercise_name, exercise));
                 if (!target) {
                     return JSON.stringify({ error: `"${exercise}" is not in the saved plan — cannot assess without a rep range.` });
