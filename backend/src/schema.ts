@@ -105,8 +105,12 @@ export const workouts = pgTable("workouts", {
 
 // ——— Coach Plan Table (current target per exercise per day-type) ———
 // The evolving progression state. day_type is 'Push' | 'Pull' | 'Legs'.
+// Per-user since 0018: each account owns its plan (new users start empty).
 export const coachPlan = pgTable("coach_plan", {
     id: serial("id").primaryKey(),
+    user_id: integer("user_id")
+        .notNull()
+        .references(() => users.id),
     day_type: text("day_type").notNull(),
     position: integer("position").default(0).notNull(),
     exercise_name: text("exercise_name").notNull(),
@@ -122,7 +126,7 @@ export const coachPlan = pgTable("coach_plan", {
     notes: text("notes").default("").notNull(),
     updated_at: timestamp("updated_at", { mode: "string" }).defaultNow(),
 }, (table) => [
-    index("coach_plan_day_type_idx").on(table.day_type),
+    index("coach_plan_user_day_type_idx").on(table.user_id, table.day_type),
 ]);
 
 // ——— Coach Knowledge Table (editable training doc, in sections) ———

@@ -33,8 +33,8 @@ export type CoachStreamEvent =
 export interface CoachService {
   chat(messages: CoachMessage[], userId?: number): Promise<{ reply: string; reasoning?: string; proposal?: CoachPlanProposal; prescription?: CoachSessionPrescription }>;
   chatStream(messages: CoachMessage[], userId?: number): AsyncGenerator<CoachStreamEvent>;
-  getPlan(): Promise<CoachPlanGrouped>;
-  savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
+  getPlan(userId: number): Promise<CoachPlanGrouped>;
+  savePlan(userId: number, dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]>;
   listKnowledge(): Promise<CoachKnowledgeRow[]>;
   addKnowledge(title: string, body: string): Promise<CoachKnowledgeRow>;
   updateKnowledge(id: number, data: { title?: string; body?: string }): Promise<CoachKnowledgeRow | null>;
@@ -269,8 +269,8 @@ export function createCoachService(
       }
     },
 
-    async getPlan(): Promise<CoachPlanGrouped> {
-      const rows = await deps.coachPlanRepo.getAll();
+    async getPlan(userId: number): Promise<CoachPlanGrouped> {
+      const rows = await deps.coachPlanRepo.getAll(userId);
       const grouped: CoachPlanGrouped = { Push: [], Pull: [], Legs: [] };
       for (const row of rows) {
         if (row.day_type in grouped) grouped[row.day_type as PlanDayType].push(row);
@@ -278,9 +278,9 @@ export function createCoachService(
       return grouped;
     },
 
-    async savePlan(dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]> {
+    async savePlan(userId: number, dayType: string, exercises: CoachPlanInput[]): Promise<CoachPlanRow[]> {
       const day = assertDayType(dayType);
-      return deps.coachPlanRepo.replaceDayType(day, exercises);
+      return deps.coachPlanRepo.replaceDayType(day, exercises, userId);
     },
 
     async listKnowledge() {

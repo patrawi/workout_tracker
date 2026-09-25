@@ -84,14 +84,14 @@ export function registerCoachRoutes(app: any, ctx: AppContext): void {
     )
     .get(
       "/coach/plan",
-      routeHandler(async () => {
-        return await coachService.getPlan();
+      routeHandlerCtx(async ({ user_id }: any) => {
+        return await coachService.getPlan(user_id);
       })
     )
     .put(
       "/coach/plan",
-      routeHandlerCtx(async ({ body }) => {
-        return await coachService.savePlan(body.day_type, body.exercises);
+      routeHandlerCtx(async ({ body, user_id }: any) => {
+        return await coachService.savePlan(user_id, body.day_type, body.exercises);
       }),
       {
         body: t.Object({
