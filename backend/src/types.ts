@@ -122,6 +122,7 @@ export interface SessionActivityData {
   notes: string;
   session_type?: SessionType;   // spec §3.3; defaults to "working"
   gym_profile?: string;         // spec §3.4; defaults to DEFAULT_GYM_PROFILE
+  gym_id?: number;
 }
 
 export interface ApiResponse<T> {

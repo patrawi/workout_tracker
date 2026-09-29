@@ -8,7 +8,7 @@ import { DEFAULT_WORKOUT_LIMIT, SESSION_TYPES } from "../constants";
 import type { AppContext } from "../context";
 
 export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
-  const { workoutService } = ctx;
+  const { workoutService, gymsService } = ctx;
 
   app
     .get("/workouts", routeHandler(async ({ user_id }: any) => {
@@ -53,11 +53,19 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
       body: t.Object({ raw_text: t.String() }),
     })
     .post("/confirm", routeHandlerCtx(async ({ body, user_id }: any) => {
+      // Resolve the gym reference (owned id, else name matched-or-created) so
+      // every confirmed session is linked to a gyms row while the legacy
+      // gym_profile string keeps rendering untouched.
+      const gym_id = await gymsService.resolveForSession(
+        body.activity?.gym_id,
+        body.activity?.gym_profile,
+        user_id
+      );
       return await workoutService.confirmSession(
         body.raw_text,
         body.items,
         body.created_at,
-        body.activity,
+        { ...body.activity, gym_id },
         user_id
       );
     }), {
@@ -85,6 +93,7 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
           notes: t.String(),
           session_type: t.Optional(t.Union(SESSION_TYPES.map((s) => t.Literal(s)))),
           gym_profile: t.Optional(t.String()),
+          gym_id: t.Optional(t.Number()),
         })),
       }),
     })

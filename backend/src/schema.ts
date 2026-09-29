@@ -72,8 +72,19 @@ export const sessions = pgTable("sessions", {
     // Progressive Overload (spec §3.3 / §3.4) — session-level training context.
     session_type: sessionTypeEnum("session_type").default("working").notNull(),
     gym_profile: text("gym_profile").default("").notNull(),
+    gym_id: integer("gym_id").references(() => gyms.id),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
 });
+
+// ——— Gyms Table (PAT-56) ———
+export const gyms = pgTable("gyms", {
+    id: serial("id").primaryKey(),
+    user_id: integer("user_id")
+        .notNull()
+        .references(() => users.id),
+    name: text("name").notNull(),
+    created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+}, (table) => [uniqueIndex("gyms_user_id_name_idx").on(table.user_id, table.name)]);
 
 // ——— Workouts Table ———
 export const workouts = pgTable("workouts", {

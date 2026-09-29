@@ -134,6 +134,13 @@
       "when": 1790325813126,
       "tag": "0018_coach_plan_per_user",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790656056375,
+      "tag": "0019_stormy_tattoo",
+      "breakpoints": true
     }
   ]
 }

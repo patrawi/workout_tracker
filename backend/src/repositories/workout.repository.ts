@@ -285,6 +285,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
             notes: activity?.notes ?? "",
             session_type: activity?.session_type ?? DEFAULT_SESSION_TYPE,
             gym_profile: activity?.gym_profile || DEFAULT_GYM_PROFILE,
+            gym_id: activity?.gym_id,
           })
           .returning({ id: sessions.id });
 
