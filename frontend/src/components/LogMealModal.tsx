@@ -3,19 +3,13 @@ import DialogBase from "./DialogBase";
 import EstimateRangePanel from "./EstimateRangePanel";
 import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
 import ImageSlot, { type AttachedImage } from "@/features/nutrition-estimation/components/ImageSlot";
-import ReferenceCandidateCard from "@/features/nutrition-estimation/components/ReferenceCandidateCard";
-import ReferenceSearchPanel from "@/features/nutrition-estimation/components/ReferenceSearchPanel";
 import { useMealObservations } from "@/features/nutrition-estimation/hooks/useMealObservations";
-import {
-    estimateFromCreateOutcome,
-    estimateFromRecalculation,
-} from "@/features/nutrition-estimation/estimate";
+import { estimateFromCreateOutcome } from "@/features/nutrition-estimation/estimate";
 import { useRowList } from "@/features/nutrition-estimation/row-list";
 import { cn } from "@/lib/utils";
 import type {
     ComponentKind,
     CreateOutcome,
-    CalculateObservationOutcome,
     LatentHint,
     MealType,
 } from "@/types";
@@ -125,6 +119,33 @@ function FractionQuartilePicker({
     );
 }
 
+/** Per-component provenance (ADR 0026): what backed each component's numbers. */
+function ProvenanceList({ outcome }: { outcome: CreateOutcome }) {
+    const perComponent = outcome.observation.calculation?.per_component ?? [];
+    if (perComponent.length === 0) return null;
+    return (
+        <div className="rounded-xl border border-surface-300/20 p-3 space-y-1.5">
+            <span className="text-xs text-surface-400">How each component was calculated</span>
+            <ul className="space-y-1">
+                {perComponent.map((c) => (
+                    <li key={c.name} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-white truncate">{c.name}</span>
+                        {c.estimated ? (
+                            <span className="tag-pill text-xs text-amber-300 shrink-0">
+                                estimated · kind prior
+                            </span>
+                        ) : (
+                            <span className="tag-pill text-xs text-emerald-300 shrink-0">
+                                reference · {c.reference?.name_th ?? c.reference?.name_en ?? `#${c.reference?.id ?? "?"}`}
+                            </span>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
 /** VLM proposal → editable rows. A stripped (low-confidence) fraction stays empty. */
 function proposalToComponents(
     components: Array<{
@@ -166,7 +187,7 @@ interface LogMealModalProps {
  * only opens/closes (remount via key to reset).
  */
 export default function LogMealModal({ open, onClose, defaultDate, onLogged }: LogMealModalProps) {
-    const { interpret, create, confirm, resolve, isInterpreting, isCreating, isConfirming, isResolving } =
+    const { interpret, create, confirm, isInterpreting, isCreating, isConfirming } =
         useMealObservations();
 
     const [step, setStep] = useState<Step>("form");
@@ -187,11 +208,10 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const componentList = useRowList<EditableComponent>(emptyComponent);
     const measuredList = useRowList<MeasuredRow>(emptyMeasuredRow);
     const [outcome, setOutcome] = useState<CreateOutcome | null>(null);
-    const [resolved, setResolved] = useState<CalculateObservationOutcome | null>(null);
-    /** VLM dish-name proposal (stripped/low-confidence arrives as "" → null here). */
+    /** VLM dish-name proposal ("" when low-confidence) — prefills an empty
+     * menu name and doubles as the save-time fallback. Since ADR 0026 the
+     * menu name is a display label only, never the match key. */
     const [vlmDishName, setVlmDishName] = useState<string | null>(null);
-    const [dishNameUsed, setDishNameUsed] = useState(false);
-    const [changeReferenceOpen, setChangeReferenceOpen] = useState(false);
 
     const hasAfterImage = afterImage !== null;
 
@@ -228,12 +248,12 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const handleFormContinue = useCallback(async () => {
         setError(null);
         const name = menuName.trim();
-        if (!name) {
-            setError("Menu name is required.");
-            return;
-        }
         if (mode === "measured") {
             // Measured mode: exact grams, no photos, straight to create.
+            if (!name) {
+                setError("Menu name is required.");
+                return;
+            }
             if (measuredList.rows.length === 0) {
                 setError("Add at least one component.");
                 return;
@@ -273,6 +293,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         }
 
         // Estimated mode: a before photo is required for the VLM pass.
+        // The menu name is optional here — the VLM proposal names the dish
+        // (ADR 0026: it is a display label, never the match key).
         if (!beforeImage) {
             setError("Attach a photo of the meal before eating.");
             return;
@@ -282,10 +304,13 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             if (result.status === "ok" && result.proposal.components.length > 0) {
                 setInterpretNotice(null);
                 componentList.replaceAll(proposalToComponents(result.proposal.components));
-                // A low-confidence dish name arrives stripped to "" (ADR 0017) —
-                // only a real proposal is surfaced.
-                setVlmDishName(result.proposal.dish_name.trim() || null);
-                setDishNameUsed(false);
+                // A low-confidence dish name arrives stripped to "" (ADR 0017).
+                // Prefill an empty menu name from the proposal; a typed name wins.
+                const dishName = result.proposal.dish_name.trim() || null;
+                setVlmDishName(dishName);
+                if (!menuName.trim() && dishName) {
+                    setMenuName(dishName);
+                }
             } else {
                 // failed (no_food / unreadable) or unavailable — never block (ADR 0017).
                 setInterpretNotice("Couldn't analyze the photo — enter components manually.");
@@ -317,6 +342,11 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     /** Review → create (estimated mode, editable proposal or manual rows). */
     const handleReviewSubmit = useCallback(async () => {
         setError(null);
+        const finalName = menuName.trim() || (vlmDishName ?? "").trim();
+        if (!finalName) {
+            setError("Menu name is required.");
+            return;
+        }
         if (componentList.rows.length === 0) {
             setError("Add at least one component.");
             return;
@@ -358,7 +388,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             const res = await create({
                 date,
                 meal,
-                menu_name: menuName.trim(),
+                menu_name: finalName,
                 portion_mode: "estimated",
                 ...(mealSource.trim() ? { meal_source: mealSource.trim() } : {}),
                 has_after_image: fractionFromAfterImage,
@@ -377,32 +407,11 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save the meal.");
         }
-    }, [componentList, hasAfterImage, mode, date, meal, menuName, mealSource, create]);
-
-    /** Candidate/reference picked → resolve → recalculate the displayed estimate. */
-    const handlePickCandidate = useCallback(
-        async (referenceId: number) => {
-            if (!outcome) return;
-            setError(null);
-            try {
-                const res = await resolve(outcome.observation.id, referenceId);
-                setResolved(res);
-                setChangeReferenceOpen(false);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to resolve the reference.");
-            }
-        },
-        [outcome, resolve],
-    );
+    }, [componentList, hasAfterImage, mode, date, meal, menuName, vlmDishName, mealSource, create]);
 
     // ——— Result rendering ———
 
-    /** A resolve/confirm recalculation wins over the create outcome's estimate. */
-    const estimate = resolved
-        ? estimateFromRecalculation(resolved)
-        : outcome
-            ? estimateFromCreateOutcome(outcome)
-            : null;
+    const estimate = outcome ? estimateFromCreateOutcome(outcome) : null;
 
     const handleConfirm = useCallback(async () => {
         if (!outcome) return;
@@ -430,7 +439,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         result: `Step ${totalSteps} of ${totalSteps} — Result`,
     };
 
-    const busy = isInterpreting || isCreating || isConfirming || isResolving;
+    const busy = isInterpreting || isCreating || isConfirming;
 
     return (
         <DialogBase open={open} onClose={handleClose} ariaLabel="Log a meal">
@@ -467,7 +476,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                             <div className="space-y-4">
                                 <div>
                                     <label htmlFor="log-meal-name" className="text-xs text-surface-400 block mb-1.5">
-                                        Menu name *
+                                        Menu name {mode === "measured" ? "*" : <span className="text-surface-300/60">(optional — the AI can name it)</span>}
                                     </label>
                                     <input
                                         id="log-meal-name"
@@ -685,28 +694,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 </div>
                             )}
 
-                            {/* VLM dish-name proposal — user-owned menu name; adopting is optional (spec §2). */}
-                            {vlmDishName && (
-                                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-surface-300/20 bg-surface-100/50 px-4 py-2.5 text-sm">
-                                    <span className="text-surface-400">AI sees:</span>
-                                    <span className="text-white font-medium">{vlmDishName}</span>
-                                    {dishNameUsed ? (
-                                        <span className="text-xs text-emerald-400">used for matching</span>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setMenuName(vlmDishName);
-                                                setDishNameUsed(true);
-                                            }}
-                                            className="text-xs font-medium text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline"
-                                        >
-                                            Use
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-
                             <div className="space-y-3">
                                 {componentList.rows.map((entry, i) => (
                                     <div key={entry.id} className="rounded-xl bg-surface-100/50 border border-surface-300/20 p-4 space-y-3">
@@ -877,47 +864,15 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                     {step === "result" && outcome && (
                         <>
                             {outcome.match.tier === "gap" && (
-                                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-                                    Saved as reference-pending — no macros until a reference is added. Find it
-                                    in the pending list below.
-                                </div>
+                                <p className="text-xs text-surface-400">
+                                    Some components had no catalog match — their numbers are coarse
+                                    kind-prior estimates (marked below). Confirming still logs the meal.
+                                </p>
                             )}
-
-                            {outcome.match.tier === "ambiguous" && !resolved && (
-                                <div className="space-y-2">
-                                    <p className="text-sm text-surface-400">
-                                        Several references match "{menuName.trim()}" — pick the closest one.
-                                    </p>
-                                    {outcome.match.candidates.map((c) => (
-                                        <ReferenceCandidateCard
-                                            key={c.id}
-                                            candidate={c}
-                                            onPick={() => handlePickCandidate(c.id)}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-
                             {estimate && (
                                 <div className="space-y-3">
-                                    {/* ADR 0020: the auto-selected reference is changeable, in place. */}
-                                    <div className="flex items-center justify-end">
-                                        <button
-                                            type="button"
-                                            onClick={() => setChangeReferenceOpen((openState) => !openState)}
-                                            aria-expanded={changeReferenceOpen}
-                                            className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
-                                        >
-                                            {changeReferenceOpen ? "Hide reference search" : "Change reference"}
-                                        </button>
-                                    </div>
-                                    {changeReferenceOpen && (
-                                        <ReferenceSearchPanel
-                                            label="Find a different reference"
-                                            onPick={handlePickCandidate}
-                                        />
-                                    )}
                                     <EstimateRangePanel estimate={estimate} />
+                                    <ProvenanceList outcome={outcome} />
                                 </div>
                             )}
                         </>
@@ -973,30 +928,22 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
                     {step === "result" && outcome && (
                         <>
-                            {outcome.match.tier === "gap" && !estimate ? (
-                                <button type="button" onClick={handleClose} className="btn-primary text-sm">
-                                    Close
-                                </button>
-                            ) : (
-                                <>
-                                    <button
-                                        type="button"
-                                        onClick={handleClose}
-                                        className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <BusyButton
-                                        onClick={handleConfirm}
-                                        busy={isConfirming}
-                                        busyLabel="Logging…"
-                                        disabled={busy || !estimate}
-                                        className="btn-primary text-sm flex items-center gap-2"
-                                    >
-                                        Confirm & log
-                                    </BusyButton>
-                                </>
-                            )}
+                            <button
+                                type="button"
+                                onClick={handleClose}
+                                className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <BusyButton
+                                onClick={handleConfirm}
+                                busy={isConfirming}
+                                busyLabel="Logging…"
+                                disabled={busy || !estimate}
+                                className="btn-primary text-sm flex items-center gap-2"
+                            >
+                                Confirm & log
+                            </BusyButton>
                         </>
                     )}
                 </div>

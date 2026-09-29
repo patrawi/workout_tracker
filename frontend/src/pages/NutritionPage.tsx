@@ -5,15 +5,12 @@ import "react-day-picker/style.css";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useNutrition } from "@/features/nutrition/hooks/useNutrition";
 import { useWater } from "@/features/nutrition/hooks/useWater";
-import { useMealObservations } from "@/features/nutrition-estimation/hooks/useMealObservations";
 import NutritionReviewModal from "@/components/NutritionReviewModal";
 import LogMealModal from "@/components/LogMealModal";
-import PendingMealDialog from "@/components/PendingMealDialog";
 import { queryKeys } from "@/lib/query-keys";
 import { nutritionApi, foodCatalogApi } from "@/lib/api";
-import { formatDate } from "@/lib/date-utils";
 import { roundToWhole, roundToOneDecimal } from "@/features/nutrition-estimation/format";
-import type { NutritionRow, NutritionItem, MealType, PendingObservation } from "@/types";
+import type { NutritionRow, NutritionItem, MealType } from "@/types";
 
 // ——— Local aliases mapped to the app's global theme tokens (keeps this page
 // consistent with the rest of the app; only macro colors stay custom). ———
@@ -549,59 +546,6 @@ function MealSection({ meal, emoji, items, onAdd, onRemove, onEdit }: {
     );
 }
 
-// ——— Pending meals (Nutrition Estimation V1, design spec §7) ———
-function PendingStatusBadge({ row }: { row: PendingObservation }) {
-    const isReferencePending = row.status === "reference_pending";
-    const style: React.CSSProperties = isReferencePending
-        ? { background: "oklch(0.8 0.16 80 / 0.12)", color: "oklch(0.82 0.16 80)", border: "1px solid oklch(0.8 0.16 80 / 0.35)" }
-        : { background: "var(--accent-soft)", color: "var(--accent)", border: "1px solid var(--accent-line)" };
-    return (
-        <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 999, whiteSpace: "nowrap", ...style }}>
-            {isReferencePending ? "Needs reference" : "Estimate ready"}
-        </span>
-    );
-}
-
-function PendingMeals({ rows, isLoading, onOpen }: { rows: PendingObservation[]; isLoading: boolean; onOpen: (id: number) => void }) {
-    return (
-        <Card style={{ padding: "18px 20px" }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text)" }}>Pending meals</h2>
-                    {!isLoading && rows.length > 0 && (
-                        <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "var(--accent-soft)", color: "var(--accent)", border: "1px solid var(--accent-line)", whiteSpace: "nowrap" }}>
-                            {rows.length} to review
-                        </span>
-                    )}
-                </div>
-                <span style={{ fontSize: 12, color: "var(--faint)" }}>Tap a meal — waiting for a reference or your confirmation</span>
-            </div>
-            {isLoading ? (
-                <div style={{ display: "grid", gap: 8 }}>
-                    <div className="skeleton" style={{ height: 54, borderRadius: 12 }} />
-                    <div className="skeleton" style={{ height: 54, borderRadius: 12 }} />
-                </div>
-            ) : (
-                <div style={{ display: "grid", gap: 8 }}>
-                    {rows.map((p) => (
-                        <button key={p.id} className="nut-tap" onClick={() => onOpen(p.id)} aria-label={`Review ${p.menu_name}`}
-                            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, width: "100%", padding: "11px 14px", borderRadius: 12, border: "1px solid var(--border)", background: "transparent", cursor: "pointer", textAlign: "left" }}>
-                            <div style={{ minWidth: 0 }}>
-                                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.menu_name}</div>
-                                <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }}>{formatDate(p.date)} · {p.meal_type}</div>
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                                <PendingStatusBadge row={p} />
-                                <span aria-hidden style={{ color: "var(--faint)", fontSize: 18, lineHeight: 1 }}>›</span>
-                            </div>
-                        </button>
-                    ))}
-                </div>
-            )}
-        </Card>
-    );
-}
-
 // ——— Page ———
 export default function NutritionPage() {
     const [searchParams] = useSearchParams();
@@ -615,12 +559,10 @@ export default function NutritionPage() {
 
     const { glasses, saveWater, isSaving: isSavingWater } = useWater(selectedDate);
 
-    // Meal observations (Nutrition Estimation V1): pending queue + photo logging modal.
-    const { pending, isPendingLoading } = useMealObservations();
+    // Meal observations (Nutrition Estimation V1): photo logging modal.
     const [logModal, setLogModal] = useState<{ open: boolean; nonce: number }>({ open: false, nonce: 0 });
     const openLogModal = useCallback(() => setLogModal((m) => ({ open: true, nonce: m.nonce + 1 })), []);
     const closeLogModal = useCallback(() => setLogModal((m) => ({ ...m, open: false })), []);
-    const [resolveId, setResolveId] = useState<number | null>(null);
 
     const [text, setText] = useState("");
     const [toast, setToast] = useState("");
@@ -785,13 +727,6 @@ export default function NutritionPage() {
                 {/* Input */}
                 <AIInput dateLabel={dateLabel} value={text} setValue={setText} onParse={handleSubmit} onManual={() => openModal("Breakfast", null)} onPhotoLog={openLogModal} isParsing={isParsing} />
 
-                {/* Pointer to the pending queue — the card lives near the page bottom */}
-                {!isPendingLoading && pending.length > 0 && (
-                    <div style={{ fontSize: 12, color: "var(--faint)", marginTop: -4 }}>
-                        {pending.length} meal{pending.length === 1 ? "" : "s"} waiting for review — see “Pending meals” below.
-                    </div>
-                )}
-
                 {/* Food log */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
                     <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text)" }}>Food log</h2>
@@ -819,10 +754,11 @@ export default function NutritionPage() {
                     </div>
                 )}
 
-                {/* Pending meals — reference-pending + unconfirmed drafts (design spec §7) */}
-                {(isPendingLoading || pending.length > 0) && (
-                    <PendingMeals rows={pending} isLoading={isPendingLoading} onOpen={setResolveId} />
-                )}
+                {/* Dataset attribution (CC BY-SA 4.0 obligation for the reference catalog). */}
+                <p style={{ marginTop: 24, fontSize: 11, lineHeight: 1.5, color: "var(--faint)" }}>
+                    Nutrition reference data: Thai Food Composition Tables (INMU), ThaiFCD 2015 snapshot,
+                    and ingredient data via the BaoWio datasets — CC BY-SA 4.0.
+                </p>
             </main>
 
             <AddFoodModal key={modal.nonce} open={modal.open} meal={modal.meal} initial={modal.editing}
@@ -831,11 +767,6 @@ export default function NutritionPage() {
 
             <LogMealModal key={`log-${logModal.nonce}`} open={logModal.open}
                 defaultDate={selectedDate} onClose={closeLogModal} onLogged={flash} />
-
-            {resolveId !== null && (
-                <PendingMealDialog key={resolveId} observationId={resolveId}
-                    onClose={() => setResolveId(null)} onLogged={flash} />
-            )}
 
             <Toast msg={toast} />
 
