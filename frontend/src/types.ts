@@ -285,12 +285,27 @@ export interface ObservationDetail extends PendingObservation {
 
 // ——— Calculation + explanation (design spec §4, §6) ———
 
+/** Provenance of one component's numbers (ADR 0026): which catalog row (if
+ * any) backed it — snake_case, mirrored from the backend calculation jsonb. */
+export interface ComponentReferenceInfo {
+    id: number;
+    provider: string;
+    provider_food_code: string;
+    name_th: string | null;
+    name_en: string | null;
+    score: number;
+}
+
 export interface MealComponentBreakdown {
     name: string;
     /** After consumed_fraction applied. */
     consumed_weight_g: MassRange;
     /** Per-nutrient contribution (grams for macros, kcal for calories). */
     contribution: Record<keyof MealMacronutrients, MassRange>;
+    /** True when the numbers come from the kind prior, not a catalog reference (ADR 0026). */
+    estimated?: boolean;
+    /** The catalog row that backed this component, when one was matched. */
+    reference?: ComponentReferenceInfo | null;
 }
 
 export interface CalculationResult {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { mealObservationApi } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type {
@@ -7,16 +7,9 @@ import type {
     CreateMealObservationInput,
     CreateOutcome,
     InterpretOutcome,
-    MealObservationReference,
-    ObservationDetailWithExplanation,
-    PendingObservation,
 } from "@/types";
 
 interface UseMealObservationsReturn {
-    // Pending queue (reference-pending + unconfirmed drafts)
-    pending: PendingObservation[];
-    isPendingLoading: boolean;
-
     // Actions (throw on failure so callers can render the error)
     interpret: (
         menuName: string,
@@ -25,32 +18,22 @@ interface UseMealObservationsReturn {
     ) => Promise<InterpretOutcome>;
     create: (input: CreateMealObservationInput) => Promise<CreateOutcome>;
     confirm: (id: number) => Promise<CalculateObservationOutcome>;
-    resolve: (id: number, referenceId: number) => Promise<CalculateObservationOutcome>;
 
     // Loading states
     isInterpreting: boolean;
     isCreating: boolean;
     isConfirming: boolean;
-    isResolving: boolean;
 }
 
 /**
- * Meal Observation data for the Nutrition Estimation V1 flow. Mutations throw on
- * failure — the modal/dialog catches and renders the message itself.
- * Confirm dual-writes central values into nutrition_logs server-side, so it
+ * Meal Observation actions for the Nutrition Estimation flow (ADR 0026 — saves
+ * never block, so there is no pending queue anymore). Mutations throw on
+ * failure — the modal catches and renders the message itself. Confirm
+ * dual-writes central values into nutrition_logs server-side, so it
  * invalidates the nutrition queries (daily totals change).
  */
 export function useMealObservations(): UseMealObservationsReturn {
     const queryClient = useQueryClient();
-
-    const { data: pending = [], isLoading: isPendingLoading } = useQuery({
-        queryKey: queryKeys.mealObservations.pending(),
-        queryFn: async () => {
-            const res = await mealObservationApi.listPending();
-            if (res.success && res.data) return res.data;
-            return [];
-        },
-    });
 
     const interpretMutation = useMutation({
         mutationFn: async ({
@@ -75,7 +58,6 @@ export function useMealObservations(): UseMealObservationsReturn {
             throw new Error(res.error ?? "Failed to save the meal");
         },
         onSuccess: () => {
-            // Created observations may land in the pending queue (reference_pending/draft).
             queryClient.invalidateQueries({ queryKey: queryKeys.mealObservations.all });
         },
     });
@@ -94,36 +76,20 @@ export function useMealObservations(): UseMealObservationsReturn {
         },
     });
 
-    const resolveMutation = useMutation({
-        mutationFn: async ({ id, referenceId }: { id: number; referenceId: number }) => {
-            const res = await mealObservationApi.resolve(id, referenceId);
-            if (res.success && res.data) return res.data;
-            throw new Error(res.error ?? "Failed to resolve the reference");
-        },
-        onSuccess: () => {
-            // Resolve only recalculates the observation — nutrition/history keys
-            // stay untouched here; confirm is what dual-writes into nutrition_logs.
-            queryClient.invalidateQueries({ queryKey: queryKeys.mealObservations.all });
-        },
-    });
-
     // Use refs to hold stable references to mutation methods
     const interpretRef = useRef(interpretMutation.mutateAsync);
     const createRef = useRef(createMutation.mutateAsync);
     const confirmRef = useRef(confirmMutation.mutateAsync);
-    const resolveRef = useRef(resolveMutation.mutateAsync);
 
     // Keep refs updated via effects (not during render)
     useEffect(() => {
         interpretRef.current = interpretMutation.mutateAsync;
         createRef.current = createMutation.mutateAsync;
         confirmRef.current = confirmMutation.mutateAsync;
-        resolveRef.current = resolveMutation.mutateAsync;
     }, [
         interpretMutation.mutateAsync,
         createMutation.mutateAsync,
         confirmMutation.mutateAsync,
-        resolveMutation.mutateAsync,
     ]);
 
     const interpret = useCallback(
@@ -139,58 +105,12 @@ export function useMealObservations(): UseMealObservationsReturn {
 
     const confirm = useCallback(async (id: number) => confirmRef.current(id), []);
 
-    const resolve = useCallback(
-        async (id: number, referenceId: number) => resolveRef.current({ id, referenceId }),
-        [],
-    );
-
     return {
-        pending,
-        isPendingLoading,
         interpret,
         create,
         confirm,
-        resolve,
         isInterpreting: interpretMutation.isPending,
         isCreating: createMutation.isPending,
         isConfirming: confirmMutation.isPending,
-        isResolving: resolveMutation.isPending,
     };
-}
-
-/** Full observation detail (components + latest revision + reference + explanation). */
-export function useMealObservationDetail(id: number | null) {
-    return useQuery({
-        // The key carries the id as-is (null while disabled) — no fake id ever
-        // lands in a cache key.
-        queryKey: queryKeys.mealObservations.detail(id),
-        queryFn: async (): Promise<ObservationDetailWithExplanation> => {
-            if (id === null) {
-                // Unreachable: the query is disabled without an id.
-                throw new Error("No meal observation id");
-            }
-            const res = await mealObservationApi.getDetail(id);
-            if (res.success && res.data) return res.data;
-            throw new Error(res.error ?? "Failed to load the meal");
-        },
-        enabled: id != null,
-    });
-}
-
-/**
- * Reference search for the pending-meal resolution picker. `query` should be the
- * debounced, trimmed term; pass null to disable the query entirely (the server
- * 422s on a missing q, so empty input never hits the wire). Results come back
- * already mapped to the shared candidate shape at the api layer.
- */
-export function useReferenceSearch(query: string | null) {
-    return useQuery({
-        queryKey: queryKeys.mealObservations.referenceSearch(query ?? ""),
-        queryFn: async (): Promise<MealObservationReference[]> => {
-            const res = await mealObservationApi.searchReferenceCandidates(query as string);
-            if (res.success && res.data) return res.data;
-            throw new Error(res.error ?? "Reference search failed");
-        },
-        enabled: query !== null && query.trim().length > 0,
-    });
 }
