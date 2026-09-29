@@ -1,11 +1,102 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuthContext } from "@/context/useAuthContext";
+import { authApi } from "@/lib/api/auth";
+
+// Minimal Google Identity Services typings — button flow only.
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize(config: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+          }): void;
+          renderButton(element: HTMLElement, options: Record<string, unknown>): void;
+        };
+      };
+    };
+  }
+}
+
+const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
+
+function loadGisScript(): Promise<void> {
+  const existing = document.querySelector<HTMLScriptElement>(
+    `script[src="${GIS_SCRIPT_SRC}"]`
+  );
+  if (existing) {
+    return window.google
+      ? Promise.resolve()
+      : new Promise((resolve, reject) => {
+          existing.addEventListener("load", () => resolve());
+          existing.addEventListener("error", () =>
+            reject(new Error("Google script failed to load."))
+          );
+        });
+  }
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = GIS_SCRIPT_SRC;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Google script failed to load."));
+    document.head.appendChild(script);
+  });
+}
 
 export default function LoginPage() {
-  const { login } = useAuthContext();
+  const { login, loginWithGoogle } = useAuthContext();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [googleError, setGoogleError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const googleRenderedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function renderGoogleButton() {
+      try {
+        const config = await authApi.googleConfig();
+        const clientId = config.data?.google_client_id;
+        if (!clientId || cancelled) return;
+
+        await loadGisScript();
+        if (cancelled || !window.google || !googleButtonRef.current) return;
+
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async ({ credential }) => {
+            const result = await loginWithGoogle(credential);
+            if (!result.success) {
+              setGoogleError(result.error || "Google login failed.");
+            }
+          },
+        });
+
+        // StrictMode double-effect guard — renderButton appends, never replaces.
+        if (googleRenderedRef.current) return;
+        googleRenderedRef.current = true;
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: "filled_black",
+          size: "large",
+          shape: "pill",
+          text: "signin_with",
+          width: 320,
+        });
+      } catch {
+        // Google login is optional — config failure just leaves the button hidden.
+      }
+    }
+
+    renderGoogleButton();
+    return () => {
+      cancelled = true;
+    };
+  }, [loginWithGoogle]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,7 +132,7 @@ export default function LoginPage() {
             Frictionless Tracker
           </h1>
           <p className="text-sm text-[var(--muted-foreground)] mt-2">
-            Enter your password to continue
+            Sign in to continue
           </p>
         </div>
 
@@ -103,6 +194,18 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+        {googleError && (
+          <div className="mt-4 px-4 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-sm animate-fade-in">
+            {googleError}
+          </div>
+        )}
+
+        {/* GIS injects its iframe here; hidden entirely when Google is not configured */}
+        <div
+          ref={googleButtonRef}
+          className="mt-6 flex justify-center [&:empty]:hidden"
+        />
 
         <p className="text-center text-xs text-[var(--muted-foreground)]/60 mt-6">
           Personal workout tracker · Secured access

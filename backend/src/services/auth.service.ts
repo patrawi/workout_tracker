@@ -14,6 +14,7 @@ export const AUTH_PUBLIC_PATHS = new Set([
   "/",
   "/api/auth/login",
   "/api/auth/google",
+  "/api/auth/google-config",
   "/api/auth/logout",
   "/api/auth/verify",
   "/health",
@@ -95,6 +96,8 @@ export interface AuthService {
   isPublicPath(path: string): boolean;
   handleLogin(body: { password: string }, jwt: JwtService, auth?: AuthCookie): Promise<Record<string, unknown>>;
   handleGoogleLogin(body: { id_token: string }, jwt: JwtService, auth?: AuthCookie): Promise<Record<string, unknown>>;
+  /** Public Google Identity Services config — client_id only (not a secret). */
+  googleConfig(): Record<string, unknown>;
   handleLogout(auth?: AuthCookie): Record<string, unknown>;
   handleVerify(jwt: JwtService, auth?: AuthCookie): Promise<Record<string, unknown>>;
   resolveUserId(jwt: JwtService, auth?: AuthCookie): Promise<number>;
@@ -232,6 +235,10 @@ export function createAuthService(config: ConfigService, deps: AuthServiceDeps =
         success: true,
         user: { id: user.id, email: user.email, name: user.name, picture: user.picture },
       };
+    },
+
+    googleConfig(): Record<string, unknown> {
+      return ok({ google_client_id: config.googleClientId || null });
     },
 
     handleLogout(auth?: AuthCookie): Record<string, unknown> {

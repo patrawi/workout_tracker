@@ -35,6 +35,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loginWithGoogle = useCallback(async (credential: string) => {
+    try {
+      const res = await authApi.googleLogin(credential);
+
+      if (res.success) {
+        setIsAuthenticated(true);
+        return { success: true };
+      }
+      return { success: false, error: res.error || "Google login failed." };
+    } catch {
+      return { success: false, error: "Cannot reach the server." };
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     await authApi.logout();
     setIsAuthenticated(false);
@@ -42,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, isCheckingAuth, login, logout }}
+      value={{ isAuthenticated, isCheckingAuth, login, loginWithGoogle, logout }}
     >
       {children}
     </AuthContext.Provider>
