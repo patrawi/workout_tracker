@@ -13,6 +13,7 @@ import { registerProfileRoutes } from "./routes/profile.routes";
 import { registerNutritionRoutes } from "./routes/nutrition.routes";
 import { registerNutritionEstimationRoutes } from "./routes/nutrition-estimation.routes";
 import { registerWaterRoutes } from "./routes/water.routes";
+import { registerGymsRoutes } from "./routes/gyms.routes";
 import { registerFoodCatalogRoutes } from "./routes/food-catalog.routes";
 import { registerHistoryRoutes } from "./routes/history.routes";
 import { registerCoachRoutes } from "./routes/coach.routes";
@@ -141,6 +142,7 @@ export function createApp(ctx: AppContext) {
             body: authService.googleLoginBodySchema,
           },
         )
+        .get("/auth/google-config", () => authService.googleConfig())
         .post("/auth/logout", ({ cookie: { auth } }) => authService.handleLogout(auth))
         .get("/auth/verify", async ({ jwt, cookie: { auth } }) =>
           authService.handleVerify(jwt, auth),
@@ -170,6 +172,7 @@ export function createApp(ctx: AppContext) {
             (a) => registerNutritionRoutes(a, ctx),
             (a) => registerNutritionEstimationRoutes(a, ctx),
             (a) => registerWaterRoutes(a, ctx),
+            (a) => registerGymsRoutes(a, ctx),
             (a) => registerFoodCatalogRoutes(a, ctx),
             (a) => registerHistoryRoutes(a, ctx),
             (a) => registerCoachRoutes(a, ctx),
