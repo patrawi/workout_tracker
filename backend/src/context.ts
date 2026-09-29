@@ -9,6 +9,7 @@ import { createRestDayRepository } from "./repositories/rest-day.repository";
 import { createHistoryRepository } from "./repositories/history.repository";
 import { createNutritionRepository } from "./repositories/nutrition.repository";
 import { createWaterRepository } from "./repositories/water.repository";
+import { createGymsRepository } from "./repositories/gyms.repository";
 import { createFoodCatalogRepository } from "./repositories/food-catalog.repository";
 import { createCoachPlanRepository } from "./repositories/coach-plan.repository";
 import { createCoachKnowledgeRepository } from "./repositories/coach-knowledge.repository";
@@ -25,6 +26,7 @@ import { createProfileService } from "./services/profile.service";
 import { createWorkoutService } from "./services/workout.service";
 import { createNutritionService } from "./services/nutrition.service";
 import { createWaterService } from "./services/water.service";
+import { createGymsService } from "./services/gyms.service";
 import { createFoodCatalogService } from "./services/food-catalog.service";
 import type { FoodCatalogService } from "./services/food-catalog.service";
 import { createCoachService } from "./services/coach.service";
@@ -41,6 +43,7 @@ import type { WorkoutService } from "./services/workout.service";
 import type { NutritionService } from "./services/nutrition.service";
 import type { NutritionEstimationService } from "./nutrition-estimation/service";
 import type { WaterService } from "./services/water.service";
+import type { GymsService } from "./services/gyms.service";
 import type { ConfigService } from "./services/config.service";
 import type { AuthService } from "./services/auth.service";
 
@@ -54,6 +57,7 @@ export interface AppContext {
   nutritionService: NutritionService;
   nutritionEstimationService: NutritionEstimationService;
   waterService: WaterService;
+  gymsService: GymsService;
   foodCatalogService: FoodCatalogService;
   coachService: CoachService;
   configService: ConfigService;
@@ -73,6 +77,7 @@ export function createAppContext(
   const historyRepo = createHistoryRepository(db);
   const nutritionRepo = createNutritionRepository(db);
   const waterRepo = createWaterRepository(db);
+  const gymsRepo = createGymsRepository(db);
   const foodCatalogRepo = createFoodCatalogRepository(db);
   const coachPlanRepo = createCoachPlanRepository(db);
   const coachKnowledgeRepo = createCoachKnowledgeRepository(db);
@@ -106,8 +111,14 @@ export function createAppContext(
     interpreter: config.deepseekApiKey
       ? createDeepSeekVisionInterpreter({ apiKey: config.deepseekApiKey })
       : undefined,
+    // Query embedder for the search vector tier (ADR 0014) — same client the
+    // matcher fallback uses; harmless when the key is absent.
+    embed: config.geminiApiKey
+      ? (text) => embeddingClient.embed(text)
+      : undefined,
   });
   const waterService = createWaterService(waterRepo);
+  const gymsService = createGymsService(gymsRepo);
   const profileService = createProfileService(profileRepo, bodyweightService);
   const usersRepo = createUsersRepository(db);
   const authService = createAuthService(config, { usersRepo });
@@ -131,6 +142,7 @@ export function createAppContext(
     nutritionService,
     nutritionEstimationService,
     waterService,
+    gymsService,
     foodCatalogService,
     coachService,
     configService: config,

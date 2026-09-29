@@ -180,6 +180,14 @@ _Avoid_: Immediate weight jump at 10 reps
 The default isolation progression cycle: use one higher-rep range such as 12 to 15 reps, add weight after the user reaches the saved top range across all planned sets, then reset to the same range at the new weight.
 _Avoid_: Compound rep promotion
 
+**Gym**:
+A named physical training location the user records once and reuses. A Workout Session may name the Gym it happened at.
+_Avoid_: Gym profile, location, primary/secondary gym
+
+**Gym Profile**:
+Per-Gym context about equipment and practice at that Gym, consulted when training there. When a Gym has no Gym Profile, standard Saved Plans apply unchanged.
+_Avoid_: Global profile, Workout Profile
+
 ## Nutrition Estimation Language
 
 **Meal Observation**:
@@ -235,12 +243,16 @@ The single normalized, locally queryable catalog through which nutrition referen
 _Avoid_: Provider-blind merged data, separate cuisine silos
 
 **Reference Coverage Gap**:
-The absence of a sufficiently relevant nutrition reference for a Meal Observation. It must not be hidden by forcing a semantically similar but compositionally inappropriate match.
+The absence of a sufficiently relevant nutrition reference for a component. It results in a Kind Prior estimate, never a forced semantically similar but compositionally inappropriate match.
 _Avoid_: Nearest-vector-as-truth, fabricated reference
 
 **Reference-Pending Meal**:
-A saved Meal Observation whose nutrition calculation is deferred because no suitable reference is available. It preserves the original evidence without fabricating macros and may be resolved when an appropriate reference is added or selected.
+A legacy state of a saved Meal Observation whose nutrition calculation was deferred because no suitable reference was available. Observations created after ADR 0026 never enter this state — they always carry a calculation.
 _Avoid_: Failed log, zero-macro meal
+
+**Kind Prior**:
+The coarse per-100 g composition assumed for a component of each kind (rice, main, side, broth, other) when no usable catalog reference exists. Estimates derived from it are labeled estimated, never presented as reference-backed.
+_Avoid_: VLM-guessed calories, fabricated reference
 
 **Nutrition Estimate Revision**:
 A newly confirmed calculation for an existing Meal Observation, linked to the reference provider and version that produced it. It supersedes the displayed estimate without erasing earlier confirmed or pending history.

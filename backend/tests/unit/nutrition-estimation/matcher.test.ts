@@ -6,6 +6,9 @@ import {
   createReferenceMatcher,
   scoreReference,
   tokenizeName,
+  VECTOR_AMBIGUOUS_THRESHOLD,
+  VECTOR_AUTO_THRESHOLD,
+  VECTOR_MARGIN_THRESHOLD,
   type ReferenceMatcherRepo,
   type ReferenceRow,
 } from "../../../src/nutrition-estimation/matching/matcher";
@@ -163,31 +166,64 @@ describe("matchReference — tiers", () => {
   });
 });
 
-describe("matchReference — embedding fallback (ADR 0014)", () => {
+describe("matchReference — vector fallback on its own scale (ADR 0014, rescaled 2026-09-29)", () => {
   const pool = [
     row({ id: 1, nameEn: "Moo Ping" }),
     row({ id: 2, nameEn: "Grilled Chicken" }),
   ];
 
-  test("vector fallback engaged only when lexical best < auto threshold; combines 0.6 lexical + 0.4 vector", async () => {
+  test("dominant vector hit auto-selects at similarity ≥ 0.85 with margin over the runner-up", async () => {
     const searchByEmbedding = mock(async () => [
-      { ...row({ id: 2, nameEn: "Grilled Chicken" }), similarity: 0.9 },
+      { ...row({ id: 2, nameEn: "Grilled Chicken" }), similarity: 0.889 },
+      { ...row({ id: 1, nameEn: "Moo Ping" }), similarity: 0.843 },
     ]);
     const repo = makeRepo(pool, searchByEmbedding);
     const embed = mock(async (text: string) => [0.1, 0.2, text.length]);
     const matcher = createReferenceMatcher(repo, { embed });
-    // "grilled pork": lexical best = 0.5 ("Grilled Chicken" shares "grilled") < 0.82.
-    const outcome = await matcher.matchReference("grilled pork");
+    // Lexical scores 0 for both rows — the vector path decides.
+    const outcome = await matcher.matchReference("ต้มยำกุ้ง");
     expect(searchByEmbedding).toHaveBeenCalledTimes(1);
-    expect(embed).toHaveBeenCalledWith("grilled pork");
+    expect(embed).toHaveBeenCalledWith("ต้มยำกุ้ง");
+    expect(outcome.tier).toBe("auto");
+    if (outcome.tier === "auto") {
+      expect(outcome.reference.id).toBe(2);
+      expect(outcome.score).toBeCloseTo(0.889);
+    }
+  });
+
+  test("vector hit between 0.70 and 0.85 → ambiguous candidate carrying its similarity", async () => {
+    const searchByEmbedding = mock(async () => [
+      { ...row({ id: 2, nameEn: "Grilled Chicken" }), similarity: 0.813 },
+    ]);
+    const repo = makeRepo(pool, searchByEmbedding);
+    const matcher = createReferenceMatcher(repo, { embed: async () => [1] });
+    const outcome = await matcher.matchReference("ไข่ดาว");
     expect(outcome.tier).toBe("ambiguous");
     if (outcome.tier === "ambiguous") {
-      // Combined for id 2: 0.6×0.5 + 0.4×0.9 = 0.66; id 1 has no vector hit → lexical 0.
       expect(outcome.candidates[0]!.id).toBe(2);
-      expect(outcome.candidates[0]!.score).toBeCloseTo(0.66);
-      expect(outcome.candidates[1]!.id).toBe(1);
-      expect(outcome.candidates[1]!.score).toBeCloseTo(0);
+      expect(outcome.candidates[0]!.score).toBeCloseTo(0.813);
     }
+  });
+
+  test("vector best below 0.70 → falls through to the lexical conclusion (gap)", async () => {
+    const searchByEmbedding = mock(async () => [
+      { ...row({ id: 2, nameEn: "Grilled Chicken" }), similarity: 0.6 },
+    ]);
+    const repo = makeRepo(pool, searchByEmbedding);
+    const matcher = createReferenceMatcher(repo, { embed: async () => [1] });
+    const outcome = await matcher.matchReference("something unrelated");
+    expect(outcome.tier).toBe("gap");
+  });
+
+  test("vector auto blocked when the runner-up trails by less than 0.03 → ambiguous", async () => {
+    const searchByEmbedding = mock(async () => [
+      { ...row({ id: 2, nameEn: "Grilled Chicken" }), similarity: 0.889 },
+      { ...row({ id: 1, nameEn: "Moo Ping" }), similarity: 0.88 },
+    ]);
+    const repo = makeRepo(pool, searchByEmbedding);
+    const matcher = createReferenceMatcher(repo, { embed: async () => [1] });
+    const outcome = await matcher.matchReference("ต้มยำกุ้ง");
+    expect(outcome.tier).toBe("ambiguous");
   });
 
   test("vector fallback NOT engaged when lexical best ≥ auto threshold", async () => {
@@ -208,6 +244,12 @@ describe("matchReference — embedding fallback (ADR 0014)", () => {
     const outcome = await matcher.matchReference("grilled pork");
     expect(searchByEmbedding).not.toHaveBeenCalled();
     expect(outcome.tier).toBe("gap"); // lexical best 0.5 < 0.60
+  });
+
+  test("vector thresholds are the provisional calibrated constants", () => {
+    expect(VECTOR_AUTO_THRESHOLD).toBe(0.85);
+    expect(VECTOR_MARGIN_THRESHOLD).toBe(0.03);
+    expect(VECTOR_AMBIGUOUS_THRESHOLD).toBe(0.7);
   });
 });
 

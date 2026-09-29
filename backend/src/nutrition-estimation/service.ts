@@ -2,14 +2,17 @@
 // 0016, 0020, 0022). Persists Meal Observations, runs tiered reference matching,
 // calculates estimates via the domain engine, and dual-writes confirmed central
 // values into nutrition_logs with provenance markers.
-import { calculateNutrition } from "./calculation/engine";
+import { calculateNutrition, calculateNutritionPerComponent } from "./calculation/engine";
+import { ESTIMATE_FALLBACK_PER100 } from "./estimate-fallback";
 import {
   COMPONENT_KINDS,
   QUARTILE_FRACTIONS,
   type CalculationResult,
   type ComponentKind,
+  type ComponentReferenceInfo,
   type IngredientEvidence,
   type LatentHint,
+  type Macronutrients,
   type MassRange,
   type MatchTier,
   type PortionComponentInput,
@@ -36,6 +39,15 @@ export type MatchOutcomeLike =
   | { tier: "auto"; reference: ReferenceRow; score: number }
   | { tier: "ambiguous"; candidates: Array<ReferenceRow & { score: number }> }
   | { tier: "gap" };
+
+/** Per-component matching outcome (ADR 0026): the chosen per-100 g source. */
+interface ComponentResolution {
+  per100: Macronutrients;
+  estimated: boolean;
+  /** Full matched catalog row, when the component is reference-backed. */
+  row?: ReferenceRow;
+  score?: number;
+}
 
 export interface InterpreterLike {
   interpret(input: {
@@ -129,6 +141,8 @@ export interface ReferenceSearchItem {
   fat: number;
   alcohol: number;
   calories: number;
+  /** pgvector similarity — present only on vector-tier results (ADR 0014). */
+  score?: number;
 }
 
 export interface ReferenceSearchResult {
@@ -137,6 +151,11 @@ export interface ReferenceSearchResult {
 
 const SEARCH_DEFAULT_LIMIT = 10;
 const SEARCH_MAX_LIMIT = 25;
+// Exploratory search floor, deliberately below the matcher's 0.7 ambiguous
+// bar: the user judges the list themselves, so anything plausibly related is
+// worth surfacing (calibrated 2026-09-29: unrelated queries score 0.60-0.73,
+// true items 0.75+). Auto-matching keeps its stricter thresholds.
+const SEARCH_VECTOR_FLOOR = 0.65;
 
 function clampSearchLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) return SEARCH_DEFAULT_LIMIT;
@@ -399,8 +418,10 @@ export function createNutritionEstimationService(deps: {
   repo: NutritionEstimationRepository;
   matcher: MatcherLike;
   interpreter?: InterpreterLike;
+  /** Query embedder for the search vector tier (ADR 0014); omitted → lexical only. */
+  embed?: (text: string) => Promise<number[]>;
 }) {
-  const { repo, matcher, interpreter } = deps;
+  const { repo, matcher, interpreter, embed } = deps;
 
   /** Central values of the latest calculation, for the ADR 0022 dual-write. */
   function centralValues(calculation: CalculationResult) {
@@ -478,10 +499,10 @@ export function createNutritionEstimationService(deps: {
       }),
     });
 
-    /** Shared manual/auto path: calculate, persist the draft, save a revision. */
+    /** Shared manual path: one user-chosen reference for the whole meal. */
     async function persistCalculatedDraft(
       reference: ReferenceRow,
-      tier: "manual" | "auto",
+      tier: "manual",
     ): Promise<CreateObservationResult> {
       const calculation = calculateNutrition(components, { per100: reference.per100 });
       const observationId = await repo.insertObservation(
@@ -502,18 +523,82 @@ export function createNutritionEstimationService(deps: {
       };
     }
 
-    /** Reference-pending path: no reference persisted, no calculation. */
-    async function persistReferencePending(
-      match: Extract<MatchOutcomeLike, { tier: "ambiguous" | "gap" }>,
-    ): Promise<CreateObservationResult> {
+    /**
+     * ADR 0026: match each component against the catalog on its own name.
+     * Anything without a usable reference — no match, an ambiguous tie, or a
+     * zero-composition row — is calculated from its kind prior instead of
+     * blocking the save, so the observation never enters reference_pending
+     * and always produces numbers.
+     */
+    async function persistPerComponentDraft(): Promise<CreateObservationResult> {
+      const resolutions: ComponentResolution[] = [];
+      const estimateNotes: string[] = [];
+      for (const component of components) {
+        const match = await matcher.matchReference(component.name);
+        if (match.tier === "auto" && match.reference.per100.calories > 0) {
+          resolutions.push({
+            per100: match.reference.per100,
+            estimated: false,
+            row: match.reference,
+            score: match.score,
+          });
+          continue;
+        }
+        const kind = component.kind;
+        let reason: string;
+        if (match.tier === "auto") {
+          reason = "zero-kcal reference";
+        } else if (match.tier === "ambiguous") {
+          const names = match.candidates
+            .map((c) => c.nameTh ?? c.nameEn ?? `#${c.id}`)
+            .join(", ");
+          reason = `ambiguous reference (candidates: ${names})`;
+        } else {
+          reason = "no reference match";
+        }
+        estimateNotes.push(
+          `${reason} for '${component.name}' — estimated from '${kind}' prior`,
+        );
+        resolutions.push({ per100: ESTIMATE_FALLBACK_PER100[kind], estimated: true });
+      }
+
+      const tier: "auto" | "gap" = resolutions.every((r) => !r.estimated) ? "auto" : "gap";
+      const calculation = calculateNutritionPerComponent(components, (_c, i) => resolutions[i]!.per100);
+      calculation.drivers.push(...estimateNotes);
+      calculation.per_component = calculation.per_component.map((pc, i) => {
+        const r = resolutions[i]!;
+        return {
+          ...pc,
+          estimated: r.estimated,
+          reference: r.row
+            ? {
+                id: r.row.id,
+                provider: r.row.provider,
+                provider_food_code: r.row.providerFoodCode,
+                name_th: r.row.nameTh,
+                name_en: r.row.nameEn,
+                score: r.score ?? 0,
+              }
+            : null,
+        };
+      });
+
+      const primary = resolutions.find((r) => r.row)?.row ?? null;
       const observationId = await repo.insertObservation(
-        toRepoInput("reference_pending", null, match.tier, null),
+        toRepoInput("draft", primary?.id ?? null, tier, calculation),
       );
+      await repo.insertRevision({
+        observation_id: observationId,
+        reference_id: primary?.id ?? null,
+        reference_provider: primary?.provider ?? null,
+        reference_version: primary?.version ?? null,
+        calculation,
+      });
       const detail = (await repo.getObservationDetail(observationId, input.user_id))!;
       return {
         observation: detail,
-        match,
-        explanation: buildExplanation(detail, null),
+        match: tier === "auto" && primary ? { tier: "auto", reference: primary } : { tier: "gap" },
+        explanation: buildExplanation(detail, calculation),
       };
     }
 
@@ -526,17 +611,7 @@ export function createNutritionEstimationService(deps: {
       return await persistCalculatedDraft(reference, "manual");
     }
 
-    const match = await matcher.matchReference(menuName);
-
-    if (match.tier === "auto") {
-      return await persistCalculatedDraft(match.reference, "auto");
-    }
-
-    // Ambiguous: candidates go back to the caller for selection. Gap: Reference
-    // Coverage Gap → Reference-Pending Meal, no fabricated macros. Either way
-    // the observation waits as reference-pending with no reference and no
-    // calculation.
-    return await persistReferencePending(match);
+    return await persistPerComponentDraft();
   }
 
   /** Recalculate against a chosen reference and save a new pending revision. */
@@ -692,6 +767,25 @@ export function createNutritionEstimationService(deps: {
     const items = codeMatch
       ? [toSearchItem(codeMatch), ...lexical].slice(0, cap)
       : lexical.slice(0, cap);
+
+    // Vector tier (ADR 0014, own similarity scale): when lexical/substring
+    // results leave headroom, pgvector neighbors fill the rest — the fix for
+    // "ค้นไม่เจอ" queries that used to dead-end at zero rows.
+    if (
+      items.length < cap &&
+      embed &&
+      typeof repo.searchByEmbedding === "function"
+    ) {
+      const queryEmbedding = await embed(trimmed);
+      const hits = await repo.searchByEmbedding(queryEmbedding, cap);
+      const seen = new Set(items.map((item) => item.id));
+      const vectorItems = hits
+        .filter((hit) => hit.similarity >= SEARCH_VECTOR_FLOOR && !seen.has(hit.id))
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, cap - items.length)
+        .map((hit) => ({ ...toSearchItem(hit), score: hit.similarity }));
+      items.push(...vectorItems);
+    }
     return { items };
   }
 

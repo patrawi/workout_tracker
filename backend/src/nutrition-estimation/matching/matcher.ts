@@ -1,8 +1,8 @@
-// Reference matching tiers (ADR 0020) over hybrid retrieval (ADR 0014, spec §7):
-// exact food-code lookup first, then lexical token overlap as primary, with
-// pgvector similarity only a fallback when the lexical best score is below the
-// auto threshold. Matching uses ONLY the menu name — Weekly Menu Prior ranking
-// is deferred (ADR 0021).
+// Reference matching tiers (ADR 0020, rescored per ADR 0026): exact food-code
+// lookup first, then lexical token overlap; when the lexical best misses the
+// auto bar, pgvector similarity decides ON ITS OWN SCALE (the old 0.6/0.4
+// blend into the lexical scale was mathematically dead). Matching is invoked
+// per meal component since ADR 0026 — the menu name is no longer the match key.
 import type { ReferenceRow } from "../types";
 
 // Compatibility re-export: ReferenceRow lives in ../types (domain types).
@@ -27,9 +27,15 @@ export const AUTO_SCORE_THRESHOLD = 0.82;
 export const AUTO_MARGIN_THRESHOLD = 0.08;
 export const AMBIGUOUS_SCORE_THRESHOLD = 0.6;
 
-/** Vector weight when combining with lexical (ADR 0014 hybrid: 0.6 lexical / 0.4 vector). */
-const LEXICAL_WEIGHT = 0.6;
-const VECTOR_WEIGHT = 0.4;
+// Vector thresholds on their OWN similarity scale (ADR 0014, calibrated
+// 2026-09-29 on 12 known-answer queries against the 1,357-row catalog: exact
+// hits 0.87–1.0, near dishes 0.75–0.82, unrelated 0.60–0.73). The old
+// 0.6-lexical/0.4-vector blend was mathematically dead — a weighted cosine can
+// never clear the lexical-scale bars. Upgrade path: recalibrate from own
+// logged meals (few-shot phase 3).
+export const VECTOR_AUTO_THRESHOLD = 0.85;
+export const VECTOR_MARGIN_THRESHOLD = 0.03;
+export const VECTOR_AMBIGUOUS_THRESHOLD = 0.7;
 
 export interface MatcherOptions {
   /** Produces the query embedding for the pgvector fallback. Required to engage the fallback. */
@@ -92,30 +98,9 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
     const pool = await repo.listReferences();
     if (pool.length === 0) return { tier: "gap" };
 
-    let scored: Scored[] = pool
+    const scored: Scored[] = pool
       .map((ref) => ({ ref, score: scoreReference(menuName, ref) }))
       .sort((a, b) => b.score - a.score);
-
-    // Vector fallback (ADR 0014): only when the lexical best is below the auto
-    // threshold AND both an embedder and repo.searchByEmbedding are available.
-    const canUseVector =
-      scored.length > 0 &&
-      scored[0]!.score < autoThreshold &&
-      typeof repo.searchByEmbedding === "function" &&
-      typeof opts.embed === "function";
-    if (canUseVector) {
-      const embedding = await opts.embed!(menuName);
-      const vectorHits = await repo.searchByEmbedding!(embedding);
-      const similarityById = new Map(vectorHits.map((hit) => [hit.id, hit.similarity]));
-      scored = scored
-        .map((s) => {
-          const similarity = similarityById.get(s.ref.id);
-          return similarity === undefined
-            ? s
-            : { ref: s.ref, score: LEXICAL_WEIGHT * s.score + VECTOR_WEIGHT * similarity };
-        })
-        .sort((a, b) => b.score - a.score);
-    }
 
     const best = scored[0]!;
     const runnerUp = scored[1];
@@ -125,6 +110,34 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
     ) {
       return { tier: "auto", reference: best.ref, score: best.score };
     }
+
+    // Vector fallback (ADR 0014): engaged when the lexical best misses the
+    // auto bar, scored on its own similarity scale (see thresholds above).
+    const canUseVector =
+      typeof repo.searchByEmbedding === "function" &&
+      typeof opts.embed === "function";
+    if (canUseVector) {
+      const embedding = await opts.embed!(menuName);
+      const vectorHits = (await repo.searchByEmbedding!(embedding))
+        .filter((hit) => hit.similarity >= VECTOR_AMBIGUOUS_THRESHOLD)
+        .sort((a, b) => b.similarity - a.similarity);
+      const bestVector = vectorHits[0];
+      if (bestVector) {
+        const runnerUpVector = vectorHits[1];
+        if (
+          bestVector.similarity >= VECTOR_AUTO_THRESHOLD &&
+          (runnerUpVector === undefined ||
+            bestVector.similarity - runnerUpVector.similarity >= VECTOR_MARGIN_THRESHOLD)
+        ) {
+          return { tier: "auto", reference: bestVector, score: bestVector.similarity };
+        }
+        return {
+          tier: "ambiguous",
+          candidates: vectorHits.slice(0, 3).map((hit) => ({ ...hit, score: hit.similarity })),
+        };
+      }
+    }
+
     if (best.score >= ambiguousThreshold) {
       return {
         tier: "ambiguous",
