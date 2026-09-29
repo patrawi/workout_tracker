@@ -7,6 +7,7 @@ import {
   MessageSquare,
   ClipboardList,
   Edit3,
+  History,
 } from "lucide-react";
 import { useCoach } from "@/features/coach/hooks/useCoach";
 import { SUGGESTIONS } from "@/features/coach/coach.utils";
@@ -19,6 +20,12 @@ import { CoachPersona } from "@/features/coach/components/CoachPersona";
 import { KnowledgeDrawer } from "@/features/coach/components/KnowledgeDrawer";
 import { PlanView } from "@/features/coach/components/PlanView";
 import { KnowledgeEditorDrawer } from "@/features/coach/components/KnowledgeEditorDrawer";
+import { ChatHistoryDrawer } from "@/features/coach/components/ChatHistoryDrawer";
+import {
+  loadSessions,
+  saveSessions,
+  type CoachChatSession,
+} from "@/features/coach/coachHistory";
 import { KB_CATEGORIES, KB_ARTICLES } from "@/features/coach/data/knowledge";
 
 type CoachTab = "chat" | "plan";
@@ -34,15 +41,39 @@ interface CoachLocationState {
 }
 
 export default function CoachPage() {
-  const { messages, send, reset, typing } = useCoach();
+  const { messages, send, newChat, resume, typing } = useCoach();
   const location = useLocation();
   const navigate = useNavigate();
   const [drawer, setDrawer] = useState<DrawerState>({ open: false, id: null });
   const [tab, setTab] = useState<CoachTab>("chat");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sessions, setSessions] = useState<CoachChatSession[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const initialMessageSentRef = useRef(false);
   const started = messages.length > 0;
+
+  const openHistory = () => {
+    setSessions(loadSessions());
+    setHistoryOpen(true);
+  };
+  const handleResume = (session: CoachChatSession) => {
+    resume(session.messages);
+    // Resumed chat moves back into the current slot, out of the archive.
+    setSessions((list) => {
+      const rest = list.filter((s) => s.id !== session.id);
+      saveSessions(rest);
+      return rest;
+    });
+    setHistoryOpen(false);
+  };
+  const handleDeleteSession = (id: string) => {
+    setSessions((list) => {
+      const rest = list.filter((s) => s.id !== id);
+      saveSessions(rest);
+      return rest;
+    });
+  };
   // While streaming, the last coach bubble is empty until the first token —
   // show the typing dots in its place, not alongside it.
   const last = messages[messages.length - 1];
@@ -114,10 +145,21 @@ export default function CoachPage() {
             <div className="max-w-3xl mx-auto px-4 sm:px-6">
               {!started ? (
                 <div className="grid gap-5 pt-2">
-                  <p className="text-[var(--muted-foreground)] text-base">
-                    Ask about your training, nutrition, or technique — in Thai
-                    or English. I read your logs.
-                  </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-[var(--muted-foreground)] text-base">
+                      Ask about your training, nutrition, or technique — in Thai
+                      or English. I read your logs.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openHistory}
+                      aria-label="Chat history"
+                      title="Chat history"
+                      className="flex-none grid place-items-center w-10 h-10 rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer"
+                    >
+                      <History className="w-5 h-5" />
+                    </button>
+                  </div>
 
                   <CoachPersona onPlanWeek={() => send("Plan my week")} />
 
@@ -196,10 +238,18 @@ export default function CoachPage() {
                 </div>
               ) : (
                 <div className="grid gap-4 pt-2">
-                  <div className="flex justify-end items-center">
+                  <div className="flex justify-end items-center gap-2">
                     <button
                       type="button"
-                      onClick={reset}
+                      onClick={openHistory}
+                      aria-label="Chat history"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--border)] bg-white/5 text-[var(--foreground)] font-semibold text-[13px] cursor-pointer hover:brightness-110 transition"
+                    >
+                      <History className="w-3.5 h-3.5" /> History
+                    </button>
+                    <button
+                      type="button"
+                      onClick={newChat}
                       className="px-3 py-1.5 rounded-full border border-[var(--border)] bg-white/5 text-[var(--foreground)] font-semibold text-[13px] cursor-pointer hover:brightness-110 transition"
                     >
                       New chat
@@ -247,6 +297,14 @@ export default function CoachPage() {
       <KnowledgeEditorDrawer
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
+      />
+
+      <ChatHistoryDrawer
+        open={historyOpen}
+        sessions={sessions}
+        onClose={() => setHistoryOpen(false)}
+        onResume={handleResume}
+        onDelete={handleDeleteSession}
       />
     </div>
   );
