@@ -4,6 +4,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isCheckingAuth: boolean;
   login: (password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (credential: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 

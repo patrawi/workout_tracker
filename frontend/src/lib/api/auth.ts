@@ -11,6 +11,11 @@ export const authApi = {
     login: (password: string) =>
         api.post<{ success: boolean }>("/auth/login", { password }),
 
+    googleConfig: () => api.get<{ google_client_id: string | null }>("/auth/google-config"),
+
+    googleLogin: (idToken: string) =>
+        api.post<{ success: boolean }>("/auth/google", { id_token: idToken }),
+
     logout: async () => {
         const res = await api.post<void>("/auth/logout", {});
         clearPrivateBrowserState();
