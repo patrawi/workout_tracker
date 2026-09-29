@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { coachApi } from "@/lib/api/coach";
+import { sessionFromMessages, saveSessions, upsertSession, loadSessions } from "../coachHistory";
 import type { CoachMessage } from "../coach.types";
 
 const LS_KEY = "coach:msgs";
@@ -72,10 +73,23 @@ export function useCoach() {
         [messages, streaming],
     );
 
-    const reset = useCallback(() => {
+    /** Archive the current conversation (when it carries anything meaningful)
+     * and start fresh — the owner's rule: closing/starting a new chat keeps
+     * the old one in history instead of destroying it. */
+    const newChat = useCallback(() => {
+        const session = sessionFromMessages(crypto.randomUUID(), messages);
+        if (session) {
+            saveSessions(upsertSession(loadSessions(), session));
+        }
         setMessages([]);
         localStorage.removeItem(LS_KEY);
+    }, [messages]);
+
+    /** Pull an archived conversation back into the current slot. Removing it
+     * from the archive is the caller's job (the drawer owns that list). */
+    const resume = useCallback((messages: CoachMessage[]) => {
+        setMessages(messages);
     }, []);
 
-    return { messages, send, reset, typing: streaming };
+    return { messages, send, newChat, resume, typing: streaming };
 }
