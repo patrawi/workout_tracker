@@ -283,22 +283,25 @@ function calculateComponent(
 }
 
 /**
- * Calculate a plausible nutrition range for a meal observation from its
- * Portion Components and a Nutrition Reference Baseline.
+ * Calculate a plausible nutrition range where EVERY component carries its own
+ * per-100 g composition (per-component references / estimate priors —
+ * ADR 0026). The whole-meal single-reference call below is the legacy shape.
  * Throws InfeasibleEvidenceError when hard constraints conflict (ADR 0019).
  */
-export function calculateNutrition(
+export function calculateNutritionPerComponent(
   components: PortionComponentInput[],
-  reference: ReferenceMacros,
+  per100For: (component: PortionComponentInput, index: number) => Macronutrients,
 ): CalculationResult {
   const drivers = new Set<string>();
   const relaxedConstraints = new Set<string>();
   const hardReasons: string[] = [];
   const perComponent: ComponentNutrients[] = [];
 
-  for (const component of components) {
-    perComponent.push(calculateComponent(component, reference, drivers, relaxedConstraints, hardReasons));
-  }
+  components.forEach((component, index) => {
+    perComponent.push(
+      calculateComponent(component, { per100: per100For(component, index) }, drivers, relaxedConstraints, hardReasons),
+    );
+  });
 
   if (hardReasons.length > 0) {
     throw new InfeasibleEvidenceError(hardReasons);
@@ -324,4 +327,17 @@ export function calculateNutrition(
       contribution: { ...c.perMacro },
     })),
   };
+}
+
+/**
+ * Calculate a plausible nutrition range for a meal observation from its
+ * Portion Components and a single Nutrition Reference Baseline (legacy
+ * observation-wide shape — resolveReference and the manual path still use it).
+ * Throws InfeasibleEvidenceError when hard constraints conflict (ADR 0019).
+ */
+export function calculateNutrition(
+  components: PortionComponentInput[],
+  reference: ReferenceMacros,
+): CalculationResult {
+  return calculateNutritionPerComponent(components, () => reference.per100);
 }

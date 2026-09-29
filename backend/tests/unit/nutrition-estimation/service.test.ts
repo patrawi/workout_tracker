@@ -316,39 +316,87 @@ describe("createObservation — auto tier", () => {
   });
 });
 
-describe("createObservation — ambiguous tier", () => {
-  test("persists reference_pending with no reference and returns candidates", async () => {
+describe("createObservation — never blocks (ADR 0026)", () => {
+  test("gap-matched components fall back to the kind prior and still produce a calculation", async () => {
+    const { repo, state } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    const result = await service.createObservation(
+      estimatedInput({
+        components: [
+          { name: "ของไม่รู้จัก", kind: "main", weight_g: { low: 90, central: 100, high: 110 } },
+        ],
+      }),
+    );
+
+    expect(result.observation.status).toBe("draft");
+    expect(result.observation.match_tier).toBe("gap");
+    expect(result.observation.reference_id).toBeNull();
+    const calculation = result.observation.calculation!;
+    // 100 g central × 200 kcal/100 g (main prior) = 200 kcal.
+    expect(calculation.nutrients.calories.central).toBeCloseTo(200);
+    expect(calculation.drivers.some((d) => d.includes("ของไม่รู้จัก") && d.includes("main"))).toBe(true);
+    expect(state.revisions).toHaveLength(1);
+    expect(state.revisions[0].status).toBe("pending_confirmation");
+  });
+
+  test("a zero-kcal reference is treated as unusable and falls back to the prior", async () => {
+    const { repo, state } = createFakeRepo();
+    const zeroRef: ReferenceRow = {
+      ...REF,
+      id: 201,
+      providerFoodCode: "TFC-201",
+      per100: { protein: 0, carbs: 0, fat: 0, alcohol: 0, calories: 0 },
+    };
+    state.references.set(zeroRef.id, zeroRef);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(zeroRef) });
+
+    const result = await service.createObservation(estimatedInput());
+
+    // rice prior: 200 g × 130 kcal/100 g = 260 kcal.
+    expect(result.observation.calculation!.nutrients.calories.central).toBeCloseTo(260);
+    expect(result.observation.reference_id).toBeNull();
+    expect(result.observation.calculation!.drivers.join(" ")).toContain("zero-kcal");
+  });
+
+  test("per-component resolution mixes a matched reference with an estimated component", async () => {
     const { repo, state } = createFakeRepo();
     state.references.set(REF.id, REF);
+    const matcher: MatcherLike = {
+      matchReference: async (name: string) =>
+        name === "ไข่ไก่"
+          ? { tier: "auto", reference: REF, score: 0.95 }
+          : { tier: "gap" },
+    };
+    const service = createNutritionEstimationService({ repo, matcher });
+
+    const result = await service.createObservation(
+      estimatedInput({
+        components: [
+          { name: "ไข่ไก่", kind: "main", weight_g: { low: 90, central: 100, high: 110 } },
+          { name: "น้ำพริกไม่รู้จัก", kind: "side", weight_g: { low: 45, central: 50, high: 55 } },
+        ],
+      }),
+    );
+
+    const calculation = result.observation.calculation!;
+    // 100 g × 200 kcal/100 g (REF) + 50 g × 90 kcal/100 g (side prior) = 245.
+    expect(calculation.nutrients.calories.central).toBeCloseTo(245);
+    expect(result.observation.reference_id).toBe(REF.id);
+    expect(calculation.per_component[0]!.reference?.id).toBe(REF.id);
+    expect(calculation.per_component[0]!.estimated).toBe(false);
+    expect(calculation.per_component[1]!.estimated).toBe(true);
+  });
+
+  test("ambiguous matches become estimates with the candidates recorded in drivers", async () => {
+    const { repo } = createFakeRepo();
     const service = createNutritionEstimationService({ repo, matcher: ambiguousMatcher() });
 
     const result = await service.createObservation(estimatedInput());
 
-    expect(result.match.tier).toBe("ambiguous");
-    if (result.match.tier !== "ambiguous") throw new Error("unreachable");
-    expect(result.match.candidates).toHaveLength(3);
-    expect(result.observation.status).toBe("reference_pending");
-    expect(result.observation.match_tier).toBe("ambiguous");
-    expect(result.observation.reference_id).toBeNull();
-    expect(result.observation.calculation).toBeNull();
-    // No revision without a calculation.
-    expect(state.revisions).toHaveLength(0);
-  });
-});
-
-describe("createObservation — gap tier", () => {
-  test("persists a Reference-Pending Meal without calculation", async () => {
-    const { repo, state } = createFakeRepo();
-    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
-
-    const result = await service.createObservation(estimatedInput());
-
-    expect(result.match.tier).toBe("gap");
-    expect(result.observation.status).toBe("reference_pending");
-    expect(result.observation.match_tier).toBe("gap");
-    expect(result.observation.reference_id).toBeNull();
-    expect(result.observation.calculation).toBeNull();
-    expect(state.revisions).toHaveLength(0);
+    expect(result.observation.status).toBe("draft");
+    expect(result.observation.calculation).not.toBeNull();
+    expect(result.observation.calculation!.drivers.join(" ")).toContain("ผัดกะเพราหมู");
   });
 });
 
@@ -416,8 +464,24 @@ describe("confirmEstimate — dual-write (ADR 0022)", () => {
   test("rejects confirming an observation without revisions", async () => {
     const { repo, state } = createFakeRepo();
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
-    const created = await service.createObservation(estimatedInput());
-    expect(service.confirmEstimate(created.observation.id, 1)).rejects.toThrow(/no estimate revision/);
+    // Legacy shape: an observation row with no revision at all (a pre-ADR-0026
+    // reference-pending meal) — new saves always carry a revision.
+    state.observations.push({
+      id: 1,
+      user_id: 1,
+      date: "2026-09-13",
+      meal_type: "Lunch",
+      menu_name: "ผัดกะเพราหมู",
+      portion_mode: "estimated",
+      meal_source: null,
+      status: "reference_pending",
+      reference_id: null,
+      match_tier: "gap",
+      calculation: null,
+      created_at: "2026-09-13 10:00:00",
+      updated_at: "2026-09-13 10:00:00",
+    });
+    expect(service.confirmEstimate(1, 1)).rejects.toThrow(/no estimate revision/);
   });
 });
 
@@ -429,7 +493,8 @@ describe("resolveReference", () => {
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
 
     const created = await service.createObservation(estimatedInput());
-    expect(created.observation.status).toBe("reference_pending");
+    // ADR 0026: a gap meal is born as a draft estimate, not reference-pending.
+    expect(created.observation.status).toBe("draft");
 
     const resolved = await service.resolveReference(created.observation.id, REF2.id, 1);
 
@@ -438,7 +503,7 @@ describe("resolveReference", () => {
     expect(resolved.observation.calculation).not.toBeNull();
     expect(resolved.revision.status).toBe("pending_confirmation");
     expect(resolved.revision.reference_provider).toBe(REF2.provider);
-    expect(state.revisions).toHaveLength(1);
+    expect(state.revisions).toHaveLength(2); // the born-with estimate + the resolved one
   });
 });
 
@@ -1085,11 +1150,109 @@ describe("user scoping", () => {
     const service = createNutritionEstimationService({ repo, matcher: ambiguousMatcher() });
 
     const created = await service.createObservation(estimatedInput({ user_id: 1 }));
-    expect(created.observation.status).toBe("reference_pending");
+    expect(created.observation.status).toBe("draft");
 
     await expect(service.resolveReference(created.observation.id, REF2.id, 2))
       .rejects.toThrow(NotFoundError);
-    // Status stays reference_pending for the owner's later resolution.
-    expect(state.observations[0]!.status).toBe("reference_pending");
+    // Status stays draft for the owner's later resolution.
+    expect(state.observations[0]!.status).toBe("draft");
+  });
+});
+
+describe("searchReferences — vector tier (ADR 0014)", () => {
+  const EGG: ReferenceRow = {
+    ...REF,
+    id: 301,
+    providerFoodCode: "TFC-301",
+    nameEn: "Fried egg",
+    nameTh: "ไข่ดาว",
+  };
+  const OIL: ReferenceRow = {
+    ...REF,
+    id: 302,
+    providerFoodCode: "TFC-302",
+    nameEn: "Vegetable oil",
+    nameTh: "น้ำมันพืช",
+  };
+
+  test("a query with no lexical hit returns pgvector neighbors when an embedder is available", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(EGG.id, EGG);
+    const vectorRepo = {
+      ...repo,
+      searchByEmbedding: async () => [{ ...EGG, similarity: 0.813 }],
+    } as unknown as NutritionEstimationRepository;
+    const service = createNutritionEstimationService({
+      repo: vectorRepo,
+      matcher: gapMatcher(),
+      embed: async () => [1],
+    });
+
+    const result = await service.searchReferences("ไข่ดาวจานโปรด");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.id).toBe(EGG.id);
+    expect(result.items[0]!.score).toBeCloseTo(0.813);
+  });
+
+  test("vector neighbors fill the cap after lexical hits and never duplicate them", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(EGG.id, EGG);
+    state.references.set(OIL.id, OIL);
+    const vectorRepo = {
+      ...repo,
+      searchByEmbedding: async () => [
+        { ...EGG, similarity: 0.9 },
+        { ...OIL, similarity: 0.8 },
+      ],
+    } as unknown as NutritionEstimationRepository;
+    const service = createNutritionEstimationService({
+      repo: vectorRepo,
+      matcher: gapMatcher(),
+      embed: async () => [1],
+    });
+
+    // "ไข่ดาว" lexically hits EGG (token overlap); OIL only exists via vector.
+    const result = await service.searchReferences("ไข่ดาว");
+
+    expect(result.items.map((item) => item.id)).toEqual([EGG.id, OIL.id]);
+    expect(result.items[1]!.score).toBeCloseTo(0.8);
+  });
+
+  test("vector hits below the 0.5 floor are dropped", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(EGG.id, EGG);
+    const vectorRepo = {
+      ...repo,
+      searchByEmbedding: async () => [{ ...OIL, similarity: 0.4 }],
+    } as unknown as NutritionEstimationRepository;
+    const service = createNutritionEstimationService({
+      repo: vectorRepo,
+      matcher: gapMatcher(),
+      embed: async () => [1],
+    });
+
+    const result = await service.searchReferences("อะไรไม่รู้");
+
+    expect(result.items).toHaveLength(0);
+  });
+
+  test("no embedder configured → lexical only, never crashes", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(EGG.id, EGG);
+    let embedCalls = 0;
+    const vectorRepo = {
+      ...repo,
+      searchByEmbedding: async () => {
+        embedCalls++;
+        return [];
+      },
+    } as unknown as NutritionEstimationRepository;
+    const service = createNutritionEstimationService({ repo: vectorRepo, matcher: gapMatcher() });
+
+    const result = await service.searchReferences("ไข่ดาวจานโปรด");
+
+    expect(result.items).toHaveLength(0);
+    expect(embedCalls).toBe(0);
   });
 });

@@ -82,12 +82,27 @@ export interface ReferenceRow {
   per100: Macronutrients;
 }
 
+/** Provenance of one component's numbers (ADR 0026): which catalog row (if
+ * any) backed it. */
+export interface ComponentReferenceInfo {
+  id: number;
+  provider: string;
+  provider_food_code: string;
+  name_th: string | null;
+  name_en: string | null;
+  score: number;
+}
+
 export interface ComponentBreakdown {
   name: string;
   /** After consumed_fraction applied. */
   consumed_weight_g: MassRange;
   /** Per-nutrient contribution from this component (grams for macros, kcal for calories). */
   contribution: Record<keyof Macronutrients, { low: number; central: number; high: number }>;
+  /** True when the numbers come from the kind prior, not a catalog reference (ADR 0026). */
+  estimated?: boolean;
+  /** The catalog row that backed this component, when one was matched. */
+  reference?: ComponentReferenceInfo | null;
 }
 
 export interface CalculationResult {

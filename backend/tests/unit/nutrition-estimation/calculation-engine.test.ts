@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { calculateNutrition } from "../../../src/nutrition-estimation/calculation/engine";
+import { calculateNutrition, calculateNutritionPerComponent } from "../../../src/nutrition-estimation/calculation/engine";
 import {
   InfeasibleEvidenceError,
   type PortionComponentInput,
@@ -525,5 +525,43 @@ describe("calculateNutrition — relaxation and infeasibility (ADR 0019)", () =>
     // No measured evidence → hard facts alone are feasible; declared is clamped.
     expect(result.relaxed).toBe(true);
     expect(result.relaxed_constraints).toContain("declared:sugar@main");
+  });
+});
+
+describe("calculateNutritionPerComponent (per-component references, 2026-09-29)", () => {
+  test("each component is calculated against its own per-100 g composition", () => {
+    const result = calculateNutritionPerComponent(
+      [
+        component({ name: "ข้าวสวย", kind: "rice", weight_g: 200 }),
+        component({ name: "หมูผัด", kind: "main", weight_g: 100 }),
+      ],
+      (c) =>
+        c.name === "ข้าวสวย"
+          ? { protein: 3, carbs: 28, fat: 0.5, alcohol: 0, calories: 130 }
+          : { protein: 15, carbs: 6, fat: 13, alcohol: 0, calories: 200 },
+    );
+    // Independent arithmetic: 200 g × 130 kcal/100 g + 100 g × 200 kcal/100 g = 460.
+    expect(result.nutrients.calories.central).toBeCloseTo(460);
+    expect(result.nutrients.protein.central).toBeCloseTo((200 * 3) / 100 + (100 * 15) / 100);
+    expect(result.per_component[0]!.contribution.calories.central).toBeCloseTo(260);
+    expect(result.per_component[1]!.contribution.calories.central).toBeCloseTo(200);
+  });
+
+  test("ingredient evidence without its own per100 defaults to the chosen component per100", () => {
+    const result = calculateNutritionPerComponent(
+      [
+        component({
+          name: "main",
+          kind: "main",
+          weight_g: 100,
+          ingredient_evidence: [
+            { name: "sugar", source: "declared", basis: "served", grams: 10 },
+          ],
+        }),
+      ],
+      () => ({ protein: 10, carbs: 20, fat: 5, alcohol: 0, calories: 200 }),
+    );
+    // 90 g base + 10 g declared sugar, both at the component per100 = 100 g × 200/100.
+    expect(result.nutrients.calories.central).toBeCloseTo(200);
   });
 });
