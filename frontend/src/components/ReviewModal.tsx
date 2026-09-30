@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import type { WorkoutData, SessionActivityData, SessionType } from "../types";
-import { SESSION_TYPES, SESSION_TYPE_LABELS, DEFAULT_GYM_PROFILE } from "../types";
+import { SESSION_TYPES, SESSION_TYPE_LABELS } from "../types";
+import { useGyms } from "@/features/workouts/hooks/useGyms";
 import DialogBase from "./DialogBase";
 
 interface ReviewModalProps {
@@ -26,7 +27,33 @@ export default function ReviewModal({
     const [didStretch, setDidStretch] = useState(false);
     const [notes, setNotes] = useState("");
     const [sessionType, setSessionType] = useState<SessionType>("working");
-    const [gymProfile, setGymProfile] = useState(DEFAULT_GYM_PROFILE);
+    // Gym picker (PAT-56): default = most-recently-used gym (the list is
+    // ordered last-used first); "" = no gym chosen yet.
+    const { gyms, createGym, isCreating } = useGyms();
+    const [gymId, setGymId] = useState<number | "">("");
+    const [addingGym, setAddingGym] = useState(false);
+    const [newGymName, setNewGymName] = useState("");
+    const [gymError, setGymError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (gymId === "" && !addingGym && gyms.length > 0) {
+            setGymId(gyms[0]!.id);
+        }
+    }, [gymId, addingGym, gyms]);
+
+    const handleCreateGym = useCallback(async () => {
+        const name = newGymName.trim();
+        if (!name || isCreating) return;
+        try {
+            const row = await createGym.mutateAsync(name);
+            setGymId(row.id);
+            setAddingGym(false);
+            setNewGymName("");
+            setGymError(null);
+        } catch (err) {
+            setGymError(err instanceof Error ? err.message : "Failed to add the gym.");
+        }
+    }, [newGymName, isCreating, createGym]);
 
     const updateItem = useCallback(
         (index: number, field: keyof WorkoutData, value: string | number | boolean) => {
@@ -53,9 +80,9 @@ export default function ReviewModal({
             did_stretch: didStretch,
             notes,
             session_type: sessionType,
-            gym_profile: gymProfile.trim() || DEFAULT_GYM_PROFILE,
+            ...(gymId !== "" ? { gym_id: gymId } : {}),
         });
-    }, [items, rawText, workoutDate, isSubmitting, onConfirm, walked10k, didLiss, didStretch, notes, sessionType, gymProfile]);
+    }, [items, rawText, workoutDate, isSubmitting, onConfirm, walked10k, didLiss, didStretch, notes, sessionType, gymId]);
 
     // Format the selected date for display — memoized
     const displayDate = useMemo(
@@ -291,17 +318,77 @@ export default function ReviewModal({
                             </select>
                         </div>
                         <div>
-                            <label className="text-xs text-surface-400 block mb-1" htmlFor="gym-profile">
+                            <label className="text-xs text-surface-400 block mb-1" htmlFor="gym-picker">
                                 Gym
                             </label>
-                            <input
-                                id="gym-profile"
-                                type="text"
-                                value={gymProfile}
-                                onChange={(e) => setGymProfile(e.target.value)}
-                                className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
-                                placeholder={DEFAULT_GYM_PROFILE}
-                            />
+                            {addingGym ? (
+                                <div className="flex gap-2">
+                                    <input
+                                        id="gym-new"
+                                        type="text"
+                                        value={newGymName}
+                                        onChange={(e) => setNewGymName(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                handleCreateGym();
+                                            }
+                                        }}
+                                        autoFocus
+                                        className="glass-input flex-1 px-3 py-1.5 text-sm text-[var(--foreground)]"
+                                        placeholder="ชื่อยิมใหม่"
+                                        aria-label="New gym name"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleCreateGym}
+                                        disabled={!newGymName.trim() || isCreating}
+                                        className="px-3 py-1.5 rounded-xl text-xs font-semibold text-[var(--primary)] border border-[var(--primary)]/40 bg-[var(--primary)]/10 disabled:opacity-50"
+                                    >
+                                        {isCreating ? "…" : "Add"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setAddingGym(false);
+                                            setNewGymName("");
+                                            setGymError(null);
+                                        }}
+                                        className="text-xs text-surface-400 hover:text-[var(--foreground)] px-1"
+                                        aria-label="Cancel adding a new gym"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        id="gym-picker"
+                                        value={gymId}
+                                        onChange={(e) => setGymId(e.target.value === "" ? "" : Number(e.target.value))}
+                                        className="glass-input w-full px-3 py-1.5 text-sm text-[var(--foreground)]"
+                                    >
+                                        {gyms.length === 0 && <option value="">No gyms yet</option>}
+                                        {gyms.map((g) => (
+                                            <option key={g.id} value={g.id}>
+                                                {g.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAddingGym(true)}
+                                        className="text-xs font-medium text-[var(--primary)] whitespace-nowrap hover:underline underline-offset-2"
+                                    >
+                                        + New
+                                    </button>
+                                </div>
+                            )}
+                            {gymError && (
+                                <p role="alert" className="text-xs text-red-400 mt-1">
+                                    {gymError}
+                                </p>
+                            )}
                         </div>
                     </div>
                 </div>

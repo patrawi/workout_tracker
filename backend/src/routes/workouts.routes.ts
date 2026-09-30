@@ -54,18 +54,23 @@ export function registerWorkoutRoutes(app: any, ctx: AppContext): void {
     })
     .post("/confirm", routeHandlerCtx(async ({ body, user_id }: any) => {
       // Resolve the gym reference (owned id, else name matched-or-created) so
-      // every confirmed session is linked to a gyms row while the legacy
-      // gym_profile string keeps rendering untouched.
-      const gym_id = await gymsService.resolveForSession(
+      // every confirmed session is linked to a gyms row; the resolved name is
+      // snapshotted into the legacy gym_profile string, keeping the display
+      // chip correct even when the client only sends gym_id.
+      const gym = await gymsService.resolveForSession(
         body.activity?.gym_id,
         body.activity?.gym_profile,
         user_id
       );
+      const activity = {
+        ...body.activity,
+        ...(gym ? { gym_id: gym.id, gym_profile: gym.name } : {}),
+      };
       return await workoutService.confirmSession(
         body.raw_text,
         body.items,
         body.created_at,
-        { ...body.activity, gym_id },
+        activity,
         user_id
       );
     }), {
