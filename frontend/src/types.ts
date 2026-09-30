@@ -40,6 +40,8 @@ export interface SessionActivityData {
     notes: string;
     session_type?: SessionType;
     gym_profile?: string;
+    /** Linked gym row (PAT-56) — takes precedence over the legacy name string. */
+    gym_id?: number;
 }
 
 export interface WorkoutRow {

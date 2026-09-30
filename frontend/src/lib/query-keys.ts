@@ -45,4 +45,8 @@ export const queryKeys = {
         referenceSearch: (q: string) =>
             [...queryKeys.mealObservations.all, "referenceSearch", q] as const,
     },
+    gyms: {
+        all: ["gyms"] as const,
+        list: () => [...queryKeys.gyms.all, "list"] as const,
+    },
 };

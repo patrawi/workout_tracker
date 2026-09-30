@@ -39,12 +39,13 @@ describe("createGymsService", () => {
       user_id: 1,
       name: "G",
       created_at: null,
+      last_used_at: null,
     }));
     const service = createGymsService(repo as any);
 
-    const gymId = await service.resolveForSession(5, undefined, 1);
+    const gym = await service.resolveForSession(5, undefined, 1);
 
-    expect(gymId).toBe(5);
+    expect(gym).toEqual({ id: 5, name: "G" });
   });
 
   test("resolveForSession rejects a gym owned by another user", () => {
@@ -57,10 +58,10 @@ describe("createGymsService", () => {
     const repo = createMockRepo();
     const service = createGymsService(repo as any);
 
-    const gymId = await service.resolveForSession(undefined, " Iron House ", 1);
+    const gym = await service.resolveForSession(undefined, " Iron House ", 1);
 
     expect(repo.findOrCreateByName).toHaveBeenCalledWith(" Iron House ", 1);
-    expect(gymId).toBe(3);
+    expect(gym).toEqual({ id: 3, name: "Iron House" });
   });
 
   test("resolveForSession returns undefined when no gym reference is given", async () => {
