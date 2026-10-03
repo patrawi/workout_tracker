@@ -109,7 +109,9 @@ Symptom: text appeared "all at once" in the UI. Trace:
 
 ---
 
-## 6. Deferred (not built)
+## 6. Tool-calling loop (SHIPPED — updated 2026-09-29)
 
-- Stream the **tool-calling loop** (run a read tool between stream segments) so the streaming path can also read logs.
-- `get_plan` / `update_plan` **write tools** + Plan-tab refresh — conversational "update my plan" → commit. **This is the next task.**
+The deferred items below are live, with one design correction:
+
+- **Agentic tool loop**: `chatStream` runs up to `MAX_TOOL_ITERS` (5) rounds — when a streamed round ends in `tool_calls`, the tools run, their results are appended to the history, and the next round streams (see `coach.service.chatStream`; characterized by `tests/unit/services/coach.service.stream.test.ts`). All read tools work on the streaming path now (nutrition, workouts, bodyweight, volume, plan, overload assessment).
+- **"Write" path = proposals, not write tools**: the glossary forbids autonomous coach saves (Explicit Save Action), so the write side is `propose_plan` / `propose_session_prescription` — the tool result drains into `plan_proposal` / `session_prescription` stream events, and the UI renders the one-click Save Plan card (In-Chat Plan Save). The card invalidates the `["coach", "plan"]` cache on save, so the Plan tab refreshes.
