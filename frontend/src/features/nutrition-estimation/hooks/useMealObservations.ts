@@ -18,11 +18,14 @@ interface UseMealObservationsReturn {
     ) => Promise<InterpretOutcome>;
     create: (input: CreateMealObservationInput) => Promise<CreateOutcome>;
     confirm: (id: number) => Promise<CalculateObservationOutcome>;
+    /** ADR 0026 — resolve ONE component's reference; others keep their sourcing. */
+    resolveComponent: (id: number, position: number, referenceId: number) => Promise<CalculateObservationOutcome>;
 
     // Loading states
     isInterpreting: boolean;
     isCreating: boolean;
     isConfirming: boolean;
+    isResolvingComponent: boolean;
 }
 
 /**
@@ -105,12 +108,35 @@ export function useMealObservations(): UseMealObservationsReturn {
 
     const confirm = useCallback(async (id: number) => confirmRef.current(id), []);
 
+    const resolveComponentMutation = useMutation({
+        mutationFn: async ({ id, position, referenceId }: { id: number; position: number; referenceId: number }) => {
+            const res = await mealObservationApi.resolveComponent(id, position, referenceId);
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Failed to resolve the reference");
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.mealObservations.all });
+        },
+    });
+    const resolveComponentRef = useRef(resolveComponentMutation.mutateAsync);
+    useEffect(() => {
+        resolveComponentRef.current = resolveComponentMutation.mutateAsync;
+    }, [resolveComponentMutation.mutateAsync]);
+
+    const resolveComponent = useCallback(
+        async (id: number, position: number, referenceId: number) =>
+            resolveComponentRef.current({ id, position, referenceId }),
+        [],
+    );
+
     return {
         interpret,
         create,
         confirm,
+        resolveComponent,
         isInterpreting: interpretMutation.isPending,
         isCreating: createMutation.isPending,
         isConfirming: confirmMutation.isPending,
+        isResolvingComponent: resolveComponentMutation.isPending,
     };
 }

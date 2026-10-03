@@ -1,15 +1,19 @@
 import { useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import DialogBase from "./DialogBase";
 import EstimateRangePanel from "./EstimateRangePanel";
 import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
 import ImageSlot, { type AttachedImage } from "@/features/nutrition-estimation/components/ImageSlot";
 import { useMealObservations } from "@/features/nutrition-estimation/hooks/useMealObservations";
-import { estimateFromCreateOutcome } from "@/features/nutrition-estimation/estimate";
+import { mealObservationApi } from "@/lib/api/mealObservations";
+import { estimateFromCreateOutcome, estimateFromRecalculation } from "@/features/nutrition-estimation/estimate";
 import { useRowList } from "@/features/nutrition-estimation/row-list";
 import { cn } from "@/lib/utils";
 import type {
     ComponentKind,
     CreateOutcome,
+    CalculateObservationOutcome,
+    MealComponentBreakdown,
     LatentHint,
     MealType,
 } from "@/types";
@@ -119,26 +123,42 @@ function FractionQuartilePicker({
     );
 }
 
-/** Per-component provenance (ADR 0026): what backed each component's numbers. */
-function ProvenanceList({ outcome }: { outcome: CreateOutcome }) {
-    const perComponent = outcome.observation.calculation?.per_component ?? [];
+/** Per-component provenance (ADR 0026): what backed each component's numbers,
+ * with a per-row "change" affordance to pick a different reference. */
+function ProvenanceList({
+    perComponent,
+    searchPosition,
+    onOpenSearch,
+}: {
+    perComponent: MealComponentBreakdown[];
+    searchPosition: number | null;
+    onOpenSearch: (position: number) => void;
+}) {
     if (perComponent.length === 0) return null;
     return (
         <div className="rounded-xl border border-surface-300/20 p-3 space-y-1.5">
             <span className="text-xs text-surface-400">How each component was calculated</span>
             <ul className="space-y-1">
-                {perComponent.map((c) => (
-                    <li key={c.name} className="flex items-center justify-between gap-3 text-sm">
+                {perComponent.map((c, i) => (
+                    <li key={`${c.name}-${i}`} className="flex items-center justify-between gap-2 text-sm">
                         <span className="text-white truncate">{c.name}</span>
-                        {c.estimated ? (
-                            <span className="tag-pill text-xs text-amber-300 shrink-0">
-                                estimated · kind prior
-                            </span>
-                        ) : (
-                            <span className="tag-pill text-xs text-emerald-300 shrink-0">
-                                reference · {c.reference?.name_th ?? c.reference?.name_en ?? `#${c.reference?.id ?? "?"}`}
-                            </span>
-                        )}
+                        <span className="flex items-center gap-1.5 shrink-0">
+                            {c.estimated ? (
+                                <span className="tag-pill text-xs text-amber-300">estimated · kind prior</span>
+                            ) : (
+                                <span className="tag-pill text-xs text-emerald-300">
+                                    reference · {c.reference?.name_th ?? c.reference?.name_en ?? `#${c.reference?.id ?? "?"}`}
+                                </span>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => onOpenSearch(i)}
+                                className="text-xs text-surface-400 hover:text-[var(--foreground)] px-1"
+                                aria-label={`Change reference for ${c.name}`}
+                            >
+                                {searchPosition === i ? "cancel" : "change"}
+                            </button>
+                        </span>
                     </li>
                 ))}
             </ul>
@@ -187,7 +207,7 @@ interface LogMealModalProps {
  * only opens/closes (remount via key to reset).
  */
 export default function LogMealModal({ open, onClose, defaultDate, onLogged }: LogMealModalProps) {
-    const { interpret, create, confirm, isInterpreting, isCreating, isConfirming } =
+    const { interpret, create, confirm, resolveComponent, isInterpreting, isCreating, isConfirming, isResolvingComponent } =
         useMealObservations();
 
     const [step, setStep] = useState<Step>("form");
@@ -208,6 +228,11 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const componentList = useRowList<EditableComponent>(emptyComponent);
     const measuredList = useRowList<MeasuredRow>(emptyMeasuredRow);
     const [outcome, setOutcome] = useState<CreateOutcome | null>(null);
+    /** Recalculated detail after a per-component resolve (ADR 0026) — wins
+     * over the create outcome's estimate. */
+    const [updated, setUpdated] = useState<CalculateObservationOutcome | null>(null);
+    const [searchPosition, setSearchPosition] = useState<number | null>(null);
+    const [searchTerm, setSearchTerm] = useState("");
     /** VLM dish-name proposal ("" when low-confidence) — prefills an empty
      * menu name and doubles as the save-time fallback. Since ADR 0026 the
      * menu name is a display label only, never the match key. */
@@ -411,7 +436,37 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
     // ——— Result rendering ———
 
-    const estimate = outcome ? estimateFromCreateOutcome(outcome) : null;
+    const estimate = updated
+        ? estimateFromRecalculation(updated)
+        : outcome
+            ? estimateFromCreateOutcome(outcome)
+            : null;
+
+    const searchResults = useQuery({
+        queryKey: ["mealObservationReferenceSearch", searchTerm],
+        queryFn: async () => {
+            const res = await mealObservationApi.searchReferenceCandidates(searchTerm, 8);
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Reference search failed");
+        },
+        enabled: searchPosition !== null && searchTerm.trim().length > 0,
+    });
+
+    const handlePickRef = useCallback(
+        async (position: number, referenceId: number) => {
+            if (!outcome) return;
+            setError(null);
+            try {
+                const res = await resolveComponent(outcome.observation.id, position, referenceId);
+                setUpdated(res);
+                setSearchPosition(null);
+                setSearchTerm("");
+            } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to resolve the reference.");
+            }
+        },
+        [outcome, resolveComponent],
+    );
 
     const handleConfirm = useCallback(async () => {
         if (!outcome) return;
@@ -439,7 +494,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         result: `Step ${totalSteps} of ${totalSteps} — Result`,
     };
 
-    const busy = isInterpreting || isCreating || isConfirming;
+    const busy = isInterpreting || isCreating || isConfirming || isResolvingComponent;
 
     return (
         <DialogBase open={open} onClose={handleClose} ariaLabel="Log a meal">
@@ -872,7 +927,52 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                             {estimate && (
                                 <div className="space-y-3">
                                     <EstimateRangePanel estimate={estimate} />
-                                    <ProvenanceList outcome={outcome} />
+                                    <ProvenanceList
+                                        perComponent={
+                                            (updated ?? outcome).observation.calculation?.per_component ?? []
+                                        }
+                                        searchPosition={searchPosition}
+                                        onOpenSearch={(i) => {
+                                            setSearchPosition(searchPosition === i ? null : i);
+                                            setSearchTerm("");
+                                        }}
+                                    />
+                                    {searchPosition !== null && (
+                                        <div className="rounded-xl border border-surface-300/20 p-3 space-y-2">
+                                            <input
+                                                type="text"
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                autoFocus
+                                                placeholder="ค้นหาอ้างอิงอาหาร…"
+                                                aria-label="Search nutrition references"
+                                                className="glass-input w-full px-3 py-2 text-sm text-[var(--foreground)]"
+                                            />
+                                            {searchResults.isLoading && (
+                                                <p className="text-xs text-surface-400">กำลังค้นหา…</p>
+                                            )}
+                                            {(searchResults.data ?? []).length > 0 && (
+                                                <ul className="space-y-1">
+                                                    {(searchResults.data ?? []).map((r) => (
+                                                        <li key={r.id}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handlePickRef(searchPosition, r.id)}
+                                                                className="w-full flex items-center justify-between gap-3 text-left px-3 py-2 rounded-lg border border-surface-300/20 hover:border-[var(--primary)]/40 transition text-sm"
+                                                            >
+                                                                <span className="text-[var(--foreground)] truncate">
+                                                                    {r.nameTh ?? r.nameEn ?? `#${r.id}`}
+                                                                </span>
+                                                                <span className="text-xs text-surface-400 shrink-0 tabular-nums">
+                                                                    {Math.round(r.per100.calories)} kcal/100g
+                                                                </span>
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </>
