@@ -655,6 +655,97 @@ export function createNutritionEstimationService(deps: {
   }
 
   /**
+   * Resolve ONE component's reference (ADR 0026): the chosen reference backs
+   * that component, every other component keeps its existing sourcing
+   * (matched reference or kind prior), and a new pending revision persists
+   * the recalculation.
+   */
+  async function resolveComponentReference(
+    observationId: number,
+    position: number,
+    referenceId: number,
+    userId: number,
+  ): Promise<CalculateForReferenceResult> {
+    const detail = await repo.getObservationDetail(observationId, userId);
+    if (!detail) throw new NotFoundError("Meal observation");
+    if (detail.status === "confirmed") {
+      throw new ConflictError("Confirmed observations cannot be re-resolved.");
+    }
+    const components = componentsFromDetail(detail);
+    if (position < 0 || position >= components.length) {
+      throw new ValidationError("Component position is out of range.");
+    }
+    validateEvidenceConflicts(components);
+    const reference = await repo.getReferenceById(referenceId);
+    if (!reference) throw new NotFoundError("Nutrition reference");
+
+    const prevPerComponent = detail.latest_revision?.calculation?.per_component ?? [];
+    const notes: string[] = [];
+    const per100s: Macronutrients[] = [];
+    const references: Array<ComponentReferenceInfo | null> = [];
+    const estimatedFlags: boolean[] = [];
+
+    for (let i = 0; i < components.length; i++) {
+      if (i === position) {
+        per100s.push(reference.per100);
+        references.push({
+          id: reference.id,
+          provider: reference.provider,
+          provider_food_code: reference.providerFoodCode,
+          name_th: reference.nameTh,
+          name_en: reference.nameEn,
+          score: 1,
+        });
+        estimatedFlags.push(false);
+        continue;
+      }
+      const prevRefId = prevPerComponent[i]?.reference?.id ?? null;
+      const prevRef = prevRefId !== null ? await repo.getReferenceById(prevRefId) : null;
+      if (prevRef) {
+        per100s.push(prevRef.per100);
+        references.push(prevPerComponent[i]!.reference ?? null);
+        estimatedFlags.push(false);
+        continue;
+      }
+      per100s.push(ESTIMATE_FALLBACK_PER100[components[i]!.kind]);
+      references.push(null);
+      estimatedFlags.push(true);
+    }
+
+    const calculation = calculateNutritionPerComponent(components, (_c, i) => per100s[i]!);
+    notes.push(`component '${components[position]!.name}' reference set manually`);
+    calculation.drivers.push(...notes);
+    calculation.per_component = calculation.per_component.map((pc, i) => ({
+      ...pc,
+      estimated: estimatedFlags[i]!,
+      reference: references[i],
+    }));
+
+    const revision = await repo.insertRevision({
+      observation_id: observationId,
+      reference_id: null,
+      reference_provider: null,
+      reference_version: null,
+      calculation,
+    });
+    await repo.updateObservationEstimate(observationId, {
+      reference_id: null,
+      calculation,
+    }, userId);
+    if (detail.status !== "draft") {
+      await repo.updateObservationStatus(observationId, "draft", userId);
+    }
+
+    const updated = (await repo.getObservationDetail(observationId, userId))!;
+    return {
+      observation: updated,
+      revision,
+      reference,
+      explanation: buildExplanation(updated, calculation),
+    };
+  }
+
+  /**
    * Confirm the latest pending revision: mark it confirmed (superseding older
    * confirmed ones), set the observation confirmed, and dual-write the central
    * point values into nutrition_logs with provenance markers (ADR 0022).
@@ -806,6 +897,7 @@ export function createNutritionEstimationService(deps: {
     calculateForReference,
     confirmEstimate,
     resolveReference,
+    resolveComponentReference,
     getObservation,
     listPending,
     searchReferences,

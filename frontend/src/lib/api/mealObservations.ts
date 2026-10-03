@@ -53,6 +53,13 @@ export const mealObservationApi = {
     resolve: (id: number, reference_id: number) =>
         api.post<CalculateObservationOutcome>(`/meal-observations/${id}/resolve`, { reference_id }),
 
+    /** Resolve ONE component's reference (ADR 0026) — others keep their sourcing. */
+    resolveComponent: (id: number, position: number, reference_id: number) =>
+        api.post<CalculateObservationOutcome>(`/meal-observations/${id}/resolve-component`, {
+            position,
+            reference_id,
+        }),
+
     listPending: () => api.get<PendingObservation[]>("/meal-observations/pending"),
 
     getDetail: (id: number) =>

@@ -142,5 +142,18 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
       body: t.Object({
         reference_id: t.Integer(),
       }),
+    })
+    .post("/meal-observations/:id/resolve-component", routeHandlerCtx(async ({ params, body, user_id }: any) => {
+      return await nutritionEstimationService.resolveComponentReference(
+        Number(params.id),
+        body.position,
+        body.reference_id,
+        user_id,
+      );
+    }), {
+      body: t.Object({
+        position: t.Integer({ minimum: 0 }),
+        reference_id: t.Integer({ minimum: 1 }),
+      }),
     });
 }

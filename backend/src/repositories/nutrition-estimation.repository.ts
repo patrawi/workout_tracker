@@ -156,7 +156,8 @@ export interface UpsertNutritionLogInput {
 }
 
 export interface UpdateEstimateInput {
-  reference_id: number;
+  /** Null for per-component calculations (ADR 0026) — no single reference. */
+  reference_id: number | null;
   calculation: CalculationResult;
 }
 
