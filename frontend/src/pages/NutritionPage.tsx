@@ -754,10 +754,14 @@ export default function NutritionPage() {
                     </div>
                 )}
 
-                {/* Dataset attribution (CC BY-SA 4.0 obligation for the reference catalog). */}
+                {/* Dataset attribution (CC BY-SA 4.0 + RepDB Free Tier obligations). */}
                 <p style={{ marginTop: 24, fontSize: 11, lineHeight: 1.5, color: "var(--faint)" }}>
                     Nutrition reference data: Thai Food Composition Tables (INMU), ThaiFCD 2015 snapshot,
-                    and ingredient data via the BaoWio datasets — CC BY-SA 4.0.
+                    and ingredient data via the BaoWio datasets — CC BY-SA 4.0. Exercise data by{" "}
+                    <a href="https://repdb.co" target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>
+                        RepDB (repdb.co)
+                    </a>
+                    .
                 </p>
             </main>
 

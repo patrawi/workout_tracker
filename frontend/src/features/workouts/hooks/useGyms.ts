@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query-keys";
 /**
  * The user's gyms (PAT-56), most-recently-used first — the picker's default is
  * the top row. createGym resolves to the new row so the caller can select it.
+ * updateEquipmentProfile writes the Gym Profile tick list (ADR 0027).
  */
 export function useGyms() {
     const queryClient = useQueryClient();
@@ -29,5 +30,23 @@ export function useGyms() {
         },
     });
 
-    return { gyms, isLoading, createGym, isCreating: createGym.isPending };
+    const updateEquipmentProfile = useMutation({
+        mutationFn: async ({ id, equipment }: { id: number; equipment: string[] | null }) => {
+            const res = await gymsApi.updateEquipmentProfile(id, equipment);
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Failed to save the gym profile");
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.gyms.all });
+        },
+    });
+
+    return {
+        gyms,
+        isLoading,
+        createGym,
+        isCreating: createGym.isPending,
+        updateEquipmentProfile,
+        isSavingProfile: updateEquipmentProfile.isPending,
+    };
 }

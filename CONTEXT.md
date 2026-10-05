@@ -185,8 +185,24 @@ A named physical training location the user records once and reuses. A Workout S
 _Avoid_: Gym profile, location, primary/secondary gym
 
 **Gym Profile**:
-Per-Gym context about equipment and practice at that Gym, consulted when training there. When a Gym has no Gym Profile, standard Saved Plans apply unchanged.
-_Avoid_: Global profile, Workout Profile
+The per-Gym set of equipment types recorded for that Gym, consulted when training there. When a Gym has no Gym Profile, standard Saved Plans apply unchanged with no equipment restrictions.
+_Avoid_: Global profile, Workout Profile, machine inventory
+
+**Canonical Exercise**:
+One normalized exercise entry in the local catalog that free-text exercise names resolve onto, carrying its equipment type. Entries are seeded from the RepDB dataset or authored manually when the dataset lacks them, and each preserves its provider identity and version.
+_Avoid_: RepDB record, exercise database entry, logged exercise
+
+**Exercise Alias**:
+A name or spelling the user actually logged, mapped to a Canonical Exercise. Aliases come only from real usage and are added by hand as unmatched names appear — never bulk-translated from the catalog.
+_Avoid_: Thai translation table, catalog metadata, generated synonym list
+
+**Equipment Availability**:
+Whether an exercise can actually be performed at a Gym. It derives from the Gym Profile's equipment set plus exercises genuinely logged at that Gym; a Gym without a Gym Profile makes everything available.
+_Avoid_: Machine inventory, per-exercise whitelist, availability guess
+
+**Derived Substitution**:
+A coach-side alternative exercise for one that is unavailable at the Gym being planned for, chosen from the catalog by shared primary muscle and available equipment. It is proposed at plan or prescription time, never forced or warned at log time.
+_Avoid_: Curated substitution pairs, log-time warning, forced swap
 
 ## Nutrition Estimation Language
 

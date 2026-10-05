@@ -16,6 +16,15 @@ export interface GymsService {
   list(userId: number): Promise<GymRow[]>;
   create(name: string, userId: number): Promise<GymRow>;
   /**
+   * Write the Gym Profile's equipment tick list (ADR 0027). null clears the
+   * profile — the gym becomes unrestricted (additive override).
+   */
+  setEquipmentProfile(
+    gymId: number,
+    userId: number,
+    equipment: string[] | null,
+  ): Promise<GymRow>;
+  /**
    * Map a session's gym reference to a gym: an owned gym id is validated,
    * a name is matched-or-created, and nothing given resolves to no gym.
    */
@@ -39,6 +48,26 @@ function cleanGymName(name: string): string {
   return trimmed;
 }
 
+/**
+ * Normalize the Gym Profile tick list (ADR 0027): trim, drop empties,
+ * dedupe. null = clear the profile (gym becomes unrestricted).
+ */
+function cleanEquipmentList(equipment: string[] | null): string[] | null {
+  if (equipment === null) return null;
+  if (!Array.isArray(equipment)) {
+    throw new ValidationError("equipment must be an array of strings or null.");
+  }
+  const cleaned: string[] = [];
+  for (const entry of equipment) {
+    if (typeof entry !== "string") {
+      throw new ValidationError("equipment must be an array of strings or null.");
+    }
+    const trimmed = entry.trim();
+    if (trimmed && !cleaned.includes(trimmed)) cleaned.push(trimmed);
+  }
+  return cleaned;
+}
+
 export function createGymsService(repo: GymsRepository): GymsService {
   return {
     async list(userId: number): Promise<GymRow[]> {
@@ -47,6 +76,18 @@ export function createGymsService(repo: GymsRepository): GymsService {
 
     async create(name: string, userId: number): Promise<GymRow> {
       return repo.findOrCreateByName(cleanGymName(name), userId);
+    },
+
+    async setEquipmentProfile(
+      gymId: number,
+      userId: number,
+      equipment: string[] | null,
+    ): Promise<GymRow> {
+      const owned = await repo.findByIdAndUser(gymId, userId);
+      if (!owned) {
+        throw new ValidationError("Unknown gym for this user.");
+      }
+      return repo.setEquipmentProfile(gymId, userId, cleanEquipmentList(equipment));
     },
 
     async resolveForSession(

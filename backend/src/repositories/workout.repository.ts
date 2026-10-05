@@ -271,7 +271,7 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
       return deleted.length > 0;
     },
 
-    async createBatch(rawInput: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow[]> {
+    async createBatch(rawInput: string, items: WorkoutData[], createdAt: string, activity?: SessionActivityData, userId: number = DEFAULT_USER_ID, anchors?: Array<{ canonical_exercise_id: number | null; match_tier: string | null }>): Promise<WorkoutRow[]> {
       return dbInstance.transaction(async (tx) => {
         const [session] = await tx
           .insert(sessions)
@@ -295,8 +295,11 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
 
         const newRows: WorkoutRow[] = [];
 
-        for (const item of items) {
+        for (const [index, item] of items.entries()) {
           const defaulted = withWorkoutDefaults(item as unknown as Record<string, unknown>);
+          // Canonical anchor (ADR 0027): resolved by the service, null when
+          // unmatched — the free-text name always stays the source of truth.
+          const anchor = anchors?.[index];
 
           const [inserted] = await tx
             .insert(workouts)
@@ -315,6 +318,8 @@ export function createWorkoutRepository(dbInstance: PostgresJsDatabase) {
               notes_english: defaulted.notes_english,
               tags: defaulted.tags,
               muscle_group: defaulted.muscle_group,
+              canonical_exercise_id: anchor?.canonical_exercise_id ?? null,
+              match_tier: anchor?.match_tier ?? null,
               created_at: createdAt,
             })
             .returning();

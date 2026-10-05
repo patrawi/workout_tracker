@@ -11,7 +11,7 @@ describe("createGymsRepository", () => {
   });
 
   test("findOrCreateByName returns the inserted row on first use", async () => {
-    const row = { id: 7, user_id: 1, name: "Iron House", created_at: null };
+    const row = { id: 7, user_id: 1, name: "Iron House", equipment: null, created_at: null };
     const returning = mock(async () => [row]);
     const onConflictDoNothing = mock(() => ({ returning }));
     const values = mock(() => ({ onConflictDoNothing }));
@@ -24,7 +24,7 @@ describe("createGymsRepository", () => {
   });
 
   test("findOrCreateByName falls back to select after a name conflict", async () => {
-    const row = { id: 7, user_id: 1, name: "Iron House", created_at: null };
+    const row = { id: 7, user_id: 1, name: "Iron House", equipment: null, created_at: null };
     const returning = mock(async () => []);
     const onConflictDoNothing = mock(() => ({ returning }));
     const values = mock(() => ({ onConflictDoNothing }));

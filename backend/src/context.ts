@@ -14,6 +14,8 @@ import { createFoodCatalogRepository } from "./repositories/food-catalog.reposit
 import { createCoachPlanRepository } from "./repositories/coach-plan.repository";
 import { createCoachKnowledgeRepository } from "./repositories/coach-knowledge.repository";
 import { createNutritionEstimationRepository } from "./repositories/nutrition-estimation.repository";
+import { createExerciseCatalogRepository, createExerciseMatcherRepository, createGymLookup } from "./repositories/exercise-catalog.repository";
+import { createExerciseMatcher } from "./exercises/exercise-matcher";
 import { createReferenceMatcher } from "./nutrition-estimation/matching/matcher";
 import { createNutritionEstimationService } from "./nutrition-estimation/service";
 import { createDeepSeekVisionInterpreter } from "./nutrition-estimation/vlm/deepseek-vision";
@@ -86,12 +88,33 @@ export function createAppContext(
   // Create AI service
   const aiService = createAIService(config);
   const embeddingClient = createEmbeddingClient(config.geminiApiKey);
+  // Canonical Exercise Catalog (ADR 0027): matcher resolves log names onto it
+  // at confirm time (never blocking); the gym lookup feeds the coach's
+  // availability tool. Embedding tier only wired when a Gemini key exists.
+  const exerciseMatcherRepo = createExerciseMatcherRepository(db);
+  const exerciseMatcher = createExerciseMatcher(exerciseMatcherRepo, {
+    embed: config.geminiApiKey
+      ? (text) => embeddingClient.embed(text)
+      : undefined,
+  });
+  const gymEquipmentDeps = {
+    getGym: createGymLookup(db).getGym,
+    listPlayedExercises: exerciseMatcherRepo.listPlayedExercises,
+    equipmentFor: async (name: string) => {
+      const outcome = await exerciseMatcher.match(name);
+      return outcome.tier === "auto"
+        ? { equipment: outcome.exercise.equipment, canonical_exercise_id: outcome.exercise.id }
+        : undefined;
+    },
+  };
   // Create services
   const analyticsService = createAnalyticsService(analyticsRepo, workoutRepo);
   const bodyweightService = createBodyweightService(bodyweightRepo);
   const restDayService = createRestDayService(restDayRepo);
   const historyService = createHistoryService(historyRepo);
-  const workoutService = createWorkoutService(workoutRepo, aiService);
+  const workoutService = createWorkoutService(workoutRepo, aiService, {
+    exerciseMatcher,
+  });
   const foodCatalogService = createFoodCatalogService(foodCatalogRepo, embeddingClient);
   const nutritionService = createNutritionService(nutritionRepo, aiService, foodCatalogService);
 
@@ -130,6 +153,7 @@ export function createAppContext(
     coachPlanRepo,
     coachKnowledgeRepo,
     workoutRepo,
+    gymEquipment: gymEquipmentDeps,
   });
 
   return {

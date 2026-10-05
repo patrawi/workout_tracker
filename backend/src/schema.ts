@@ -77,14 +77,68 @@ export const sessions = pgTable("sessions", {
 });
 
 // ——— Gyms Table (PAT-56) ———
+// equipment: the Gym Profile's ticked equipment types (RepDB vocabulary,
+// ADR 0027). NULL = no profile yet — every exercise available (additive
+// override); an empty array = a profile with nothing ticked.
 export const gyms = pgTable("gyms", {
     id: serial("id").primaryKey(),
     user_id: integer("user_id")
         .notNull()
         .references(() => users.id),
     name: text("name").notNull(),
+    equipment: jsonb("equipment").$type<string[]>(),
     created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
 }, (table) => [uniqueIndex("gyms_user_id_name_idx").on(table.user_id, table.name)]);
+
+// ——— Canonical Exercise Catalog (PAT-56 Phase 2, ADR 0027) ———
+// Normalized exercises free-text log names resolve onto, seeded from the
+// RepDB dataset via scripts/import-repdb.ts (fetch at run time — nothing
+// RepDB-derived is committed; license term 3) plus hand-authored manual rows.
+export const canonicalExercises = pgTable(
+    "canonical_exercises",
+    {
+        id: serial("id").primaryKey(),
+        provider: text("provider").notNull(), // "repdb" | "manual"
+        provider_exercise_code: text("provider_exercise_code").notNull(), // RepDB slug id
+        version: text("version").notNull(), // dataset schema_version / manual v1
+        name_en: text("name_en"),
+        equipment: text("equipment"), // RepDB equipment type; null = bodyweight
+        body_part: text("body_part"),
+        primary_muscles: jsonb("primary_muscles").$type<string[]>().default([]),
+        secondary_muscles: jsonb("secondary_muscles").$type<string[]>().default([]),
+        mechanic: text("mechanic"), // "compound" | "isolation"
+        is_unilateral: boolean("is_unilateral").default(false).notNull(),
+        is_bodyweight: boolean("is_bodyweight").default(false).notNull(),
+        embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
+        created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+    },
+    (table) => [
+        uniqueIndex("canonical_exercises_provider_code_version_idx").on(
+            table.provider,
+            table.provider_exercise_code,
+            table.version,
+        ),
+        index("canonical_exercises_name_en_idx").on(table.name_en),
+        // Documented exception to the B-tree rule (see nutrition_references).
+        index("canonical_exercises_embedding_idx")
+            .using("hnsw", table.embedding.op("vector_cosine_ops")),
+    ],
+);
+
+// Exercise Alias: a name/spelling the user actually logged (ADR 0027) —
+// hand-added as unmatched names appear, never bulk-generated.
+export const exerciseAliases = pgTable(
+    "exercise_aliases",
+    {
+        id: serial("id").primaryKey(),
+        canonical_exercise_id: integer("canonical_exercise_id")
+            .notNull()
+            .references(() => canonicalExercises.id),
+        alias: text("alias").notNull(),
+        created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
+    },
+    (table) => [uniqueIndex("exercise_aliases_alias_idx").on(table.alias)],
+);
 
 // ——— Workouts Table ———
 export const workouts = pgTable("workouts", {
@@ -96,6 +150,10 @@ export const workouts = pgTable("workouts", {
         .notNull()
         .references(() => sessions.id),
     exercise_name: text("exercise_name").notNull(),
+    // Canonical anchor (ADR 0027): resolved at confirm time, never blocking —
+    // unmatched names stay free text with a null anchor.
+    canonical_exercise_id: integer("canonical_exercise_id").references(() => canonicalExercises.id),
+    match_tier: text("match_tier"), // "manual" | "auto" | "ambiguous" | "gap"
     weight: real("weight").default(0),
     reps: integer("reps").default(0),
     rpe: integer("rpe").default(0),
