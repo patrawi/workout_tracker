@@ -6,6 +6,8 @@ export interface GymRow {
   id: number;
   user_id: number;
   name: string;
+  /** Gym Profile equipment types (ADR 0027); null = no profile (unrestricted). */
+  equipment: string[] | null;
   created_at: string | null;
   /** Latest session bound to this gym — present on list() (drives the
    * last-used default order); single-row fetches omit it. */
@@ -20,6 +22,7 @@ export function createGymsRepository(dbInstance: PostgresJsDatabase) {
         id: gyms.id,
         user_id: gyms.user_id,
         name: gyms.name,
+        equipment: gyms.equipment,
         created_at: gyms.created_at,
         last_used_at: sql<string | null>`max(${sessions.created_at})`,
       })
@@ -61,5 +64,22 @@ export function createGymsRepository(dbInstance: PostgresJsDatabase) {
     return existing;
   }
 
-  return { list, findByIdAndUser, findOrCreateByName };
+  /** Write the Gym Profile equipment tick list (null = no profile). */
+  async function setEquipmentProfile(
+    id: number,
+    userId: number,
+    equipment: string[] | null,
+  ): Promise<GymRow> {
+    const [updated] = await dbInstance
+      .update(gyms)
+      .set({ equipment })
+      .where(and(eq(gyms.id, id), eq(gyms.user_id, userId)))
+      .returning();
+    if (!updated) {
+      throw new Error("Gym equipment profile update returned no row.");
+    }
+    return updated;
+  }
+
+  return { list, findByIdAndUser, findOrCreateByName, setEquipmentProfile };
 }

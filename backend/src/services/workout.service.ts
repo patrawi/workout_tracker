@@ -3,6 +3,7 @@
 import type { WorkoutData, WorkoutRow, SessionActivityData } from "../types";
 import type { WorkoutUpdateData } from "../repositories/workout.repository";
 import type { AIService } from "./ai.service";
+import type { ExerciseMatchOutcome } from "../exercises/exercise-matcher";
 import { DEFAULT_WORKOUT_LIMIT, DEFAULT_RECENT_NOTES_LIMIT } from "../constants";
 import { ValidationError } from "../lib/errors";
 import { createChildLogger } from "../lib/logger";
@@ -11,6 +12,51 @@ const logger = createChildLogger("workout-service");
 
 // Legacy default: all pre-multi-user data belongs to the owner (user 1).
 const DEFAULT_USER_ID = 1;
+
+/** Canonical anchor written alongside each confirmed workout row (ADR 0027). */
+export interface WorkoutAnchor {
+  canonical_exercise_id: number | null;
+  match_tier: "manual" | "auto" | "ambiguous" | "gap" | null;
+}
+
+export interface WorkoutServiceDeps {
+  /** Optional — resolving anchors must never block a save (ADR 0027). */
+  exerciseMatcher?: {
+    match(name: string): Promise<ExerciseMatchOutcome>;
+  };
+}
+
+function outcomeToAnchor(outcome: ExerciseMatchOutcome): WorkoutAnchor {
+  switch (outcome.tier) {
+    case "auto":
+      return { canonical_exercise_id: outcome.exercise.id, match_tier: "auto" };
+    case "ambiguous":
+      return { canonical_exercise_id: null, match_tier: "ambiguous" };
+    case "gap":
+      return { canonical_exercise_id: null, match_tier: "gap" };
+  }
+}
+
+async function resolveAnchors(
+  items: WorkoutData[],
+  matcher: WorkoutServiceDeps["exerciseMatcher"],
+): Promise<WorkoutAnchor[]> {
+  return Promise.all(
+    items.map(async (item): Promise<WorkoutAnchor> => {
+      if (!matcher) return { canonical_exercise_id: null, match_tier: null };
+      try {
+        return outcomeToAnchor(await matcher.match(item.exercise_name));
+      } catch (error) {
+        // Never block a save on matching trouble (ADR 0027).
+        logger.warn("exercise match failed; saving unanchored", {
+          error,
+          exercise: item.exercise_name,
+        });
+        return { canonical_exercise_id: null, match_tier: null };
+      }
+    }),
+  );
+}
 
 export interface WorkoutService {
   getRecent(limit?: number, userId?: number): Promise<WorkoutRow[]>;
@@ -28,7 +74,8 @@ export interface WorkoutService {
 
 export function createWorkoutService(
   repo: ReturnType<typeof import("../repositories/workout.repository").createWorkoutRepository>,
-  aiService: AIService
+  aiService: AIService,
+  deps: WorkoutServiceDeps = {},
 ): WorkoutService {
   return {
     async getRecent(limit = DEFAULT_WORKOUT_LIMIT, userId: number = DEFAULT_USER_ID): Promise<WorkoutRow[]> {
@@ -71,7 +118,8 @@ export function createWorkoutService(
       if (!items || items.length === 0) {
         throw new ValidationError("No workout items to save");
       }
-      return repo.createBatch(rawText, items, createdAt, activity, userId);
+      const anchors = await resolveAnchors(items, deps.exerciseMatcher);
+      return repo.createBatch(rawText, items, createdAt, activity, userId, anchors);
     },
 
     async getDistinctExercises(userId: number = DEFAULT_USER_ID): Promise<string[]> {

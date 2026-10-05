@@ -15,6 +15,7 @@ import { getLocalDateString } from "../lib/date";
 import type { createCoachPlanRepository, CoachPlanRow, CoachPlanInput } from "../repositories/coach-plan.repository";
 import type { createCoachKnowledgeRepository, CoachKnowledgeRow } from "../repositories/coach-knowledge.repository";
 import type { createWorkoutRepository } from "../repositories/workout.repository";
+import type { GymAvailabilityDeps } from "../exercises/gym-availability";
 import { COACH_CONTEXT_DAYS, COACH_NUTRITION_DAYS, DEEPSEEK_COACH_MODEL } from "../constants";
 
 const logger = createChildLogger("coach-service");
@@ -50,6 +51,8 @@ export interface CoachServiceDeps {
   coachPlanRepo: ReturnType<typeof createCoachPlanRepository>;
   coachKnowledgeRepo: ReturnType<typeof createCoachKnowledgeRepository>;
   workoutRepo: ReturnType<typeof createWorkoutRepository>;
+  /** Gym equipment facts for the lookup_gym_equipment tool (ADR 0027). */
+  gymEquipment: GymAvailabilityDeps;
 }
 
 const round = (n: number) => Math.round(n);

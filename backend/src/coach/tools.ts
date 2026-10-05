@@ -2,6 +2,7 @@ import type { CoachServiceDeps } from "../services/coach.service";
 import { isValidDateString } from "../lib/date";
 import { classifySession } from "./classify";
 import { assessExercise } from "./overload";
+import { summarizeGymAvailability } from "../exercises/gym-availability";
 import type { CoachPlanInput } from "../repositories/coach-plan.repository";
 import {
     DEFAULT_EXERCISE_ROLE,
@@ -310,6 +311,17 @@ export function buildCoachTools(deps: CoachServiceDeps, userId: number): {
         {
             type: "function",
             function: {
+                name: "lookup_gym_equipment",
+                description: "Look up what equipment a gym has and whether the saved plan's exercises can actually be performed there. Omit gym_id for the user's most recently used gym — if you rely on that default, SAY which gym you assumed. Use this BEFORE proposing a plan or a session prescription for training at a specific gym, and when an exercise turns out unavailable: substitute an available exercise for the same muscles (Derived Substitution) instead of keeping the unavailable one.",
+                parameters: {
+                    type: "object",
+                    properties: { gym_id: { type: "number", description: "Optional gym id; omit for the last-used gym" } },
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
                 name: "propose_plan",
                 description: "Return a structured plan proposal for one day type. This DOES NOT save. Use this after presenting the plan so the app can show a one-click Save Plan card.",
                 parameters: {
@@ -516,6 +528,19 @@ export function buildCoachTools(deps: CoachServiceDeps, userId: number): {
                     ...assessment,
                     painComments,
                 });
+            }
+            case "lookup_gym_equipment": {
+                // parseSessionId is the generic positive-integer arg parser —
+                // here it parses a gym id.
+                const gymId = parseSessionId(args.gym_id) ?? undefined;
+                const planRows = await deps.coachPlanRepo.getAll(userId);
+                const planNames = [...new Set(planRows.map((r) => r.exercise_name))];
+                const summary = await summarizeGymAvailability(deps.gymEquipment, {
+                    gymId,
+                    userId,
+                    planNames,
+                });
+                return JSON.stringify(summary);
             }
             case "propose_plan": {
                 const day = parseDayType(args.day_type);

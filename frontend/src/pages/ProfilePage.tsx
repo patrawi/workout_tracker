@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import {
   LineChart,
   Line,
@@ -17,6 +18,9 @@ import {
 } from "@/components/ui/select";
 import { TIME_RANGES } from "@/lib/constants";
 import { useProfile } from "@/features/profile/hooks/useProfile";
+import { useGyms } from "@/features/workouts/hooks/useGyms";
+import type { GymRow } from "@/lib/api/gyms";
+import GymProfileSheet from "@/components/GymProfileSheet";
 import PushNotificationToggle from "@/components/PushNotificationToggle";
 import DatePicker from "@/components/DatePicker";
 
@@ -71,6 +75,8 @@ export default function ProfilePage() {
     bmi,
     bmiLabel,
   } = useProfile();
+  const { gyms, updateEquipmentProfile, isSavingProfile } = useGyms();
+  const [editingGym, setEditingGym] = useState<GymRow | null>(null);
   return (
     <div className="min-h-screen">
       {/* Background ambient glow */}
@@ -522,9 +528,69 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {/* Gyms (PAT-56 Phase 2): Gym Profile equipment editor */}
+            <div className="glass-card p-6 space-y-4">
+              <h3 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
+                🏋️ Gyms
+              </h3>
+              {gyms.length === 0 ? (
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  ยังไม่มียิม — ยิมจะถูกเพิ่มอัตโนมัติเมื่อบันทึกซ้อมพร้อมระบุยิม
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {gyms.map((gym) => (
+                    <button
+                      key={gym.id}
+                      onClick={() => setEditingGym(gym)}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-left transition-all hover:opacity-90"
+                      style={{
+                        background: "oklch(0.22 0.015 260 / 0.4)",
+                        border: "1px solid oklch(0.28 0.015 260 / 0.3)",
+                      }}
+                    >
+                      <span className="text-sm text-[var(--foreground)] font-medium truncate">
+                        {gym.name}
+                      </span>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full whitespace-nowrap ml-3"
+                        style={
+                          gym.equipment === null
+                            ? { background: "oklch(0.25 0.01 260 / 0.5)", color: "var(--muted-foreground)" }
+                            : { background: "oklch(0.65 0.22 160 / 0.12)", color: "oklch(0.72 0.19 160)" }
+                        }
+                      >
+                        {gym.equipment === null
+                          ? "ไม่จำกัด"
+                          : `${gym.equipment.length} อุปกรณ์`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-[var(--muted-foreground)]">
+                แตะยิมเพื่อตั้งโปรไฟล์อุปกรณ์ — โค้ชจะใช้เลือก/substitute ท่าตอนวางแผน
+              </p>
+            </div>
           </div>
         )}
       </main>
+
+      {editingGym && (
+        <GymProfileSheet
+          gym={gyms.find((g) => g.id === editingGym.id) ?? editingGym}
+          onClose={() => setEditingGym(null)}
+          saving={isSavingProfile}
+          onSave={async (equipment) => {
+            await updateEquipmentProfile.mutateAsync({
+              id: editingGym.id,
+              equipment,
+            });
+            setEditingGym(null);
+          }}
+        />
+      )}
     </div>
   );
 }
