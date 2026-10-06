@@ -48,11 +48,12 @@ export default function GymProfileSheet({ gym, onClose, onSave, saving }: GymPro
     return (
         <div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
-            style={{ background: "rgba(0,0,0,0.6)" }}
+            style={{ background: "rgba(0,0,0,0.78)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}
             onClick={onClose}
         >
             <div
                 className="glass-card w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-6 space-y-5 animate-slide-up"
+                style={{ background: "oklch(0.18 0.012 260 / 0.92)" }}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
