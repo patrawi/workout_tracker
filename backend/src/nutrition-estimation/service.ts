@@ -27,12 +27,12 @@ import type {
   PersistedRevision,
   NutritionEstimationRepository,
 } from "../repositories/nutrition-estimation.repository";
-import { scoreReference, type ReferenceRow } from "./matching/matcher";
+import { providerRank, scoreReference, type ReferenceRow } from "./matching/matcher";
 import { ValidationError, NotFoundError, ConflictError } from "../lib/errors";
 import type { InterpretOutcome } from "./vlm/deepseek-vision";
 
 export interface MatcherLike {
-  matchReference(menuName: string): Promise<MatchOutcomeLike>;
+  matchReference(menuName: string, hints?: { kind?: string }): Promise<MatchOutcomeLike>;
 }
 
 export type MatchOutcomeLike =
@@ -54,6 +54,7 @@ export interface InterpreterLike {
     menuName: string;
     beforeImageBase64?: string;
     afterImageBase64?: string;
+    userNote?: string;
   }): Promise<InterpretOutcome>;
 }
 
@@ -75,6 +76,8 @@ export interface CreateObservationServiceInput {
   menu_name: string;
   portion_mode: "measured" | "estimated";
   meal_source?: string;
+  /** Human portion estimates/constraints sent at interpret time (ADR 0028). */
+  user_note?: string;
   components: ServiceComponentInput[];
   reference_id?: number;
   /**
@@ -461,6 +464,7 @@ export function createNutritionEstimationService(deps: {
       menu_name: menuName,
       portion_mode: portionMode,
       meal_source: input.meal_source ?? null,
+      user_note: input.user_note?.trim() || null,
       status,
       reference_id: referenceId,
       match_tier: matchTier,
@@ -534,7 +538,7 @@ export function createNutritionEstimationService(deps: {
       const resolutions: ComponentResolution[] = [];
       const estimateNotes: string[] = [];
       for (const component of components) {
-        const match = await matcher.matchReference(component.name);
+        const match = await matcher.matchReference(component.name, { kind: component.kind });
         if (match.tier === "auto" && match.reference.per100.calories > 0) {
           resolutions.push({
             per100: match.reference.per100,
@@ -657,8 +661,11 @@ export function createNutritionEstimationService(deps: {
   /**
    * Resolve ONE component's reference (ADR 0026): the chosen reference backs
    * that component, every other component keeps its existing sourcing
-   * (matched reference or kind prior), and a new pending revision persists
-   * the recalculation.
+   * (matched reference or kind prior), and a new revision persists the
+   * recalculation. On a confirmed observation (the ADR 0030 auto-confirm flow
+   * makes every save confirmed) the correction re-finalizes: the new revision
+   * is marked confirmed, older confirmed ones are superseded, and
+   * nutrition_logs is re-dual-written so daily totals follow the fix.
    */
   async function resolveComponentReference(
     observationId: number,
@@ -668,9 +675,7 @@ export function createNutritionEstimationService(deps: {
   ): Promise<CalculateForReferenceResult> {
     const detail = await repo.getObservationDetail(observationId, userId);
     if (!detail) throw new NotFoundError("Meal observation");
-    if (detail.status === "confirmed") {
-      throw new ConflictError("Confirmed observations cannot be re-resolved.");
-    }
+    const wasConfirmed = detail.status === "confirmed";
     const components = componentsFromDetail(detail);
     if (position < 0 || position >= components.length) {
       throw new ValidationError("Component position is out of range.");
@@ -732,14 +737,29 @@ export function createNutritionEstimationService(deps: {
       reference_id: null,
       calculation,
     }, userId);
-    if (detail.status !== "draft") {
+
+    if (wasConfirmed) {
+      // Re-finalize the correction: the meal is already logged, so the new
+      // revision supersedes the confirmed one and nutrition_logs is re-dual-
+      // written — otherwise daily totals would keep the pre-fix values.
+      await repo.updateRevisionStatus(revision.id, "confirmed");
+      await repo.supersedeConfirmedRevisions(observationId, revision.id);
+      await repo.upsertNutritionLogLink({
+        user_id: userId,
+        date: detail.date,
+        meal: detail.meal_type,
+        food_name: detail.menu_name,
+        ...centralValues(calculation),
+        observation_id: observationId,
+      });
+    } else if (detail.status !== "draft") {
       await repo.updateObservationStatus(observationId, "draft", userId);
     }
 
     const updated = (await repo.getObservationDetail(observationId, userId))!;
     return {
       observation: updated,
-      revision,
+      revision: wasConfirmed ? { ...revision, status: "confirmed" } : revision,
       reference,
       explanation: buildExplanation(updated, calculation),
     };
@@ -852,7 +872,7 @@ export function createNutritionEstimationService(deps: {
         score: scoreReference(trimmed, row) || substringScore(row, trimmed, lowered),
       }))
       .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.score - a.score || providerRank(a.row.provider) - providerRank(b.row.provider))
       .map((s) => toSearchItem(s.row));
 
     const items = codeMatch
@@ -872,7 +892,7 @@ export function createNutritionEstimationService(deps: {
       const seen = new Set(items.map((item) => item.id));
       const vectorItems = hits
         .filter((hit) => hit.similarity >= SEARCH_VECTOR_FLOOR && !seen.has(hit.id))
-        .sort((a, b) => b.similarity - a.similarity)
+        .sort((a, b) => b.similarity - a.similarity || providerRank(a.provider) - providerRank(b.provider))
         .slice(0, cap - items.length)
         .map((hit) => ({ ...toSearchItem(hit), score: hit.similarity }));
       items.push(...vectorItems);
@@ -885,6 +905,7 @@ export function createNutritionEstimationService(deps: {
     menuName: string;
     beforeImageBase64?: string;
     afterImageBase64?: string;
+    userNote?: string;
   }): Promise<InterpretOutcome> {
     if (!interpreter) {
       return { status: "unavailable" };

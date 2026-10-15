@@ -81,6 +81,7 @@ function createFakeRepo() {
         menu_name: input.menu_name,
         portion_mode: input.portion_mode,
         meal_source: input.meal_source,
+        user_note: input.user_note,
         status: input.status,
         reference_id: input.reference_id,
         match_tier: input.match_tier,
@@ -474,6 +475,7 @@ describe("confirmEstimate — dual-write (ADR 0022)", () => {
       menu_name: "ผัดกะเพราหมู",
       portion_mode: "estimated",
       meal_source: null,
+      user_note: null,
       status: "reference_pending",
       reference_id: null,
       match_tier: "gap",
@@ -482,6 +484,38 @@ describe("confirmEstimate — dual-write (ADR 0022)", () => {
       updated_at: "2026-09-13 10:00:00",
     });
     expect(service.confirmEstimate(1, 1)).rejects.toThrow(/no estimate revision/);
+  });
+});
+
+describe("resolveComponentReference on a confirmed observation (ADR 0030)", () => {
+  test("re-finalizes: new revision confirmed, log re-dual-written, status stays confirmed", async () => {
+    const { repo, state } = createFakeRepo();
+    state.references.set(REF.id, REF);
+    const REF_ALT: ReferenceRow = {
+      ...REF,
+      id: 104,
+      providerFoodCode: "TFC-004",
+      nameTh: "ข้าวเหนียว, นึ่ง",
+      per100: { protein: 12, carbs: 24, fat: 6, alcohol: 0, calories: 240 },
+    };
+    state.references.set(REF_ALT.id, REF_ALT);
+    const service = createNutritionEstimationService({ repo, matcher: autoMatcher(REF) });
+
+    const created = await service.createObservation(estimatedInput());
+    await service.confirmEstimate(created.observation.id, 1);
+
+    const outcome = await service.resolveComponentReference(created.observation.id, 0, REF_ALT.id, 1);
+
+    // The correction is immediately final — the meal stays logged.
+    expect(outcome.revision.status).toBe("confirmed");
+    expect(state.observations[0]!.status).toBe("confirmed");
+    const revisions = [...state.revisions].sort((a, b) => a.id - b.id);
+    expect(revisions[0]!.status).toBe("superseded");
+    expect(revisions[1]!.status).toBe("confirmed");
+    // Same linked log row, corrected central values (200 g × alt per100).
+    expect(state.nutritionLogs).toHaveLength(1);
+    expect(state.nutritionLogs[0].protein).toBeCloseTo(24);
+    expect(state.nutritionLogs[0].calories).toBeCloseTo(480);
   });
 });
 
@@ -608,6 +642,47 @@ describe("interpret pass-through", () => {
     const { repo } = createFakeRepo();
     const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
     expect(await service.interpret({ menuName: "ข้าวผัด" })).toEqual({ status: "unavailable" });
+  });
+
+  test("forwards userNote to the interpreter unchanged (ADR 0028)", async () => {
+    const { repo } = createFakeRepo();
+    const seen: Array<{ menuName: string; userNote?: string }> = [];
+    const interpreter: InterpreterLike = {
+      interpret: async (input) => {
+        seen.push({ menuName: input.menuName, userNote: input.userNote });
+        return { status: "failed", reason: "no_food" };
+      },
+    };
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher(), interpreter });
+
+    await service.interpret({
+      menuName: "ข้าวมันไก่ผสม",
+      userNote: "ข้าว ~200 g ไม่มันมาก, ไก่ทอด ~65 g",
+    });
+    expect(seen).toEqual([
+      { menuName: "ข้าวมันไก่ผสม", userNote: "ข้าว ~200 g ไม่มันมาก, ไก่ทอด ~65 g" },
+    ]);
+  });
+});
+
+describe("createObservation — user_note persistence (ADR 0028)", () => {
+  test("stores a trimmed note with the observation", async () => {
+    const { repo, state } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    await service.createObservation(estimatedInput({ user_note: "  ข้าว ~200 g  " }));
+    expect(state.observations[0]!.user_note).toBe("ข้าว ~200 g");
+  });
+
+  test("absent or whitespace-only note persists as null", async () => {
+    const { repo, state } = createFakeRepo();
+    const service = createNutritionEstimationService({ repo, matcher: gapMatcher() });
+
+    await service.createObservation(estimatedInput());
+    expect(state.observations[0]!.user_note).toBeNull();
+
+    await service.createObservation(estimatedInput({ user_note: "   " }));
+    expect(state.observations[1]!.user_note).toBeNull();
   });
 });
 

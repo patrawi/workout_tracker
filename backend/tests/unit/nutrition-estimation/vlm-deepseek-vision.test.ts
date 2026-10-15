@@ -94,6 +94,69 @@ describe("createDeepSeekVisionInterpreter — request shape", () => {
   });
 });
 
+describe("createDeepSeekVisionInterpreter — user note constraints (ADR 0028)", () => {
+  test("includes a non-empty user_note as an authoritative constraint line in the user text", async () => {
+    const { calls, fetchImpl } = createMockFetch(JSON.stringify(VALID_PROPOSAL));
+    const interpreter = createDeepSeekVisionInterpreter({ apiKey: "sk-test", fetchImpl });
+
+    await interpreter.interpret({
+      menuName: "ข้าวมันไก่ผสม",
+      beforeImageBase64: "BEFORE",
+      userNote: "ข้าว ~200 g ไม่มันมาก, ไก่ทอด ~65 g, ไม่กินน้ำจิ้ม",
+    });
+
+    const body = JSON.parse(String(calls[0]!.init.body));
+    const userText = body.messages[1].content[0].text;
+    expect(userText).toContain('Menu name given by the user: "ข้าวมันไก่ผสม".');
+    expect(userText).toContain(
+      'Human-provided portion estimates/constraints (authoritative, override visual estimates): "ข้าว ~200 g ไม่มันมาก, ไก่ทอด ~65 g, ไม่กินน้ำจิ้ม".',
+    );
+  });
+
+  test("trims the note and omits whitespace-only notes entirely", async () => {
+    const { calls, fetchImpl } = createMockFetch(JSON.stringify(VALID_PROPOSAL));
+    const interpreter = createDeepSeekVisionInterpreter({ apiKey: "sk-test", fetchImpl });
+
+    await interpreter.interpret({ menuName: "ข้าวผัด", userNote: "   " });
+    const blankBody = JSON.parse(String(calls[0]!.init.body));
+    expect(blankBody.messages[1].content[0].text).not.toContain("Human-provided");
+
+    calls.length = 0;
+    await interpreter.interpret({ menuName: "ข้าวผัด", userNote: "  ไก่ต้ม 70 g  " });
+    const body = JSON.parse(String(calls[0]!.init.body));
+    expect(body.messages[1].content[0].text).toContain(
+      'Human-provided portion estimates/constraints (authoritative, override visual estimates): "ไก่ต้ม 70 g".',
+    );
+  });
+
+  test("keeps the no-note prompt byte-identical to the pre-ADR shape", async () => {
+    const { calls, fetchImpl } = createMockFetch(JSON.stringify(VALID_PROPOSAL));
+    const interpreter = createDeepSeekVisionInterpreter({ apiKey: "sk-test", fetchImpl });
+
+    await interpreter.interpret({ menuName: "ข้าวผัด" });
+
+    const body = JSON.parse(String(calls[0]!.init.body));
+    const userText = body.messages[1].content[0].text;
+    expect(userText).not.toContain("Human-provided");
+    expect(userText).toBe(
+      "Menu name given by the user: \"ข้าวผัด\".\n" +
+        "Only a before photo is provided; do NOT propose consumed_fraction.\n" +
+        "Inspect the photo(s) and respond with the JSON contract only.",
+    );
+  });
+
+  test("the system prompt states the authoritative-constraint and weak-prior rules", async () => {
+    const { calls, fetchImpl } = createMockFetch(JSON.stringify(VALID_PROPOSAL));
+    const interpreter = createDeepSeekVisionInterpreter({ apiKey: "sk-test", fetchImpl });
+
+    await interpreter.interpret({ menuName: "ข้าวผัด" });
+
+    const body = JSON.parse(String(calls[0]!.init.body));
+    expect(body.messages[0].content).toContain("Treat them as authoritative facts");
+    expect(body.messages[0].content).toContain("The menu name is a weak prior");
+  });
+});
+
 describe("createDeepSeekVisionInterpreter — ok path", () => {
   test("parses the contract into a validated proposal", async () => {
     const { fetchImpl } = createMockFetch(JSON.stringify(VALID_PROPOSAL));

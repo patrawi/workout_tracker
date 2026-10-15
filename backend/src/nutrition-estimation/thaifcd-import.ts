@@ -116,6 +116,10 @@ export interface ThaifcdImportStats {
   fallbackEnergyRows: number;
   /** Rows where "Carbohydrate, total" was missing and "available" used. */
   fallbackCarbsRows: number;
+  /** Rows whose missing CHOCDF was recovered from Energy by calculation. */
+  derivedCarbsRows: number;
+  /** Rows whose missing kcal was recovered from their macros. */
+  derivedCaloriesRows: number;
   /** Rows imported with a missing (→ 0) core macro, by macro. */
   missingMacros: { protein: number; carbs: number; fat: number; calories: number };
   /** Rows where name_en / name_th was absent (→ null). */
@@ -193,6 +197,26 @@ function mapName(value: string): string | null {
  * Map one ThaiFCD CSV record (header → value) to a catalog upsert row.
  * `record` keys are the exact export header names (see THAIFCD_COLUMNS).
  */
+/**
+ * Atwater by-difference recovery for ThaiFCD's independently incomplete rows:
+ * the source's "Energy(kcal) by calculation" implies the missing CHOCDF and
+ * vice versa (ข้าวเหนียว,นึ่ง → (232 − 4·4.54 − 9·0.21)/4 ≈ 53 g carbs).
+ * Returns null — keep the stored zero — when the numbers disagree with physics
+ * (negative remainder, or > 100 g of carbs per 100 g).
+ */
+export function byDifferenceCarbs(calories: number, protein: number, fat: number): number | null {
+  if (!Number.isFinite(calories) || calories <= 0) return null;
+  const derived = Math.round(((calories - 4 * protein - 9 * fat) / 4) * 100) / 100;
+  return Number.isFinite(derived) && derived >= 0 && derived <= 100 ? derived : null;
+}
+
+/** kcal from the Atwater factors, mirroring the source's "by calculation"
+ * column; null when nothing to build from or the result is implausible. */
+export function byDifferenceCalories(protein: number, carbs: number, fat: number): number | null {
+  const derived = Math.round((4 * protein + 4 * carbs + 9 * fat) * 10) / 10;
+  return Number.isFinite(derived) && derived > 0 && derived <= 900 ? derived : null;
+}
+
 export function mapThaifcdRecord(
   record: Record<string, string>,
   version: string = THAIFCD_DEFAULT_VERSION,
@@ -205,6 +229,8 @@ export function mapThaifcdRecord(
         skipped: true,
         usedFallbackEnergy: false,
         usedFallbackCarbs: false,
+        derivedCarbs: false,
+        derivedCalories: false,
         missingProtein: false,
         missingCarbs: false,
         missingCalories: false,
@@ -229,10 +255,19 @@ export function mapThaifcdRecord(
   const missingCarbs = carbsTotal === null && carbsAvailable === null;
   const missingCalories = energyPrimary === null && energyFallback === null;
 
-  // Missing core macros → 0 (per-100 g baseline; never fabricate a claim).
+  // Missing core macros → 0 (per-100 g baseline). EXCEPT the ThaiFCD gap the
+  // source itself ships: Energy is "by calculation" while CHOCDF (or the kcal
+  // column) is "-" on the same row — one side can be recovered with the same
+  // Atwater arithmetic, and a missing macro stored as a measured zero lies
+  // (steamed sticky rice at 0 g carbs). Out-of-range results keep the zero.
   const protein = parseThaifcdNumber(record[THAIFCD_COLUMNS.protein] ?? "") ?? 0;
   const fat = parseThaifcdNumber(record[THAIFCD_COLUMNS.fat] ?? "") ?? 0;
   const alcohol = parseThaifcdNumber(record[THAIFCD_COLUMNS.alcohol] ?? "") ?? 0;
+  const derivedCarbs = missingCarbs && calories > 0 ? byDifferenceCarbs(calories, protein, fat) : null;
+  const derivedCalories =
+    missingCalories && (protein > 0 || carbs > 0 || fat > 0)
+      ? byDifferenceCalories(protein, carbs, fat)
+      : null;
 
   const extra_nutrients: Record<string, number> = {};
   for (const [column, key] of EXTRA_NUTRIENT_COLUMNS) {
@@ -248,10 +283,10 @@ export function mapThaifcdRecord(
       name_en: mapName(record[THAIFCD_COLUMNS.englishName] ?? ""),
       name_th: mapName(record[THAIFCD_COLUMNS.thaiName] ?? ""),
       protein,
-      carbs,
+      carbs: derivedCarbs ?? carbs,
       fat,
       alcohol,
-      calories,
+      calories: derivedCalories ?? calories,
       extra_nutrients: Object.keys(extra_nutrients).length > 0 ? extra_nutrients : null,
       embedding: null,
     },
@@ -259,6 +294,8 @@ export function mapThaifcdRecord(
       skipped: false,
       usedFallbackEnergy: energyPrimary === null && energyFallback !== null,
       usedFallbackCarbs: carbsTotal === null && carbsAvailable !== null,
+      derivedCarbs: derivedCarbs !== null,
+      derivedCalories: derivedCalories !== null,
       missingProtein: parseThaifcdNumber(record[THAIFCD_COLUMNS.protein] ?? "") === null,
       missingCarbs,
       missingCalories,
@@ -275,6 +312,10 @@ export interface ThaifcdMappingFlags {
   skipped: boolean;
   usedFallbackEnergy: boolean;
   usedFallbackCarbs: boolean;
+  /** Missing CHOCDF recovered from the row's "Energy by calculation". */
+  derivedCarbs: boolean;
+  /** Missing kcal recovered from the row's macros. */
+  derivedCalories: boolean;
   missingProtein: boolean;
   missingCarbs: boolean;
   missingCalories: boolean;
@@ -324,6 +365,8 @@ export function parseThaifcdCsv(
     totalRows: 0,
     fallbackEnergyRows: 0,
     fallbackCarbsRows: 0,
+    derivedCarbsRows: 0,
+    derivedCaloriesRows: 0,
     missingMacros: { protein: 0, carbs: 0, fat: 0, calories: 0 },
     missingNameEn: 0,
     missingNameTh: 0,
@@ -341,6 +384,8 @@ export function parseThaifcdCsv(
     stats.totalRows++;
     if (flags.usedFallbackEnergy) stats.fallbackEnergyRows++;
     if (flags.usedFallbackCarbs) stats.fallbackCarbsRows++;
+    if (flags.derivedCarbs) stats.derivedCarbsRows++;
+    if (flags.derivedCalories) stats.derivedCaloriesRows++;
     if (flags.missingProtein) stats.missingMacros.protein++;
     if (flags.missingCarbs) stats.missingMacros.carbs++;
     if (flags.missingFat) stats.missingMacros.fat++;

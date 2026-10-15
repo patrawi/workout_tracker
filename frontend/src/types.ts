@@ -343,6 +343,8 @@ export interface CreateMealObservationInput {
     menu_name: string;
     portion_mode: "measured" | "estimated";
     meal_source?: string;
+    /** Human portion estimates/constraints sent at interpret time (ADR 0028). */
+    user_note?: string;
     has_after_image?: boolean;
     reference_id?: number;
     components: PortionComponentInput[];

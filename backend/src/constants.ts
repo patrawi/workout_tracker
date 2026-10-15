@@ -18,6 +18,10 @@ export const AUTH_JWT_EXPIRY = "7d";
 export const GEMINI_MODEL_WORKOUT = "gemini-3-flash-preview";
 export const GEMINI_MODEL_NUTRITION = "gemini-3-flash-preview";
 export const GEMINI_TEMPERATURE = 0.1;
+// Gemini REST base — direct generateContent calls (vision adapter, ADR 0029).
+export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+// Vision model when VLM_PROVIDER=gemini (ADR 0029); override via GEMINI_VISION_MODEL.
+export const GEMINI_VISION_MODEL = "gemini-3.8-flash";
 
 // AI Coach (conversational — higher temperature than the parsers)
 export const COACH_MODEL = "gemini-3-flash-preview";

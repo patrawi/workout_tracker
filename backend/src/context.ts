@@ -19,6 +19,7 @@ import { createExerciseMatcher } from "./exercises/exercise-matcher";
 import { createReferenceMatcher } from "./nutrition-estimation/matching/matcher";
 import { createNutritionEstimationService } from "./nutrition-estimation/service";
 import { createDeepSeekVisionInterpreter } from "./nutrition-estimation/vlm/deepseek-vision";
+import { createGeminiVisionInterpreter } from "./nutrition-estimation/vlm/gemini-vision";
 import { createAIService } from "./services/ai.service";
 import { createAnalyticsService } from "./services/analytics.service";
 import { createBodyweightService } from "./services/bodyweight.service";
@@ -129,11 +130,16 @@ export function createAppContext(
   const nutritionEstimationService = createNutritionEstimationService({
     repo: nutritionEstimationRepo,
     matcher: referenceMatcher,
-    // VLM interpreter is optional; without a DeepSeek key interpret() returns
+    // VLM interpreter is optional; without a usable provider interpret() returns
     // { status: "unavailable" } and logging proceeds manually (ADR 0017).
-    interpreter: config.deepseekApiKey
-      ? createDeepSeekVisionInterpreter({ apiKey: config.deepseekApiKey })
-      : undefined,
+    // Provider selected via VLM_PROVIDER (default deepseek = shipped behavior,
+    // gemini opt-in — ADR 0029); an unusable selection falls back to deepseek.
+    interpreter:
+      config.vlmProvider === "gemini" && config.geminiApiKey
+        ? createGeminiVisionInterpreter({ apiKey: config.geminiApiKey, model: config.geminiVisionModel })
+        : config.deepseekApiKey
+          ? createDeepSeekVisionInterpreter({ apiKey: config.deepseekApiKey })
+          : undefined,
     // Query embedder for the search vector tier (ADR 0014) — same client the
     // matcher fallback uses; harmless when the key is absent.
     embed: config.geminiApiKey

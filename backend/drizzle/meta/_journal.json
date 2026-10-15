@@ -148,6 +148,13 @@
       "when": 1791206546629,
       "tag": "0020_aberrant_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791283561469,
+      "tag": "0021_acoustic_jack_power",
+      "breakpoints": true
     }
   ]
 }

@@ -47,6 +47,24 @@ const OIL_BAND_FRACTIONS: Record<Exclude<LatentHintLevel, "none">, Interval> = {
 
 const LEVEL_ORDER: LatentHintLevel[] = ["none", "low", "medium", "high"];
 
+/** Round to 2 decimal places — every engine output is user-facing, and raw
+ * float results read as a bug (11.889999999999999) even when they are just
+ * IEEE-754 noise. Interval math stays exact internally; only outputs round. */
+function round2(v: number): number {
+  return Math.round((v + Number.EPSILON) * 100) / 100;
+}
+
+function roundInterval(iv: Interval): Interval {
+  return { low: round2(iv.low), central: round2(iv.central), high: round2(iv.high) };
+}
+
+function roundMacros(m: Record<MacroKey, Interval>): Record<MacroKey, Interval> {
+  return Object.fromEntries(MACRO_KEYS.map((k) => [k, roundInterval(m[k])])) as Record<
+    MacroKey,
+    Interval
+  >;
+}
+
 function point(v: number): Interval {
   return { low: v, central: v, high: v };
 }
@@ -307,11 +325,19 @@ export function calculateNutritionPerComponent(
     throw new InfeasibleEvidenceError(hardReasons);
   }
 
+  // Totals are the rounded sum of the ROUNDED per-component contributions, then
+  // rounded once more so the displayed parts sum to the displayed total.
+  const rounded = perComponent.map((c) => ({
+    name: c.name,
+    consumedWeight: roundInterval(c.consumedWeight),
+    perMacro: roundMacros(c.perMacro),
+  }));
+
   const nutrients = Object.fromEntries(
     MACRO_KEYS.map((k) => {
-      const low = perComponent.reduce((s, c) => s + c.perMacro[k].low, 0);
-      const central = perComponent.reduce((s, c) => s + c.perMacro[k].central, 0);
-      const high = perComponent.reduce((s, c) => s + c.perMacro[k].high, 0);
+      const low = round2(rounded.reduce((s, c) => s + c.perMacro[k].low, 0));
+      const central = round2(rounded.reduce((s, c) => s + c.perMacro[k].central, 0));
+      const high = round2(rounded.reduce((s, c) => s + c.perMacro[k].high, 0));
       return [k, { low, central, high }];
     }),
   ) as Record<keyof Macronutrients, MassRange>;
@@ -321,7 +347,7 @@ export function calculateNutritionPerComponent(
     relaxed: relaxedConstraints.size > 0,
     relaxed_constraints: [...relaxedConstraints],
     drivers: [...drivers],
-    per_component: perComponent.map((c) => ({
+    per_component: rounded.map((c) => ({
       name: c.name,
       consumed_weight_g: c.consumedWeight,
       contribution: { ...c.perMacro },

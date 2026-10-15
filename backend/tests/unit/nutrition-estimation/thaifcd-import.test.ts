@@ -11,6 +11,9 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   THAIFCD_COLUMNS,
   THAIFCD_PROVIDER,
+  byDifferenceCalories,
+  byDifferenceCarbs,
+  mapThaifcdRecord,
   parseCsv,
   parseThaifcdCsv,
   parseThaifcdNumber,
@@ -375,5 +378,54 @@ describe("thaifcdEmbedText", () => {
     expect(thaifcdEmbedText({ name_th: "ข้าวผัด", name_en: null })).toBe("ข้าวผัด");
     expect(thaifcdEmbedText({ name_th: null, name_en: "Fried Rice" })).toBe("Fried Rice");
     expect(thaifcdEmbedText({ name_th: null, name_en: null })).toBe("");
+  });
+});
+
+describe("by-difference recovery (ThaiFCD ships Energy/CHOCDF independently incomplete)", () => {
+  test("missing CHOCDF with kcal present derives carbs — ข้าวเหนียว,นึ่ง fixture", () => {
+    const { row, stats } = mapThaifcdRecord({
+      food_code: "A23",
+      thai_name: "ข้าวเหนียว, นึ่ง",
+      [THAIFCD_COLUMNS.energyKcalPrimary]: "232",
+      [THAIFCD_COLUMNS.protein]: "4.54",
+      [THAIFCD_COLUMNS.fat]: "0.21",
+    });
+    // (232 − 4·4.54 − 9·0.21)/4 ≈ 52.99 — the real steamed-glutinous-rice carbs.
+    expect(row!.carbs).toBeCloseTo(52.99, 1);
+    expect(stats.derivedCarbs).toBe(true);
+    expect(row!.calories).toBe(232);
+  });
+
+  test("missing kcal with macros present derives kcal — หมูกรอบ fixture", () => {
+    const { row, stats } = mapThaifcdRecord({
+      food_code: "F1",
+      thai_name: "หมูกรอบ (หมูสามชั้นทอดกรอบ)",
+      [THAIFCD_COLUMNS.protein]: "19.9",
+      [THAIFCD_COLUMNS.fat]: "46.9",
+    });
+    // 4·19.9 + 9·46.9 = 501.7 — the missing fried-pork energy.
+    expect(row!.calories).toBeCloseTo(501.7, 0);
+    expect(stats.derivedCalories).toBe(true);
+    expect(row!.carbs).toBe(0);
+  });
+
+  test("implausible by-difference keeps the zero (pure fat row: negative remainder)", () => {
+    const { row, stats } = mapThaifcdRecord({
+      food_code: "F2",
+      thai_name: "น้ำมันพืช",
+      [THAIFCD_COLUMNS.energyKcalPrimary]: "884",
+      [THAIFCD_COLUMNS.fat]: "100",
+    });
+    // (884 − 900)/4 < 0 → not derived; a zero-carb oil stays zero-carb.
+    expect(row!.carbs).toBe(0);
+    expect(stats.derivedCarbs).toBe(false);
+  });
+
+  test("helper units: carbs by difference clamps out-of-physics results to null", () => {
+    expect(byDifferenceCarbs(232, 4.54, 0.21)).toBeCloseTo(52.99, 1);
+    expect(byDifferenceCarbs(884, 0, 100)).toBeNull(); // negative remainder
+    expect(byDifferenceCarbs(0, 10, 5)).toBeNull(); // no energy to work from
+    expect(byDifferenceCalories(19.9, 0, 46.9)).toBeCloseTo(501.7, 0);
+    expect(byDifferenceCalories(0, 0, 0)).toBeNull(); // nothing to build from
   });
 });

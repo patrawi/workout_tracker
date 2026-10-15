@@ -66,6 +66,9 @@ const InterpretationSchema = t.Object({
   menu_name: t.String({ maxLength: 300 }),
   before_image_base64: t.Optional(t.String({ maxLength: IMAGE_BASE64_MAX_LENGTH })),
   after_image_base64: t.Optional(t.String({ maxLength: IMAGE_BASE64_MAX_LENGTH })),
+  // Human portion estimates/constraints (ADR 0028) — fed to the VLM as
+  // authoritative anchors for its weight_g proposals.
+  user_note: t.Optional(t.String({ maxLength: 500 })),
 });
 
 export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): void {
@@ -102,6 +105,7 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
         menu_name: body.menu_name,
         portion_mode: body.portion_mode,
         meal_source: body.meal_source,
+        user_note: body.user_note,
         components: body.components,
         reference_id: body.reference_id,
         has_after_image: body.has_after_image,
@@ -113,6 +117,7 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
         menu_name: t.String({ minLength: 1, maxLength: 300 }),
         portion_mode: t.Union(literals(PORTION_MODES)),
         meal_source: t.Optional(t.String({ maxLength: 200 })),
+        user_note: t.Optional(t.String({ maxLength: 500 })),
         components: t.Array(ComponentSchema, { minItems: 1 }),
         reference_id: t.Optional(t.Integer()),
         // Fractions were confirmed against an after image → any value in (0, 1]
@@ -125,6 +130,7 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
         menuName: body.menu_name,
         beforeImageBase64: body.before_image_base64,
         afterImageBase64: body.after_image_base64,
+        userNote: body.user_note,
       });
     }), {
       body: InterpretationSchema,

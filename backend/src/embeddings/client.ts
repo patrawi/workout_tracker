@@ -9,8 +9,10 @@ export interface EmbeddingClient {
 }
 
 /**
- * Create an embedding client backed by Gemini `text-embedding-004` (768-dim).
- * Used to embed food-catalog documents and meal-item queries for pgvector search.
+ * Create an embedding client backed by `gemini-embedding-001` (multilingual,
+ * 100+ languages; 768-dim Matryoshka slice requested via
+ * outputDimensionality). Used to embed food-catalog documents and meal-item
+ * queries for pgvector search.
  */
 export function createEmbeddingClient(
   apiKey: string,

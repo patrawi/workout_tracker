@@ -152,6 +152,22 @@ describe("matchReference — tiers", () => {
     expect(outcome.tier).toBe("gap");
   });
 
+  test("score ties order ThaiFCD before BaoWio (vendor trust tie-break)", async () => {
+    // Both rows share the exact name → both score 1.0, margin 0 → ambiguous;
+    // the tie-break decides which one the picker shows first.
+    const repo = makeRepo([
+      row({ id: 1, provider: "baowio", nameTh: "ข้าวเหนียว", per100: { protein: 2, carbs: 21.1, fat: 0.2, alcohol: 0, calories: 97 } }),
+      row({ id: 2, provider: "thaifcd", nameTh: "ข้าวเหนียว", per100: { protein: 4.54, carbs: 52.99, fat: 0.21, alcohol: 0, calories: 232 } }),
+    ]);
+    const matcher = createReferenceMatcher(repo);
+    const outcome = await matcher.matchReference("ข้าวเหนียว");
+    expect(outcome.tier).toBe("ambiguous");
+    if (outcome.tier === "ambiguous") {
+      expect(outcome.candidates[0]!.provider).toBe("thaifcd");
+      expect(outcome.candidates[0]!.id).toBe(2);
+    }
+  });
+
   test("empty candidate pool → gap (never fabricate a reference)", async () => {
     const repo = makeRepo([]);
     const matcher = createReferenceMatcher(repo);
@@ -253,6 +269,86 @@ describe("matchReference — vector fallback on its own scale (ADR 0014, rescale
   });
 });
 
+describe("matchReference — vector provider handicap (vendor trust)", () => {
+  test("BaoWio edging a ThaiFCD row does not auto-select — goes to the picker", async () => {
+    // Live-measured case: "ข้าวเหนียวสุก" embeds 0.879 to BaoWio's bare
+    // "ข้าวเหนียว" vs 0.796 to ThaiFCD's "ข้าวเหนียว, นึ่ง".
+    const hits = [
+      { ...row({ id: 1, provider: "baowio", nameTh: "ข้าวเหนียว" }), similarity: 0.8792 },
+      { ...row({ id: 2, provider: "thaifcd", nameTh: "ข้าวเหนียว, นึ่ง" }), similarity: 0.7956 },
+    ];
+    const repo = makeRepo(hits, mock(async () => hits));
+    const matcher = createReferenceMatcher(repo, { embed: async () => [1] });
+    const outcome = await matcher.matchReference("ข้าวเหนียวสุก");
+    expect(outcome.tier).toBe("ambiguous");
+    if (outcome.tier === "ambiguous") {
+      expect(outcome.candidates[0]!.provider).toBe("baowio"); // sim order preserved
+    }
+  });
+
+  test("ThaiFCD clear of the runner-up still auto-selects through the handicap", async () => {
+    const hits = [
+      { ...row({ id: 2, provider: "thaifcd", nameTh: "ข้าวเหนียว, นึ่ง" }), similarity: 0.9 },
+      { ...row({ id: 1, provider: "baowio", nameTh: "ข้าวเหนียว" }), similarity: 0.88 },
+    ];
+    const repo = makeRepo(hits, mock(async () => hits));
+    const matcher = createReferenceMatcher(repo, { embed: async () => [1] });
+    const outcome = await matcher.matchReference("ข้าวเหนียวสุก");
+    expect(outcome.tier).toBe("auto");
+    if (outcome.tier === "auto") expect(outcome.reference.provider).toBe("thaifcd");
+  });
+
+  test("BaoWio never auto-selects even with a clear vector lead (unit-suspect rows go to the picker)", async () => {
+    // Behavior change (ข้าวเหนียวหมูย่าง incident fix): BaoWio's bare
+    // ingredient names embed closest to queries, but its rows mix unit
+    // conventions — a clear vector lead now stays ambiguous.
+    const hits = [
+      { ...row({ id: 1, provider: "baowio", nameTh: "กุ้ง" }), similarity: 0.95 },
+      { ...row({ id: 2, provider: "thaifcd", nameTh: "กุ้งเผา" }), similarity: 0.8 },
+    ];
+    const repo = makeRepo(hits, mock(async () => hits));
+    const matcher = createReferenceMatcher(repo, { embed: async () => [1] });
+    const outcome = await matcher.matchReference("กุ้งสุก");
+    expect(outcome.tier).toBe("ambiguous");
+    if (outcome.tier === "ambiguous") {
+      expect(outcome.candidates[0]!.provider).toBe("baowio"); // sim order preserved
+    }
+  });
+
+  test("BaoWio never auto-selects on the lexical tier either", async () => {
+    const repo = makeRepo([
+      row({ id: 1, provider: "baowio", nameTh: "กะปิ", per100: { protein: 10, carbs: 360, fat: 2, alcohol: 0, calories: 1480 } }),
+      row({ id: 2, provider: "thaifcd", nameTh: "กุ้งสด" }),
+    ]);
+    const matcher = createReferenceMatcher(repo);
+    const outcome = await matcher.matchReference("กะปิ");
+    expect(outcome.tier).toBe("ambiguous");
+    if (outcome.tier === "ambiguous") {
+      expect(outcome.candidates[0]!.provider).toBe("baowio");
+    }
+  });
+
+  test("auto-pick outside the kind's calorie band is demoted to ambiguous (F3 sanity net)", async () => {
+    // "ข้าวเม่า" (raw glutinous flakes, 364 kcal/100g) would lexically
+    // auto-select at 1.0 — outside the rice band [40, 320] it must not.
+    const repo = makeRepo([
+      row({ id: 1279, nameTh: "ข้าวเม่า", nameEn: "Rice, glutinous, flakes", per100: { protein: 7.2, carbs: 79.5, fat: 1.2, alcohol: 0, calories: 364 } }),
+    ]);
+    const matcher = createReferenceMatcher(repo);
+    const outcome = await matcher.matchReference("ข้าวเม่า", { kind: "rice" });
+    expect(outcome.tier).toBe("ambiguous");
+  });
+
+  test("kind band check is skipped when no kind hint is given", async () => {
+    const repo = makeRepo([
+      row({ id: 1279, nameTh: "ข้าวเม่า", nameEn: "Rice, glutinous, flakes", per100: { protein: 7.2, carbs: 79.5, fat: 1.2, alcohol: 0, calories: 364 } }),
+    ]);
+    const matcher = createReferenceMatcher(repo);
+    const outcome = await matcher.matchReference("ข้าวเม่า");
+    expect(outcome.tier).toBe("auto");
+  });
+});
+
 describe("matchReference — bilingual names", () => {
   test("Thai query matches a Thai-only reference name", async () => {
     const repo = makeRepo([
@@ -274,5 +370,54 @@ describe("matchReference — bilingual names", () => {
     const outcome = await matcher.matchReference("red pork with rice");
     expect(outcome.tier).toBe("auto");
     if (outcome.tier === "auto") expect(outcome.reference.id).toBe(1);
+  });
+});
+
+// Regression guard for the ข้าวเหนียวหมูย่าง incident (2026-10): cooked-dish
+// component names must never auto-select a raw/processed-grain row, and cooked
+// rows must outrank raw rows wherever the matcher surfaces a ranking.
+// Row shapes mirror the live catalog (#3288 baowio 97, #1280 thaifcd raw 354,
+// #1281 thaifcd steamed 232, #1279 thaifcd flakes 364 kcal/100g).
+describe("matchReference — preparation-state awareness (raw vs cooked)", () => {
+  const liveStickyRicePool = [
+    row({ id: 3288, provider: "baowio", nameTh: "ข้าวเหนียว", per100: { protein: 2.4, carbs: 21.1, fat: 0.2, alcohol: 0, calories: 97 } }),
+    row({ id: 1280, nameTh: "ข้าวเหนียว, ดิบ", nameEn: "Rice, glutinous, polished, raw", per100: { protein: 7.4, carbs: 77.6, fat: 0.6, alcohol: 0, calories: 354 } }),
+    row({ id: 1281, nameTh: "ข้าวเหนียว, นึ่ง", nameEn: "Rice, glutinous, polished, steamed", per100: { protein: 4.3, carbs: 51.1, fat: 0.4, alcohol: 0, calories: 232 } }),
+    row({ id: 1279, nameTh: "ข้าวเม่า, ข้าวเหนียวขาว", nameEn: "Rice, glutinous, flakes", per100: { protein: 7.2, carbs: 79.5, fat: 1.2, alcohol: 0, calories: 364 } }),
+  ];
+
+  function expectCookedRow(ref: ReferenceRow) {
+    // cooked = the steamed sticky-rice row; raw-ingredient rows are the bug
+    expect([1280, 1279]).not.toContain(ref.id);
+  }
+
+  test("component 'ข้าวเหนียว' (cooked in any real meal) does not auto-select a raw-grain row (lexical-only)", async () => {
+    const matcher = createReferenceMatcher(makeRepo(liveStickyRicePool));
+    const outcome = await matcher.matchReference("ข้าวเหนียว");
+    if (outcome.tier === "auto") expectCookedRow(outcome.reference);
+    if (outcome.tier === "ambiguous") {
+      expect(outcome.candidates[0]!.id).not.toBe(1280);
+      expect(outcome.candidates[0]!.id).not.toBe(1279);
+    }
+  });
+
+  test("component 'ข้าวเหนียวขาว' does not auto-select the ข้าวเม่า (flakes) row", async () => {
+    const matcher = createReferenceMatcher(makeRepo(liveStickyRicePool));
+    const outcome = await matcher.matchReference("ข้าวเหนียวขาว");
+    if (outcome.tier === "auto") expectCookedRow(outcome.reference);
+    if (outcome.tier === "ambiguous") {
+      expect(outcome.candidates[0]!.id).not.toBe(1279);
+    }
+  });
+
+  test("'ข้าวเหนียวสุก' reaches the steamed row instead of gap (lexical-only)", async () => {
+    const matcher = createReferenceMatcher(makeRepo(liveStickyRicePool.slice(0, 3)));
+    const outcome = await matcher.matchReference("ข้าวเหนียวสุก");
+    expect(outcome.tier).not.toBe("gap");
+    if (outcome.tier === "auto") {
+      expect(outcome.reference.id).toBe(1281);
+    } else if (outcome.tier === "ambiguous") {
+      expect(outcome.candidates.map((c) => c.id)).toContain(1281);
+    }
   });
 });

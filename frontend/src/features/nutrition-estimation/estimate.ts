@@ -1,5 +1,5 @@
 // ResolvedEstimate (design spec §6): the displayed estimate bundle shared by
-// LogMealModal and PendingMealDialog, with one derivation per response shape so
+// LogMealModal, with one derivation per response shape so
 // the calculation/explanation/reference triple always agrees.
 import type {
     CalculationResult,

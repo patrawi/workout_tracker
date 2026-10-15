@@ -14,7 +14,7 @@ import type {
     PersistedRevision,
 } from "../../../src/repositories/nutrition-estimation.repository";
 import type { ReferenceRow } from "../../../src/nutrition-estimation/matching/matcher";
-import { ValidationError, NotFoundError, ConflictError } from "../../../src/lib/errors";
+import { ValidationError, NotFoundError } from "../../../src/lib/errors";
 
 const REF_A: ReferenceRow = {
     id: 11,
@@ -106,6 +106,7 @@ function observationWithCalculation(state: {
         menu_name: "มื้อทดสอบ",
         portion_mode: "estimated",
         meal_source: null,
+        user_note: null,
         status: "draft",
         reference_id: REF_A.id,
         match_tier: "gap",
@@ -215,8 +216,17 @@ function createFakeRepo() {
         async upsertNutritionLogLink() {
             return 1;
         },
-        async updateRevisionStatus() {},
-        async supersedeConfirmedRevisions() {},
+        async updateRevisionStatus(id: number, status: string) {
+            const rev = state.revisions.find((r) => r.id === id);
+            if (rev) rev.status = status as PersistedRevision["status"];
+        },
+        async supersedeConfirmedRevisions(observationId: number, keepId: number) {
+            for (const rev of state.revisions) {
+                if (rev.observation_id === observationId && rev.id !== keepId && rev.status === "confirmed") {
+                    rev.status = "superseded";
+                }
+            }
+        },
         async listPending() {
             return [];
         },
@@ -262,13 +272,22 @@ describe("resolveComponentReference (ADR 0026 per-component resolve)", () => {
         expect(prevCalc.per_component[1]!.estimated).toBe(true); // source calc untouched
     });
 
-    test("rejects a confirmed observation", async () => {
+    test("re-finalizes a confirmed observation instead of rejecting (ADR 0030)", async () => {
         const { repo, state } = createFakeRepo();
         observationWithCalculation(state);
         state.observations[0]!.status = "confirmed";
+        // The observation was confirmed, so a confirmed revision already exists.
+        state.revisions[0]!.status = "confirmed";
         const service = makeService(repo);
 
-        expect(service.resolveComponentReference(1, 1, REF_B.id, 1)).rejects.toThrow(ConflictError);
+        const result = await service.resolveComponentReference(1, 1, REF_B.id, 1);
+
+        // The correction is immediately final — the meal stays logged.
+        expect(result.revision.status).toBe("confirmed");
+        expect(result.observation.status).toBe("confirmed");
+        const byId = new Map(state.revisions.map((r) => [r.id, r.status]));
+        expect(byId.get(201)).toBe("superseded");
+        expect(byId.get(900)).toBe("confirmed");
     });
 
     test("rejects an unknown reference", async () => {

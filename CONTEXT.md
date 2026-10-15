@@ -219,7 +219,7 @@ A bounded portion-mass estimate used when no scale measurement is available. It 
 _Avoid_: Measured grams, exact weight
 
 **Reviewed Weight Estimate**:
-An Estimated Portion Weight that the user has accepted or adjusted during review. It remains estimated unless replaced by an actual scale measurement.
+An Estimated Portion Weight accepted automatically at save time (ADR 0030 — there is no separate review step; the user corrects estimates after the fact through per-component provenance). It remains estimated unless replaced by an actual scale measurement.
 _Avoid_: Measured weight, ground truth
 
 **Portion Component**:
@@ -229,6 +229,10 @@ _Avoid_: Ingredient, full recipe decomposition
 **Consumed Fraction**:
 The share of a Portion Component that was actually eaten, expressed coarsely such as all, three quarters, half, or a quarter. AI may propose it by comparing before and after images, but it becomes evidence only when the user confirms or corrects it.
 _Avoid_: Observed fact, AI truth, leftover guess
+
+**User Portion Note**:
+Optional free-text portion estimates or constraints the user attaches when submitting a Meal Observation, such as grams they have learned to estimate or stated exclusions. It anchors the AI's weight proposals as authoritative human input and is persisted with the observation as provenance.
+_Avoid_: Recipe instructions, AI-derived fact, ground truth
 
 **Latent Recipe Factor**:
 An ingredient or preparation detail that is not separately observed or weighed, such as starch, cooking oil, sugar, or rendered pork fat. Its effect belongs in estimate uncertainty rather than user-entered Portion Components.

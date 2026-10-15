@@ -4,3 +4,5 @@ node_modules/
 drizzle/meta/
 nutrition_chroma_blind/
 nutrition_chroma_sandbox/
+backend/.wrangler/
+.zcode/

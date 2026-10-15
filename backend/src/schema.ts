@@ -359,6 +359,8 @@ export const mealObservations = pgTable(
         menu_name: text("menu_name").notNull(),
         portion_mode: portionModeEnum("portion_mode").notNull(),
         meal_source: text("meal_source"),
+        // Human portion estimates/constraints sent at interpret time (ADR 0028).
+        user_note: text("user_note"),
         status: mealObservationStatusEnum("status").default("draft").notNull(),
         reference_id: integer("reference_id").references(() => nutritionReferences.id),
         match_tier: text("match_tier").$type<MatchTier>(), // "manual" | "auto" | "ambiguous" | "gap"

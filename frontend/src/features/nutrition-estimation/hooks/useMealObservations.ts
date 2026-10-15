@@ -15,6 +15,7 @@ interface UseMealObservationsReturn {
         menuName: string,
         beforeImageBase64?: string,
         afterImageBase64?: string,
+        userNote?: string,
     ) => Promise<InterpretOutcome>;
     create: (input: CreateMealObservationInput) => Promise<CreateOutcome>;
     confirm: (id: number) => Promise<CalculateObservationOutcome>;
@@ -43,12 +44,14 @@ export function useMealObservations(): UseMealObservationsReturn {
             menuName,
             beforeImageBase64,
             afterImageBase64,
+            userNote,
         }: {
             menuName: string;
             beforeImageBase64?: string;
             afterImageBase64?: string;
+            userNote?: string;
         }) => {
-            const res = await mealObservationApi.interpret(menuName, beforeImageBase64, afterImageBase64);
+            const res = await mealObservationApi.interpret(menuName, beforeImageBase64, afterImageBase64, userNote);
             if (res.success && res.data) return res.data;
             throw new Error(res.error ?? "Failed to analyze the photo");
         },
@@ -96,8 +99,8 @@ export function useMealObservations(): UseMealObservationsReturn {
     ]);
 
     const interpret = useCallback(
-        async (menuName: string, beforeImageBase64?: string, afterImageBase64?: string) =>
-            interpretRef.current({ menuName, beforeImageBase64, afterImageBase64 }),
+        async (menuName: string, beforeImageBase64?: string, afterImageBase64?: string, userNote?: string) =>
+            interpretRef.current({ menuName, beforeImageBase64, afterImageBase64, userNote }),
         [],
     );
 

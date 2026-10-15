@@ -1,5 +1,5 @@
 // Shared primary action button with the inline spinner (S2.3). Replaces the
-// spinner blocks pasted across LogMealModal and PendingMealDialog.
+// spinner blocks pasted across the meal-logging modal and its action buttons.
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 interface BusyButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

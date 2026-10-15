@@ -90,6 +90,8 @@ PostgreSQL with Drizzle ORM. Schema in `backend/src/schema.ts`, migrations in `b
 Required: `DATABASE_URL`
 Optional: `PORT` (default 3000), `MASTER_PASSWORD`, `JWT_SECRET`, `GEMINI_API_KEY`, `GOOGLE_CLIENT_ID` (enables Google login; when unset the endpoint returns "Google login is not configured")
 
+Meal-photo VLM (ADR 0028/0029): `VLM_PROVIDER` (`deepseek` default | `gemini`) picks the vision provider; with `gemini` the model is `GEMINI_VISION_MODEL` (default `gemini-3.8-flash`), keyed by `GEMINI_API_KEY`
+
 For web push notifications: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`
 
 Bun auto-loads `.env` files, but the project also uses `dotenv/config` imports.

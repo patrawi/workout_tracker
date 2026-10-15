@@ -37,11 +37,17 @@ function toReferenceCandidate(item: ReferenceSearchItem): MealObservationReferen
  * dual-writes the central values into nutrition_logs server-side (ADR 0022).
  */
 export const mealObservationApi = {
-    interpret: (menu_name: string, before_image_base64?: string, after_image_base64?: string) =>
+    interpret: (
+        menu_name: string,
+        before_image_base64?: string,
+        after_image_base64?: string,
+        user_note?: string,
+    ) =>
         api.post<InterpretOutcome>("/meal-observations/interpret", {
             menu_name,
             ...(before_image_base64 ? { before_image_base64 } : {}),
             ...(after_image_base64 ? { after_image_base64 } : {}),
+            ...(user_note ? { user_note } : {}),
         }),
 
     create: (input: CreateMealObservationInput) =>

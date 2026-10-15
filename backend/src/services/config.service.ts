@@ -8,6 +8,10 @@ export interface AppConfig {
   geminiApiKey: string;
   deepseekApiKey: string;
   llmProvider: "gemini" | "deepseek";
+  /** Vision provider for the meal-photo interpreter (ADR 0029). */
+  vlmProvider: "gemini" | "deepseek";
+  /** Vision model when vlmProvider=gemini. */
+  geminiVisionModel: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
@@ -48,6 +52,9 @@ export class ConfigService {
       geminiApiKey: getOptionalEnv(env, "GEMINI_API_KEY"),
       deepseekApiKey: getOptionalEnv(env, "DEEPSEEK_API_KEY"),
       llmProvider: getOptionalEnv(env, "LLM_PROVIDER", "gemini").toLowerCase() === "deepseek" ? "deepseek" : "gemini",
+      // Default deepseek = the pre-ADR-0029 shipped behavior; opt in via VLM_PROVIDER=gemini.
+      vlmProvider: getOptionalEnv(env, "VLM_PROVIDER", "deepseek").toLowerCase() === "gemini" ? "gemini" : "deepseek",
+      geminiVisionModel: getOptionalEnv(env, "GEMINI_VISION_MODEL", "gemini-3.8-flash"),
       VAPID_PUBLIC_KEY: getOptionalEnv(env, "VAPID_PUBLIC_KEY"),
       VAPID_PRIVATE_KEY: getOptionalEnv(env, "VAPID_PRIVATE_KEY"),
       VAPID_SUBJECT: getOptionalEnv(env, "VAPID_SUBJECT", "mailto:admin@localhost"),
@@ -68,6 +75,8 @@ export class ConfigService {
       geminiApiKey: "test-gemini-key",
       deepseekApiKey: "",
       llmProvider: "gemini",
+      vlmProvider: "deepseek",
+      geminiVisionModel: "test-vision-model",
       VAPID_PUBLIC_KEY: "test-vapid-public",
       VAPID_PRIVATE_KEY: "test-vapid-private",
       VAPID_SUBJECT: "mailto:test@localhost",
@@ -87,6 +96,8 @@ export class ConfigService {
   get geminiApiKey() { return this.config.geminiApiKey; }
   get deepseekApiKey() { return this.config.deepseekApiKey; }
   get llmProvider() { return this.config.llmProvider; }
+  get vlmProvider() { return this.config.vlmProvider; }
+  get geminiVisionModel() { return this.config.geminiVisionModel; }
   get VAPID_PUBLIC_KEY() { return this.config.VAPID_PUBLIC_KEY; }
   get VAPID_PRIVATE_KEY() { return this.config.VAPID_PRIVATE_KEY; }
   get VAPID_SUBJECT() { return this.config.VAPID_SUBJECT; }

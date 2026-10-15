@@ -67,6 +67,7 @@ export interface CreateObservationInput {
   menu_name: string;
   portion_mode: "measured" | "estimated";
   meal_source: string | null;
+  user_note: string | null;
   status: ObservationStatus;
   reference_id: number | null;
   match_tier: MatchTier | null;
@@ -127,6 +128,7 @@ export interface PersistedObservation {
   menu_name: string;
   portion_mode: "measured" | "estimated";
   meal_source: string | null;
+  user_note: string | null;
   status: ObservationStatus;
   reference_id: number | null;
   match_tier: MatchTier | null;
@@ -216,6 +218,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
       menu_name: row.menu_name,
       portion_mode: row.portion_mode,
       meal_source: row.meal_source,
+      user_note: row.user_note,
       status: row.status,
       reference_id: row.reference_id,
       match_tier: row.match_tier,
@@ -241,6 +244,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
             menu_name: input.menu_name,
             portion_mode: input.portion_mode,
             meal_source: input.meal_source,
+            user_note: input.user_note,
             status: input.status,
             reference_id: input.reference_id,
             match_tier: input.match_tier,
