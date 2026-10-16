@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
 import DialogBase from "./DialogBase";
 import DropToast from "./DropToast";
 import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
@@ -28,55 +29,151 @@ type SheetDrag = { kind: "idle" } | { kind: "drag"; y: number } | { kind: "settl
 
 // ——— Helpers ———
 
-/** Per-component provenance (ADR 0026): what backed each component's numbers,
- * with a per-row "change" affordance to pick a different reference. */
+/** Per-component provenance (ADR 0026) as collapsed ingredient cards: each
+ *  card shows the name over "kcal • grams"; tapping the pencil expands the
+ *  card in place to reveal the nutrition detail and the reference search
+ *  (the "change" affordance) inside the card. */
 function ProvenanceList({
     perComponent,
-    searchPosition,
-    onOpenSearch,
+    onPick,
 }: {
     perComponent: MealComponentBreakdown[];
-    searchPosition: number | null;
-    onOpenSearch: (position: number) => void;
+    onPick: (position: number, referenceId: number) => Promise<void>;
 }) {
+    const [openIndex, setOpenIndex] = useState<number | null>(null);
+    const [searchPosition, setSearchPosition] = useState<number | null>(null);
+    const [searchTerm, setSearchTerm] = useState("");
+
+    const searchResults = useQuery({
+        queryKey: ["mealObservationReferenceSearch", searchTerm],
+        queryFn: async () => {
+            const res = await mealObservationApi.searchReferenceCandidates(searchTerm, 8);
+            if (res.success && res.data) return res.data;
+            throw new Error(res.error ?? "Reference search failed");
+        },
+        enabled: searchPosition !== null && searchTerm.trim().length > 0,
+    });
+
+    const pick = useCallback(
+        async (position: number, referenceId: number) => {
+            await onPick(position, referenceId);
+            setSearchPosition(null);
+            setSearchTerm("");
+        },
+        [onPick],
+    );
+
     if (perComponent.length === 0) return null;
     return (
-        <div className="rounded-xl border border-surface-300/20 p-3 space-y-1.5">
-            <span className="text-xs text-surface-400">How each component was calculated</span>
-            <ul className="space-y-2">
-                {perComponent.map((c, i) => (
-                    <li key={`${c.name}-${i}`} className="space-y-0.5">
-                        <div className="flex items-center justify-between gap-2 text-sm">
-                            <span className="text-white truncate">{c.name}</span>
-                            <span className="flex items-center gap-1.5 shrink-0">
-                                {c.estimated ? (
-                                    <span className="tag-pill text-xs text-amber-300">estimated · kind prior</span>
-                                ) : (
-                                    <span className="tag-pill text-xs text-emerald-300">
-                                        reference · {c.reference?.name_th ?? c.reference?.name_en ?? `#${c.reference?.id ?? "?"}`}
-                                    </span>
-                                )}
+        <div className="space-y-3">
+            <span className="text-xs text-surface-400">Ingredients</span>
+            <div className="space-y-2.5">
+                {perComponent.map((c, i) => {
+                    const open = openIndex === i;
+                    return (
+                        <div
+                            key={`${c.name}-${i}`}
+                            className="rounded-2xl border border-surface-300/20 bg-white/[0.02] overflow-hidden"
+                        >
+                            {/* Collapsed summary — mockup: name over kcal • grams. */}
+                            <div className="flex items-center justify-between gap-3 px-4 py-3.5">
                                 <button
                                     type="button"
-                                    onClick={() => onOpenSearch(i)}
-                                    className="text-xs text-surface-400 hover:text-[var(--foreground)] px-1"
-                                    aria-label={`Change reference for ${c.name}`}
+                                    onClick={() => setOpenIndex(open ? null : i)}
+                                    aria-expanded={open}
+                                    className="flex-1 min-w-0 text-left"
                                 >
-                                    {searchPosition === i ? "cancel" : "change"}
+                                    <span className="block text-sm font-medium text-white truncate">{c.name}</span>
+                                    <span className="block text-xs text-surface-400 mt-0.5 tabular-nums">
+                                        {roundToWhole(c.contribution.calories.central)} kcal •{" "}
+                                        {roundToWhole(c.consumed_weight_g.central)} g
+                                    </span>
                                 </button>
-                            </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setOpenIndex(open ? null : i)}
+                                    aria-expanded={open}
+                                    aria-label={`Edit ${c.name}`}
+                                    className={`shrink-0 rounded-full p-2 transition active:scale-90 ${
+                                        open ? "text-emerald-300 bg-emerald-500/10" : "text-surface-300 hover:bg-white/5"
+                                    }`}
+                                >
+                                    <Pencil size={16} aria-hidden />
+                                </button>
+                            </div>
+
+                            {/* Expanded — nutrition detail + reference search live inside the card. */}
+                            {open && (
+                                <div className="px-4 pb-3.5 space-y-2.5 border-t border-surface-300/10 animate-fade-in">
+                                    <div className="flex items-center justify-between gap-2 pt-3">
+                                        {c.estimated ? (
+                                            <span className="tag-pill text-xs text-amber-300">estimated · kind prior</span>
+                                        ) : (
+                                            <span className="tag-pill text-xs text-emerald-300">
+                                                reference ·{" "}
+                                                {c.reference?.name_th ?? c.reference?.name_en ?? `#${c.reference?.id ?? "?"}`}
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => setSearchPosition(searchPosition === i ? null : i)}
+                                            className="text-xs text-surface-400 hover:text-[var(--foreground)] px-1"
+                                            aria-label={`Change reference for ${c.name}`}
+                                        >
+                                            {searchPosition === i ? "cancel" : "change"}
+                                        </button>
+                                    </div>
+                                    {/* Central contribution per component (ADR 0030 — single numbers). */}
+                                    <div className="text-xs text-surface-400 tabular-nums">
+                                        {roundToWhole(c.consumed_weight_g.central)} g ·{" "}
+                                        {roundToWhole(c.contribution.calories.central)} kcal · P{" "}
+                                        {roundToOneDecimal(c.contribution.protein.central)} / C{" "}
+                                        {roundToOneDecimal(c.contribution.carbs.central)} / F{" "}
+                                        {roundToOneDecimal(c.contribution.fat.central)}
+                                    </div>
+
+                                    {searchPosition === i && (
+                                        <div className="space-y-2">
+                                            <input
+                                                type="text"
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                autoFocus
+                                                placeholder="ค้นหาอ้างอิงอาหาร…"
+                                                aria-label="Search nutrition references"
+                                                className="glass-input w-full px-3 py-2 text-sm text-[var(--foreground)]"
+                                            />
+                                            {searchResults.isLoading && (
+                                                <p className="text-xs text-surface-400">กำลังค้นหา…</p>
+                                            )}
+                                            {(searchResults.data ?? []).length > 0 && (
+                                                <ul className="space-y-1">
+                                                    {(searchResults.data ?? []).map((r) => (
+                                                        <li key={r.id}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => void pick(i, r.id)}
+                                                                className="w-full flex items-center justify-between gap-3 text-left px-3 py-2 rounded-lg border border-surface-300/20 hover:border-[var(--primary)]/40 transition text-sm"
+                                                            >
+                                                                <span className="text-[var(--foreground)] truncate">
+                                                                    {r.nameTh ?? r.nameEn ?? `#${r.id}`}
+                                                                </span>
+                                                                <span className="text-xs text-surface-400 shrink-0 tabular-nums">
+                                                                    {Math.round(r.per100.calories)} kcal/100g
+                                                                </span>
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                        {/* Central contribution per component (ADR 0030 — single numbers). */}
-                        <div className="text-xs text-surface-400 tabular-nums pl-0.5">
-                            {roundToWhole(c.consumed_weight_g.central)} g ·{" "}
-                            {roundToWhole(c.contribution.calories.central)} kcal · P{" "}
-                            {roundToOneDecimal(c.contribution.protein.central)} / C{" "}
-                            {roundToOneDecimal(c.contribution.carbs.central)} / F{" "}
-                            {roundToOneDecimal(c.contribution.fat.central)}
-                        </div>
-                    </li>
-                ))}
-            </ul>
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -277,8 +374,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     /** Recalculated detail after a per-component resolve (ADR 0026) — wins
      * over the create outcome's estimate. */
     const [updated, setUpdated] = useState<CalculateObservationOutcome | null>(null);
-    const [searchPosition, setSearchPosition] = useState<number | null>(null);
-    const [searchTerm, setSearchTerm] = useState("");
 
     // ——— Analyze → create → confirm (the whole flow, ADR 0030) ———
 
@@ -353,24 +448,12 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             ? estimateFromCreateOutcome(outcome)
             : null;
 
-    const searchResults = useQuery({
-        queryKey: ["mealObservationReferenceSearch", searchTerm],
-        queryFn: async () => {
-            const res = await mealObservationApi.searchReferenceCandidates(searchTerm, 8);
-            if (res.success && res.data) return res.data;
-            throw new Error(res.error ?? "Reference search failed");
-        },
-        enabled: searchPosition !== null && searchTerm.trim().length > 0,
-    });
-
     const handlePickRef = useCallback(
         async (position: number, referenceId: number) => {
             if (!outcome) return;
             try {
                 const res = await resolveComponent(outcome.observation.id, position, referenceId);
                 setUpdated(res);
-                setSearchPosition(null);
-                setSearchTerm("");
             } catch (err) {
                 showToast(err instanceof Error ? err.message : "Failed to resolve the reference.");
             }
@@ -639,48 +722,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         perComponent={
                                             (updated ?? outcome).observation.calculation?.per_component ?? []
                                         }
-                                        searchPosition={searchPosition}
-                                        onOpenSearch={(i) => {
-                                            setSearchPosition(searchPosition === i ? null : i);
-                                            setSearchTerm("");
-                                        }}
+                                        onPick={handlePickRef}
                                     />
-                                    {searchPosition !== null && (
-                                        <div className="rounded-xl border border-surface-300/20 p-3 space-y-2">
-                                            <input
-                                                type="text"
-                                                value={searchTerm}
-                                                onChange={(e) => setSearchTerm(e.target.value)}
-                                                autoFocus
-                                                placeholder="ค้นหาอ้างอิงอาหาร…"
-                                                aria-label="Search nutrition references"
-                                                className="glass-input w-full px-3 py-2 text-sm text-[var(--foreground)]"
-                                            />
-                                            {searchResults.isLoading && (
-                                                <p className="text-xs text-surface-400">กำลังค้นหา…</p>
-                                            )}
-                                            {(searchResults.data ?? []).length > 0 && (
-                                                <ul className="space-y-1">
-                                                    {(searchResults.data ?? []).map((r) => (
-                                                        <li key={r.id}>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handlePickRef(searchPosition, r.id)}
-                                                                className="w-full flex items-center justify-between gap-3 text-left px-3 py-2 rounded-lg border border-surface-300/20 hover:border-[var(--primary)]/40 transition text-sm"
-                                                            >
-                                                                <span className="text-[var(--foreground)] truncate">
-                                                                    {r.nameTh ?? r.nameEn ?? `#${r.id}`}
-                                                                </span>
-                                                                <span className="text-xs text-surface-400 shrink-0 tabular-nums">
-                                                                    {Math.round(r.per100.calories)} kcal/100g
-                                                                </span>
-                                                            </button>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </div>
-                                    )}
                                 </div>
                             )}
                         </>
