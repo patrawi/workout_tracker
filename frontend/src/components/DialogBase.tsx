@@ -8,6 +8,9 @@ interface DialogBaseProps {
     className?: string;
     ariaLabel?: string;
     ariaLabelledby?: string;
+    /** Bottom drawer (mobile sheet): anchored to the viewport's bottom edge and
+     *  full-bleed on phones; falls back to the centered card on sm+. */
+    drawer?: boolean;
 }
 
 /**
@@ -22,6 +25,7 @@ export default function DialogBase({
     className,
     ariaLabel,
     ariaLabelledby,
+    drawer = false,
 }: DialogBaseProps) {
     const ref = useRef<HTMLDialogElement>(null);
 
@@ -78,7 +82,13 @@ export default function DialogBase({
             closedby="any"
             aria-label={ariaLabel}
             aria-labelledby={ariaLabelledby}
-            className={`backdrop:bg-[oklch(0.05_0.005_260_/_0.7)] backdrop:backdrop-blur-sm bg-transparent p-0 m-auto rounded-2xl w-[calc(100%-2rem)] max-h-[85vh] overflow-visible ${className ?? "max-w-3xl"}`}
+            className={`backdrop:bg-[oklch(0.05_0.005_260_/_0.7)] backdrop:backdrop-blur-sm bg-transparent p-0 overflow-visible ${
+                drawer
+                    ? // Bottom drawer: pinned to the bottom edge, full-bleed on phones;
+                      // sm:m-auto (later in the cascade) restores the centered card on desktop.
+                      "mt-auto mb-0 mx-auto sm:m-auto rounded-t-3xl sm:rounded-2xl w-full sm:w-[calc(100%-2rem)] max-h-[92dvh]"
+                    : "m-auto rounded-2xl w-[calc(100%-2rem)] max-h-[85vh]"
+            } ${className ?? "max-w-3xl"}`}
             style={{ overscrollBehavior: "contain" }}
         >
             {children}

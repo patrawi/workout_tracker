@@ -274,9 +274,11 @@
     will-change: transform, opacity;
   }
 
-  /* iOS-style sheet entrance — critically damped spring (the UIKit sheet curve). */
+  /* iOS-style sheet entrance — critically damped spring (the UIKit sheet curve).
+     No fill-mode: once finished the transform is free again so the drag-to-
+     dismiss gesture can take over the inline transform. */
   .animate-sheet-up {
-    animation: sheet-up 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
+    animation: sheet-up 0.5s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   /* Step push/pop — iOS navigation-controller feel inside the sheet. */
@@ -368,13 +370,11 @@
 
 @keyframes sheet-up {
   from {
-    opacity: 0;
-    transform: translateY(48px) scale(0.98);
+    transform: translateY(100%);
   }
 
   to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 

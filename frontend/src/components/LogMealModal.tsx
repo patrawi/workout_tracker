@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DialogBase from "./DialogBase";
 import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
@@ -20,6 +21,9 @@ import type {
 const MEALS: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
 type Step = "photo" | "details" | "result";
+
+/** Drawer gesture state: following the finger, springing back, or sliding out. */
+type SheetDrag = { kind: "idle" } | { kind: "drag"; y: number } | { kind: "settle" } | { kind: "dismiss" };
 
 // ——— Helpers ———
 
@@ -189,6 +193,67 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         setStep("photo");
     }, []);
 
+    // ——— Drawer drag-to-dismiss (iOS sheet): pull the grabber/header down ———
+
+    const [sheetDrag, setSheetDrag] = useState<SheetDrag>({ kind: "idle" });
+    const dragInfoRef = useRef({ startY: 0, lastY: 0, lastT: 0, velocity: 0 });
+    const sheetTimerRef = useRef<number | null>(null);
+
+    useEffect(() => () => {
+        if (sheetTimerRef.current !== null) window.clearTimeout(sheetTimerRef.current);
+    }, []);
+
+    const beginSheetDrag = useCallback(
+        (e: ReactPointerEvent) => {
+            if (sheetDrag.kind !== "idle") return;
+            if (e.pointerType === "mouse" && e.button !== 0) return;
+            dragInfoRef.current = { startY: e.clientY, lastY: e.clientY, lastT: e.timeStamp, velocity: 0 };
+            setSheetDrag({ kind: "drag", y: 0 });
+        },
+        [sheetDrag.kind],
+    );
+
+    useEffect(() => {
+        if (sheetDrag.kind !== "drag") return;
+        const move = (e: PointerEvent) => {
+            const d = dragInfoRef.current;
+            d.velocity = (e.clientY - d.lastY) / Math.max(1, e.timeStamp - d.lastT);
+            d.lastY = e.clientY;
+            d.lastT = e.timeStamp;
+            // Rubber-band the top: the sheet only follows downward.
+            setSheetDrag({ kind: "drag", y: Math.max(0, e.clientY - d.startY) });
+        };
+        const end = () => {
+            const d = dragInfoRef.current;
+            const y = Math.max(0, d.lastY - d.startY);
+            const flung = d.velocity > 0.6;
+            if (y > 120 || (flung && y > 24)) {
+                setSheetDrag({ kind: "dismiss" });
+                sheetTimerRef.current = window.setTimeout(onClose, 280);
+            } else {
+                setSheetDrag({ kind: "settle" });
+                sheetTimerRef.current = window.setTimeout(() => setSheetDrag({ kind: "idle" }), 320);
+            }
+        };
+        window.addEventListener("pointermove", move, { passive: true });
+        window.addEventListener("pointerup", end);
+        window.addEventListener("pointercancel", end);
+        return () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", end);
+            window.removeEventListener("pointercancel", end);
+        };
+    }, [sheetDrag.kind, onClose]);
+
+    const sheetStyle =
+        sheetDrag.kind === "drag"
+            ? { transform: `translateY(${sheetDrag.y}px)`, transition: "none", willChange: "transform" }
+            : sheetDrag.kind === "settle"
+                ? { transform: "translateY(0px)", transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)" }
+                : sheetDrag.kind === "dismiss"
+                    ? { transform: "translateY(100%)", transition: "transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)" }
+                    : undefined;
+
     // Result state
     const [outcome, setOutcome] = useState<CreateOutcome | null>(null);
     /** Recalculated detail after a per-component resolve (ADR 0026) — wins
@@ -328,26 +393,38 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const busy = isInterpreting || isCreating || isConfirming || isResolvingComponent;
 
     return (
-        <DialogBase open={open} onClose={handleClose} ariaLabel="Log a meal">
-            <div className="glass-card w-full flex flex-col animate-sheet-up max-h-[85vh] overflow-hidden rounded-t-3xl sm:rounded-2xl">
-                {/* iOS sheet grabber */}
-                <div aria-hidden className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-white/15" />
+        <DialogBase open={open} onClose={handleClose} ariaLabel="Log a meal" drawer>
+            <div
+                className="glass-card w-full flex flex-col animate-sheet-up max-h-[92dvh] overflow-hidden rounded-t-3xl sm:rounded-2xl"
+                style={sheetStyle}
+            >
+                {/* Drag surface: grabber + header. Pull down to dismiss — past
+                    the threshold (or with a fling) the sheet slides out, else it
+                    springs back. touch-action:none keeps the gesture ours. */}
+                <div
+                    onPointerDown={beginSheetDrag}
+                    style={{ touchAction: "none" }}
+                    className="cursor-grab active:cursor-grabbing"
+                >
+                    {/* iOS sheet grabber */}
+                    <div aria-hidden className="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-white/15" />
 
-                {/* Header */}
-                <div className="px-5 pt-3 pb-4 sm:px-6 border-b border-surface-300/30">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-xl font-bold text-white">Log a meal</h2>
-                            <p className="text-sm text-surface-400 mt-1">{stepLabels[step]}</p>
+                    {/* Header */}
+                    <div className="px-5 pt-3 pb-4 sm:px-6 border-b border-surface-300/30">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-bold text-white">Log a meal</h2>
+                                <p className="text-sm text-surface-400 mt-1">{stepLabels[step]}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleClose}
+                                className="text-surface-400 hover:text-white transition text-xl px-2 py-1 rounded-lg hover:bg-surface-200/50 active:scale-90"
+                                aria-label="Close log meal modal"
+                            >
+                                ✕
+                            </button>
                         </div>
-                        <button
-                            type="button"
-                            onClick={handleClose}
-                            className="text-surface-400 hover:text-white transition text-xl px-2 py-1 rounded-lg hover:bg-surface-200/50 active:scale-90"
-                            aria-label="Close log meal modal"
-                        >
-                            ✕
-                        </button>
                     </div>
                 </div>
 

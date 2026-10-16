@@ -1,13 +1,13 @@
-// Camera-first capture block (design "10 แนบรูป AI · Sheet"): a live
-// viewfinder with rear/front switching plus an always-available gallery
-// fallback. Captures funnel through the shared image pipeline, so oversized
-// phone originals never reach the API. The shutter feeds whichever slot the
-// parent routes it to; the camera stays live so an after-photo can follow.
+// Camera-first capture block: a large live viewfinder with rear/front flip and
+// torch as on-frame overlays (native camera-app style) plus an always-available
+// gallery fallback beside the shutter. Captures funnel through the shared image
+// pipeline, so oversized phone originals never reach the API. The shutter feeds
+// whichever slot the parent routes it to; the camera stays live so an
+// after-photo can follow.
 // Graceful degradation: permission denied → message + gallery still usable;
-// no mediaDevices at all → the source chips fall back to native
-// <input capture> which opens the OS camera app instead.
+// no mediaDevices at all → hidden <input capture> inputs open the OS camera.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent, ReactNode } from "react";
+import type { ChangeEvent } from "react";
 import { Camera, Images, SwitchCamera, Zap, ZapOff } from "lucide-react";
 import { captureVideoFrame, processImageFile } from "../lib/imagePipeline";
 import type { AttachedImage } from "../lib/imagePipeline";
@@ -21,34 +21,6 @@ interface CameraCaptureProps {
     /** Receives the captured/picked photo (parent routes it to a slot). */
     onAttach: (image: AttachedImage) => void;
     onError: (message: string | null) => void;
-}
-
-function SourceChip({
-    active,
-    icon,
-    label,
-    onClick,
-}: {
-    active: boolean;
-    icon: ReactNode;
-    label: string;
-    onClick: () => void;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            aria-pressed={active}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition active:scale-95 ${
-                active
-                    ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-300"
-                    : "border-surface-300/40 text-surface-300 hover:bg-white/5"
-            }`}
-        >
-            <span aria-hidden>{icon}</span>
-            {label}
-        </button>
-    );
 }
 
 export default function CameraCapture({ onAttach, onError }: CameraCaptureProps) {
@@ -190,34 +162,9 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
 
     return (
         <div className="space-y-3">
-            {/* Source chips (design: ถ่ายกล้องหลัง / ถ่ายกล้องหน้า / แกลเลอรี) */}
-            <div className="flex flex-wrap gap-2">
-                <SourceChip
-                    active={cameraOn && facing === "environment"}
-                    icon={<Camera size={14} />}
-                    label="ถ่ายกล้องหลัง"
-                    onClick={() => {
-                        void startCamera("environment");
-                    }}
-                />
-                <SourceChip
-                    active={cameraOn && facing === "user"}
-                    icon={<SwitchCamera size={14} />}
-                    label="ถ่ายกล้องหน้า"
-                    onClick={() => {
-                        void startCamera("user");
-                    }}
-                />
-                <SourceChip
-                    active={false}
-                    icon={<Images size={14} />}
-                    label="แกลเลอรี"
-                    onClick={() => galleryInputRef.current?.click()}
-                />
-            </div>
-
-            {/* Viewfinder — height-capped so the photo step fits a phone sheet. */}
-            <div className="relative aspect-[4/3] max-h-[44dvh] overflow-hidden rounded-2xl border border-surface-300/30 bg-black">
+            {/* Viewfinder — the hero of the photo step: fills the drawer width,
+                flip + torch live on the frame like a native camera app. */}
+            <div className="relative aspect-[4/5] max-h-[52dvh] w-full overflow-hidden rounded-2xl border border-surface-300/30 bg-black">
                 <video
                     ref={videoRef}
                     autoPlay
@@ -235,11 +182,10 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                     </div>
                 )}
                 {cornerBrackets}
-            </div>
 
-            {/* Capture controls: torch (when the track supports it) | shutter | gallery */}
-            <div className="flex items-center justify-center gap-6">
-                {hasTorch ? (
+                {/* Frame overlays: torch (left, only when the track supports it) and
+                    rear/front flip (right) — replacing the old source-chip row. */}
+                {cameraOn && hasTorch && (
                     <button
                         type="button"
                         onClick={() => {
@@ -247,17 +193,30 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                         }}
                         aria-pressed={torchOn}
                         aria-label={torchOn ? "ปิดไฟฉาย" : "เปิดไฟฉาย"}
-                        className={`rounded-full border p-2.5 transition active:scale-90 ${
-                            torchOn
-                                ? "border-amber-400/60 bg-amber-500/10 text-amber-300"
-                                : "border-surface-300/40 text-surface-300 hover:bg-white/5"
+                        className={`absolute left-3 top-3 rounded-full bg-black/45 p-2.5 text-white backdrop-blur-sm transition active:scale-90 ${
+                            torchOn ? "text-amber-300" : ""
                         }`}
                     >
                         {torchOn ? <Zap size={18} /> : <ZapOff size={18} />}
                     </button>
-                ) : (
-                    <span className="w-[42px]" aria-hidden />
                 )}
+                {cameraOn && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            void startCamera(facing === "environment" ? "user" : "environment");
+                        }}
+                        aria-label="สลับกล้องหลัง/หน้า"
+                        className="absolute right-3 top-3 rounded-full bg-black/45 p-2.5 text-white backdrop-blur-sm transition active:scale-90"
+                    >
+                        <SwitchCamera size={18} aria-hidden />
+                    </button>
+                )}
+            </div>
+
+            {/* Capture controls: shutter centered, gallery fallback on the right. */}
+            <div className="flex items-center justify-center gap-6">
+                <span className="w-[42px]" aria-hidden />
                 <button
                     type="button"
                     onClick={() => {
