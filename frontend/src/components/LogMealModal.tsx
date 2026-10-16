@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DialogBase from "./DialogBase";
+import DropToast from "./DropToast";
 import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
 import CameraCapture from "@/features/nutrition-estimation/components/CameraCapture";
 import ImageSlot, { type AttachedImage } from "@/features/nutrition-estimation/components/ImageSlot";
@@ -154,11 +155,15 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const [step, setStep] = useState<Step>("photo");
     /** Push (forward) vs pop (back) — picks the step transition direction. */
     const [direction, setDirection] = useState<"forward" | "back">("forward");
-    const [error, setError] = useState<string | null>(null);
-    const [analyzeNotice, setAnalyzeNotice] = useState<string | null>(null);
+    /** Top toast (drops in, auto-dismisses) — analysis failures, save failures. */
+    const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
     const [imageError, setImageError] = useState<string | null>(null);
     /** False until the auto (or manual) confirm dual-writes into nutrition_logs. */
     const [confirmed, setConfirmed] = useState(false);
+
+    const showToast = useCallback((message: string) => {
+        setToast({ id: Date.now(), message });
+    }, []);
 
     // Form state
     const [menuName, setMenuName] = useState("");
@@ -278,10 +283,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     // ——— Analyze → create → confirm (the whole flow, ADR 0030) ———
 
     const handleAnalyze = useCallback(async () => {
-        setError(null);
-        setAnalyzeNotice(null);
         if (!beforeImage) {
-            setError("Attach a photo of the meal before eating.");
+            showToast("Attach a photo of the meal before eating.");
             return;
         }
         let res: CreateOutcome;
@@ -293,7 +296,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                 userNote.trim() || undefined,
             );
             if (result.status !== "ok" || result.proposal.components.length === 0) {
-                setAnalyzeNotice(
+                showToast(
                     "Couldn't analyze the photo — try again (better light, full plate in frame) or add info describing the meal.",
                 );
                 return;
@@ -323,7 +326,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                 })),
             });
         } catch {
-            setAnalyzeNotice("Couldn't analyze the photo — check your connection and try again.");
+            showToast("Couldn't analyze the photo — check your connection and try again.");
             return;
         }
         setOutcome(res);
@@ -335,14 +338,13 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             await confirm(res.observation.id);
             setConfirmed(true);
         } catch (err) {
-            setError(
+            showToast(
                 err instanceof Error
                     ? `Saved as a draft, but logging failed: ${err.message} — press Confirm & log to retry.`
                     : "Saved as a draft, but logging failed — press Confirm & log to retry.",
             );
         }
-    }, [menuName, beforeImage, afterImage, userNote, date, meal, mealSource, interpret, create, confirm]);
-
+    }, [menuName, beforeImage, afterImage, userNote, date, meal, mealSource, interpret, create, confirm, showToast]);
     // ——— Result rendering ———
 
     const estimate = updated
@@ -364,30 +366,28 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const handlePickRef = useCallback(
         async (position: number, referenceId: number) => {
             if (!outcome) return;
-            setError(null);
             try {
                 const res = await resolveComponent(outcome.observation.id, position, referenceId);
                 setUpdated(res);
                 setSearchPosition(null);
                 setSearchTerm("");
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to resolve the reference.");
+                showToast(err instanceof Error ? err.message : "Failed to resolve the reference.");
             }
         },
-        [outcome, resolveComponent],
+        [outcome, resolveComponent, showToast],
     );
 
     /** Manual fallback when the auto-confirm failed (never-block, ADR 0030). */
     const handleConfirmRetry = useCallback(async () => {
         if (!outcome) return;
-        setError(null);
         try {
             await confirm(outcome.observation.id);
             setConfirmed(true);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to confirm the meal.");
+            showToast(err instanceof Error ? err.message : "Failed to confirm the meal.");
         }
-    }, [outcome, confirm]);
+    }, [outcome, confirm, showToast]);
 
     if (!open) return null;
 
@@ -438,12 +438,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
                 {/* Body — keyed remount per step drives the push/pop transition. */}
                 <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
-                    {error && (
-                        <div role="alert" className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                            {error}
-                        </div>
-                    )}
-
                     <div key={step} className={direction === "forward" ? "step-in-right" : "step-in-left"}>
                         {/* ——— Step 1: photo ——— */}
                         {step === "photo" && (
@@ -573,20 +567,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                     )}
                                 </div>
                             </div>
-
-                            {analyzeNotice && (
-                                <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-                                    <span>{analyzeNotice}</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => setAnalyzeNotice(null)}
-                                        className="text-amber-300/70 hover:text-amber-200 shrink-0"
-                                        aria-label="Dismiss notice"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                            )}
 
                             <p className="text-[11px] text-surface-400">
                                 Analyzing saves and logs the meal automatically with the AI's estimate —
@@ -784,6 +764,9 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                     )}
                 </div>
             </div>
+
+            {/* Top toast — drops from the screen edge, auto-lifts after 4s. */}
+            {toast && <DropToast key={toast.id} message={toast.message} onDone={() => setToast(null)} />}
         </DialogBase>
     );
 }

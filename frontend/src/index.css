@@ -296,6 +296,15 @@
   .animate-pop-in {
     animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
+
+  /* Top toast: drops in from the screen edge, lifts back out to dismiss. */
+  .animate-toast-drop {
+    animation: toast-drop 0.45s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .animate-toast-lift {
+    animation: toast-lift 0.3s cubic-bezier(0.55, 0, 1, 0.45) both;
+  }
 }
 
 @keyframes shimmer {
@@ -414,6 +423,28 @@
   }
 }
 
+@keyframes toast-drop {
+  from {
+    transform: translate(-50%, -140%);
+  }
+
+  to {
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes toast-lift {
+  from {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translate(-50%, -140%);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
 
   .animate-slide-up,
@@ -423,7 +454,9 @@
   .animate-sheet-up,
   .step-in-right,
   .step-in-left,
-  .animate-pop-in {
+  .animate-pop-in,
+  .animate-toast-drop,
+  .animate-toast-lift {
     animation: none !important;
   }
 
