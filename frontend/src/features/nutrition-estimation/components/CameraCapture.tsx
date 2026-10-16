@@ -39,7 +39,7 @@ function SourceChip({
             type="button"
             onClick={onClick}
             aria-pressed={active}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition active:scale-95 ${
                 active
                     ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-300"
                     : "border-surface-300/40 text-surface-300 hover:bg-white/5"
@@ -216,8 +216,8 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                 />
             </div>
 
-            {/* Viewfinder */}
-            <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-surface-300/30 bg-black">
+            {/* Viewfinder — height-capped so the photo step fits a phone sheet. */}
+            <div className="relative aspect-[4/3] max-h-[44dvh] overflow-hidden rounded-2xl border border-surface-300/30 bg-black">
                 <video
                     ref={videoRef}
                     autoPlay
@@ -247,7 +247,7 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                         }}
                         aria-pressed={torchOn}
                         aria-label={torchOn ? "ปิดไฟฉาย" : "เปิดไฟฉาย"}
-                        className={`rounded-full border p-2.5 transition-colors ${
+                        className={`rounded-full border p-2.5 transition active:scale-90 ${
                             torchOn
                                 ? "border-amber-400/60 bg-amber-500/10 text-amber-300"
                                 : "border-surface-300/40 text-surface-300 hover:bg-white/5"
@@ -265,7 +265,7 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                     }}
                     disabled={!cameraOn || shooting}
                     aria-label="ถ่ายรูป"
-                    className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition-colors hover:bg-emerald-400 disabled:opacity-50"
+                    className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition active:scale-90 hover:bg-emerald-400 disabled:opacity-50"
                 >
                     <Camera size={22} aria-hidden />
                 </button>
@@ -273,7 +273,7 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
                     aria-label="เลือกรูปจากแกลเลอรี"
-                    className="rounded-full border border-surface-300/40 p-2.5 text-surface-300 transition-colors hover:bg-white/5"
+                    className="rounded-full border border-surface-300/40 p-2.5 text-surface-300 transition active:scale-90 hover:bg-white/5"
                 >
                     <Images size={18} aria-hidden />
                 </button>

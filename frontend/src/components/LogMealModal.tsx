@@ -19,7 +19,7 @@ import type {
 
 const MEALS: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
-type Step = "form" | "result";
+type Step = "photo" | "details" | "result";
 
 // ——— Helpers ———
 
@@ -78,6 +78,52 @@ function ProvenanceList({
 
 // ——— Component ———
 
+/** Compact per-slot status on the photo step: preview (with remove) or an
+ *  empty dashed placeholder — mirrors the design's รูปก่อนกิน/รูปหลังกิน row. */
+function SlotThumb({
+    label,
+    required = false,
+    image,
+    onRemove,
+}: {
+    label: string;
+    required?: boolean;
+    image: AttachedImage | null;
+    onRemove: () => void;
+}) {
+    return (
+        <div className="rounded-xl border border-surface-300/20 p-2">
+            <div className="flex items-center justify-between gap-1 mb-1.5">
+                <span className="text-[11px] text-surface-400 truncate">
+                    {label} <span className="text-surface-300/50">· {required ? "จำเป็น" : "ไม่บังคับ"}</span>
+                </span>
+                {image && (
+                    <button
+                        type="button"
+                        onClick={onRemove}
+                        className="text-red-400/70 hover:text-red-400 text-[11px] px-1 shrink-0 transition active:scale-90"
+                        aria-label={`Remove ${label}`}
+                    >
+                        ✕
+                    </button>
+                )}
+            </div>
+            {image ? (
+                <img
+                    key={image.dataUrl}
+                    src={image.dataUrl}
+                    alt={`${label} preview`}
+                    className="animate-pop-in h-20 w-full rounded-lg object-cover border border-surface-300/30"
+                />
+            ) : (
+                <div className="h-20 rounded-lg border border-dashed border-surface-300/30 flex items-center justify-center text-[11px] text-surface-400/60">
+                    {required ? "ถ่ายหรือเลือกรูป" : "รอรูป"}
+                </div>
+            )}
+        </div>
+    );
+}
+
 interface LogMealModalProps {
     open: boolean;
     onClose: () => void;
@@ -88,19 +134,22 @@ interface LogMealModalProps {
 }
 
 /**
- * One-flow meal logging (ADR 0030): photo + optional additional info → the VLM
- * estimates → auto create + confirm → result shows the photo and central
- * nutrition numbers. No portion modes, no range editing, no review step —
- * correction is post-hoc via the provenance list. Never-block: a failed
- * analysis stays on the form for retry; a failed confirm keeps a manual
- * fallback button. All state lives here; the parent only opens/closes
- * (remount via key to reset).
+ * Two-step meal logging (ADR 0030 + mobile redesign): step 1 is photo capture
+ * only — live camera (auto-prompts permission) or gallery; step 2 collects the
+ * details; then the VLM estimates → auto create + confirm → result shows the
+ * photo and central nutrition numbers. Steps push/pop with iOS-style spring
+ * motion. No portion modes, no range editing, no review step — correction is
+ * post-hoc via the provenance list. Never-block: a failed analysis stays on
+ * the details step for retry; a failed confirm keeps a manual fallback button.
+ * All state lives here; the parent only opens/closes (remount via key to reset).
  */
 export default function LogMealModal({ open, onClose, defaultDate, onLogged }: LogMealModalProps) {
     const { interpret, create, confirm, resolveComponent, isInterpreting, isCreating, isConfirming, isResolvingComponent } =
         useMealObservations();
 
-    const [step, setStep] = useState<Step>("form");
+    const [step, setStep] = useState<Step>("photo");
+    /** Push (forward) vs pop (back) — picks the step transition direction. */
+    const [direction, setDirection] = useState<"forward" | "back">("forward");
     const [error, setError] = useState<string | null>(null);
     const [analyzeNotice, setAnalyzeNotice] = useState<string | null>(null);
     const [imageError, setImageError] = useState<string | null>(null);
@@ -127,6 +176,18 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         },
         [beforeImage],
     );
+
+    // ——— Step navigation (drives the push/pop transition) ———
+
+    const goDetails = useCallback(() => {
+        setDirection("forward");
+        setStep("details");
+    }, []);
+
+    const goBackToPhoto = useCallback(() => {
+        setDirection("back");
+        setStep("photo");
+    }, []);
 
     // Result state
     const [outcome, setOutcome] = useState<CreateOutcome | null>(null);
@@ -188,6 +249,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             return;
         }
         setOutcome(res);
+        setDirection("forward");
         setStep("result");
         // Auto-confirm dual-writes the central values into nutrition_logs (ADR 0022).
         // On failure the result stays open with a manual fallback (never-block).
@@ -258,17 +320,21 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     if (!open) return null;
 
     const stepLabels: Record<Step, string> = {
-        form: "Step 1 of 2 — Details",
-        result: "Step 2 of 2 — Result",
+        photo: "Step 1 of 3 — Photo",
+        details: "Step 2 of 3 — Details",
+        result: "Step 3 of 3 — Result",
     };
 
     const busy = isInterpreting || isCreating || isConfirming || isResolvingComponent;
 
     return (
         <DialogBase open={open} onClose={handleClose} ariaLabel="Log a meal">
-            <div className="glass-card w-full flex flex-col animate-slide-up max-h-[85vh] overflow-hidden">
+            <div className="glass-card w-full flex flex-col animate-sheet-up max-h-[85vh] overflow-hidden rounded-t-3xl sm:rounded-2xl">
+                {/* iOS sheet grabber */}
+                <div aria-hidden className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-white/15" />
+
                 {/* Header */}
-                <div className="p-6 pb-4 border-b border-surface-300/30">
+                <div className="px-5 pt-3 pb-4 sm:px-6 border-b border-surface-300/30">
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-xl font-bold text-white">Log a meal</h2>
@@ -277,7 +343,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                         <button
                             type="button"
                             onClick={handleClose}
-                            className="text-surface-400 hover:text-white transition-colors text-xl px-2 py-1 rounded-lg hover:bg-surface-200/50"
+                            className="text-surface-400 hover:text-white transition text-xl px-2 py-1 rounded-lg hover:bg-surface-200/50 active:scale-90"
                             aria-label="Close log meal modal"
                         >
                             ✕
@@ -285,21 +351,38 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                     </div>
                 </div>
 
-                {/* Body */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {/* Body — keyed remount per step drives the push/pop transition. */}
+                <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
                     {error && (
                         <div role="alert" className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                             {error}
                         </div>
                     )}
 
-                    {/* ——— Step: form ——— */}
-                    {step === "form" && (
-                        <>
-                            {/* Camera-first capture (design: แนบรูป AI) — live viewfinder
-                                + gallery fallback, feeding the slots below. */}
-                            <CameraCapture onAttach={handleCaptured} onError={setImageError} />
+                    <div key={step} className={direction === "forward" ? "step-in-right" : "step-in-left"}>
+                        {/* ——— Step 1: photo ——— */}
+                        {step === "photo" && (
+                            <div className="space-y-4">
+                                {/* Camera-first capture (design: แนบรูป AI) — live viewfinder
+                                    + gallery fallback, feeding the slot row below. */}
+                                <CameraCapture onAttach={handleCaptured} onError={setImageError} />
 
+                                {imageError && (
+                                    <p role="alert" className="text-xs text-amber-400">
+                                        {imageError}
+                                    </p>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <SlotThumb label="รูปก่อนกิน" required image={beforeImage} onRemove={() => setBeforeImage(null)} />
+                                    <SlotThumb label="รูปหลังกิน" image={afterImage} onRemove={() => setAfterImage(null)} />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ——— Step 2: details ——— */}
+                        {step === "details" && (
+                            <>
                             <div className="space-y-4">
                                 <div>
                                     <label htmlFor="log-meal-name" className="text-xs text-surface-400 block mb-1.5">
@@ -424,11 +507,11 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 Analyzing saves and logs the meal automatically with the AI's estimate —
                                 adjust any component afterwards from its provenance row below.
                             </p>
-                        </>
-                    )}
+                            </>
+                        )}
 
-                    {/* ——— Step: result ——— */}
-                    {step === "result" && outcome && (
+                        {/* ——— Step 3: result ——— */}
+                        {step === "result" && outcome && (
                         <>
                             {confirmed ? (
                                 <p className="text-xs text-emerald-300 flex items-center gap-1.5">
@@ -536,19 +619,41 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 </div>
                             )}
                         </>
-                    )}
+                        )}
+                    </div>
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-6 pt-4 border-t border-surface-300/30">
-                    {step === "form" && (
+                <div className="flex items-center justify-end gap-3 p-5 pt-4 sm:p-6 sm:pt-4 border-t border-surface-300/30">
+                    {step === "photo" && (
                         <>
                             <button
                                 type="button"
                                 onClick={handleClose}
-                                className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition-colors"
+                                className="px-5 py-3 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition active:scale-[0.97]"
                             >
                                 Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={goDetails}
+                                disabled={!beforeImage}
+                                className="btn-primary text-sm transition active:scale-[0.97]"
+                            >
+                                Next
+                            </button>
+                        </>
+                    )}
+
+                    {step === "details" && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={goBackToPhoto}
+                                disabled={busy}
+                                className="px-5 py-3 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition active:scale-[0.97] disabled:opacity-50"
+                            >
+                                Back
                             </button>
                             <BusyButton
                                 onClick={handleAnalyze}
@@ -576,7 +681,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition-colors"
+                                    className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition active:scale-[0.97]"
                                 >
                                     Cancel
                                 </button>
