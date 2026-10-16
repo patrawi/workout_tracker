@@ -62,6 +62,8 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
     const systemFrontInputRef = useRef<HTMLInputElement>(null);
     const [facing, setFacing] = useState<Facing>("environment");
     const [cameraOn, setCameraOn] = useState(false);
+    /** True while the permission prompt / getUserMedia handshake is pending. */
+    const [starting, setStarting] = useState(false);
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [hasTorch, setHasTorch] = useState(false);
     const [torchOn, setTorchOn] = useState(false);
@@ -90,6 +92,7 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                 return;
             }
             stopStream();
+            setStarting(true);
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: want, width: { ideal: 2560 }, height: { ideal: 1440 } },
@@ -112,16 +115,28 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                 const caps = track?.getCapabilities?.() as (MediaTrackCapabilities & { torch?: boolean }) | undefined;
                 setHasTorch(Boolean(caps?.torch));
             } catch (err) {
-                setCameraOn(false);
-                setCameraError(
-                    err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "SecurityError")
-                        ? "ไม่ได้รับอนุญาตให้ใช้กล้อง — เปิดสิทธิ์ในเบราว์เซอร์ หรือเลือกรูปจากแกลเลอรีแทน"
-                        : "เปิดกล้องไม่สำเร็จ — ลองอีกครั้ง หรือเลือกรูปจากแกลเลอรีแทน",
-                );
+                if (seq === startSeqRef.current) {
+                    setCameraOn(false);
+                    setCameraError(
+                        err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "SecurityError")
+                            ? "ไม่ได้รับอนุญาตให้ใช้กล้อง — เปิดสิทธิ์ในเบราว์เซอร์ หรือเลือกรูปจากแกลเลอรีแทน"
+                            : "เปิดกล้องไม่สำเร็จ — ลองอีกครั้ง หรือเลือกรูปจากแกลเลอรีแทน",
+                    );
+                }
+            } finally {
+                if (seq === startSeqRef.current) setStarting(false);
             }
         },
         [stopStream, currentTrack],
     );
+
+    // The design's sheet opens straight onto the live viewfinder — start the
+    // rear camera on mount so the browser's camera permission prompt fires
+    // immediately instead of waiting for a chip tap. Without live-camera
+    // support the placeholder stays put and the chips drive the OS fallback.
+    useEffect(() => {
+        if (HAS_LIVE_CAMERA) void startCamera("environment");
+    }, [startCamera]);
 
     const handleShutter = useCallback(async () => {
         const video = videoRef.current;
@@ -215,7 +230,7 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
                 {!cameraOn && (
                     <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
                         <p role={cameraError ? "alert" : undefined} className="text-xs text-surface-400">
-                            {cameraError ?? "จัดอาหารให้อยู่ในกรอบ แล้วกดปุ่มกลางเพื่อถ่าย"}
+                            {cameraError ?? (starting ? "กำลังขอสิทธิ์และเปิดกล้อง…" : "จัดอาหารให้อยู่ในกรอบ แล้วกดปุ่มกลางเพื่อถ่าย")}
                         </p>
                     </div>
                 )}
