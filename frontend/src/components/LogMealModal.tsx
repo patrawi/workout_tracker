@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import DialogBase from "./DialogBase";
 import DropToast from "./DropToast";
@@ -8,7 +7,6 @@ import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
 import CameraCapture from "@/features/nutrition-estimation/components/CameraCapture";
 import ImageSlot, { type AttachedImage } from "@/features/nutrition-estimation/components/ImageSlot";
 import { useMealObservations } from "@/features/nutrition-estimation/hooks/useMealObservations";
-import { mealObservationApi } from "@/lib/api/mealObservations";
 import { estimateFromCreateOutcome, estimateFromRecalculation } from "@/features/nutrition-estimation/estimate";
 import { roundToWhole, roundToOneDecimal } from "@/features/nutrition-estimation/format";
 import type {
@@ -16,6 +14,7 @@ import type {
     CreateOutcome,
     MealComponentBreakdown,
     MealType,
+    UpdateComponentMacrosInput,
 } from "@/types";
 
 // ——— Constants ———
@@ -29,39 +28,50 @@ type SheetDrag = { kind: "idle" } | { kind: "drag"; y: number } | { kind: "settl
 
 // ——— Helpers ———
 
-/** Per-component provenance (ADR 0026) as collapsed ingredient cards: each
- *  card shows the name over "kcal • grams"; tapping the pencil expands the
- *  card in place to reveal the nutrition detail and the reference search
- *  (the "change" affordance) inside the card. */
+/** Per-component provenance as collapsed ingredient cards: each card shows the
+ *  name over "kcal • grams"; tapping the pencil expands the card in place to
+ *  reveal editable weight/macros — the fix is a direct macro edit (there is no
+ *  reference picker on the user page); calories re-sync server-side (4/4/9/7). */
 function ProvenanceList({
     perComponent,
-    onPick,
+    onSave,
+    saving,
 }: {
     perComponent: MealComponentBreakdown[];
-    onPick: (position: number, referenceId: number) => Promise<void>;
+    onSave: (position: number, input: UpdateComponentMacrosInput) => Promise<void>;
+    saving: boolean;
 }) {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
-    const [searchPosition, setSearchPosition] = useState<number | null>(null);
-    const [searchTerm, setSearchTerm] = useState("");
+    const [draft, setDraft] = useState({ weight: "", protein: "", carbs: "", fat: "" });
 
-    const searchResults = useQuery({
-        queryKey: ["mealObservationReferenceSearch", searchTerm],
-        queryFn: async () => {
-            const res = await mealObservationApi.searchReferenceCandidates(searchTerm, 8);
-            if (res.success && res.data) return res.data;
-            throw new Error(res.error ?? "Reference search failed");
-        },
-        enabled: searchPosition !== null && searchTerm.trim().length > 0,
-    });
+    const openCard = (i: number, c: MealComponentBreakdown) => {
+        if (openIndex === i) {
+            setOpenIndex(null);
+            return;
+        }
+        setDraft({
+            weight: String(roundToWhole(c.consumed_weight_g.central)),
+            protein: String(roundToOneDecimal(c.contribution.protein.central)),
+            carbs: String(roundToOneDecimal(c.contribution.carbs.central)),
+            fat: String(roundToOneDecimal(c.contribution.fat.central)),
+        });
+        setOpenIndex(i);
+    };
 
-    const pick = useCallback(
-        async (position: number, referenceId: number) => {
-            await onPick(position, referenceId);
-            setSearchPosition(null);
-            setSearchTerm("");
-        },
-        [onPick],
+    const valid = [draft.weight, draft.protein, draft.carbs, draft.fat].every(
+        (s) => s.trim() !== "" && Number.isFinite(Number(s)) && Number(s) >= 0,
     );
+
+    const save = async () => {
+        if (openIndex === null || saving || !valid) return;
+        await onSave(openIndex, {
+            weight_g: Number(draft.weight),
+            protein_g: Number(draft.protein),
+            carbs_g: Number(draft.carbs),
+            fat_g: Number(draft.fat),
+        });
+        setOpenIndex(null);
+    };
 
     if (perComponent.length === 0) return null;
     return (
@@ -79,7 +89,7 @@ function ProvenanceList({
                             <div className="flex items-center justify-between gap-3 px-4 py-3.5">
                                 <button
                                     type="button"
-                                    onClick={() => setOpenIndex(open ? null : i)}
+                                    onClick={() => openCard(i, c)}
                                     aria-expanded={open}
                                     className="flex-1 min-w-0 text-left"
                                 >
@@ -91,7 +101,7 @@ function ProvenanceList({
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setOpenIndex(open ? null : i)}
+                                    onClick={() => openCard(i, c)}
                                     aria-expanded={open}
                                     aria-label={`Edit ${c.name}`}
                                     className={`shrink-0 rounded-full p-2 transition active:scale-90 ${
@@ -102,7 +112,7 @@ function ProvenanceList({
                                 </button>
                             </div>
 
-                            {/* Expanded — nutrition detail + reference search live inside the card. */}
+                            {/* Expanded — editable weight/macros; Save persists the override. */}
                             {open && (
                                 <div className="px-4 pb-3.5 space-y-2.5 border-t border-surface-300/10 animate-fade-in">
                                     <div className="flex items-center justify-between gap-2 pt-3">
@@ -114,60 +124,28 @@ function ProvenanceList({
                                                 {c.reference?.name_th ?? c.reference?.name_en ?? `#${c.reference?.id ?? "?"}`}
                                             </span>
                                         )}
-                                        <button
-                                            type="button"
-                                            onClick={() => setSearchPosition(searchPosition === i ? null : i)}
-                                            className="text-xs text-surface-400 hover:text-[var(--foreground)] px-1"
-                                            aria-label={`Change reference for ${c.name}`}
-                                        >
-                                            {searchPosition === i ? "cancel" : "change"}
-                                        </button>
-                                    </div>
-                                    {/* Central contribution per component (ADR 0030 — single numbers). */}
-                                    <div className="text-xs text-surface-400 tabular-nums">
-                                        {roundToWhole(c.consumed_weight_g.central)} g ·{" "}
-                                        {roundToWhole(c.contribution.calories.central)} kcal · P{" "}
-                                        {roundToOneDecimal(c.contribution.protein.central)} / C{" "}
-                                        {roundToOneDecimal(c.contribution.carbs.central)} / F{" "}
-                                        {roundToOneDecimal(c.contribution.fat.central)}
                                     </div>
 
-                                    {searchPosition === i && (
-                                        <div className="space-y-2">
-                                            <input
-                                                type="text"
-                                                value={searchTerm}
-                                                onChange={(e) => setSearchTerm(e.target.value)}
-                                                autoFocus
-                                                placeholder="ค้นหาอ้างอิงอาหาร…"
-                                                aria-label="Search nutrition references"
-                                                className="glass-input w-full px-3 py-2 text-sm text-[var(--foreground)]"
-                                            />
-                                            {searchResults.isLoading && (
-                                                <p className="text-xs text-surface-400">กำลังค้นหา…</p>
-                                            )}
-                                            {(searchResults.data ?? []).length > 0 && (
-                                                <ul className="space-y-1">
-                                                    {(searchResults.data ?? []).map((r) => (
-                                                        <li key={r.id}>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => void pick(i, r.id)}
-                                                                className="w-full flex items-center justify-between gap-3 text-left px-3 py-2 rounded-lg border border-surface-300/20 hover:border-[var(--primary)]/40 transition text-sm"
-                                                            >
-                                                                <span className="text-[var(--foreground)] truncate">
-                                                                    {r.nameTh ?? r.nameEn ?? `#${r.id}`}
-                                                                </span>
-                                                                <span className="text-xs text-surface-400 shrink-0 tabular-nums">
-                                                                    {Math.round(r.per100.calories)} kcal/100g
-                                                                </span>
-                                                            </button>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </div>
-                                    )}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <MacroField label="Weight (g)" value={draft.weight} onChange={(v) => setDraft((d) => ({ ...d, weight: v }))} />
+                                        <MacroField label="Protein (g)" value={draft.protein} onChange={(v) => setDraft((d) => ({ ...d, protein: v }))} />
+                                        <MacroField label="Carbs (g)" value={draft.carbs} onChange={(v) => setDraft((d) => ({ ...d, carbs: v }))} />
+                                        <MacroField label="Fat (g)" value={draft.fat} onChange={(v) => setDraft((d) => ({ ...d, fat: v }))} />
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            void save();
+                                        }}
+                                        disabled={saving || !valid}
+                                        className="btn-primary text-sm w-full transition active:scale-[0.97]"
+                                    >
+                                        {saving ? "Saving…" : "Save"}
+                                    </button>
+                                    <p className="text-[11px] text-surface-400">
+                                        kcal จะคำนวณใหม่จาก macros อัตโนมัติ (4/4/9 กิโลแคลอรีต่อกรัม)
+                                    </p>
                                 </div>
                             )}
                         </div>
@@ -175,6 +153,22 @@ function ProvenanceList({
                 })}
             </div>
         </div>
+    );
+}
+
+/** One numeric macro/weight field (decimal keypad on mobile). */
+function MacroField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+    return (
+        <label className="block">
+            <span className="block text-[11px] text-surface-400 mb-1">{label}</span>
+            <input
+                type="text"
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className="glass-input w-full px-3 py-2 text-sm text-white tabular-nums"
+            />
+        </label>
     );
 }
 
@@ -246,7 +240,7 @@ interface LogMealModalProps {
  * All state lives here; the parent only opens/closes (remount via key to reset).
  */
 export default function LogMealModal({ open, onClose, defaultDate, onLogged }: LogMealModalProps) {
-    const { interpret, create, confirm, resolveComponent, isInterpreting, isCreating, isConfirming, isResolvingComponent } =
+    const { interpret, create, confirm, updateMacros, isInterpreting, isCreating, isConfirming, isUpdatingMacros } =
         useMealObservations();
 
     const [step, setStep] = useState<Step>("photo");
@@ -448,17 +442,17 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             ? estimateFromCreateOutcome(outcome)
             : null;
 
-    const handlePickRef = useCallback(
-        async (position: number, referenceId: number) => {
+    const handleSaveMacros = useCallback(
+        async (position: number, input: UpdateComponentMacrosInput) => {
             if (!outcome) return;
             try {
-                const res = await resolveComponent(outcome.observation.id, position, referenceId);
+                const res = await updateMacros(outcome.observation.id, position, input);
                 setUpdated(res);
             } catch (err) {
-                showToast(err instanceof Error ? err.message : "Failed to resolve the reference.");
+                showToast(err instanceof Error ? err.message : "Failed to save the ingredient.");
             }
         },
-        [outcome, resolveComponent, showToast],
+        [outcome, updateMacros, showToast],
     );
 
     /** Manual fallback when the auto-confirm failed (never-block, ADR 0030). */
@@ -480,7 +474,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         result: "Step 3 of 3 — Result",
     };
 
-    const busy = isInterpreting || isCreating || isConfirming || isResolvingComponent;
+    const busy = isInterpreting || isCreating || isConfirming || isUpdatingMacros;
 
     return (
         <DialogBase open={open} onClose={dismissSheet} ariaLabel="Log a meal" drawer>
@@ -722,7 +716,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                         perComponent={
                                             (updated ?? outcome).observation.calculation?.per_component ?? []
                                         }
-                                        onPick={handlePickRef}
+                                        onSave={handleSaveMacros}
+                                        saving={isUpdatingMacros}
                                     />
                                 </div>
                             )}

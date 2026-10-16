@@ -9,6 +9,7 @@ import type {
     ObservationDetailWithExplanation,
     PendingObservation,
     ReferenceSearchItem,
+    UpdateComponentMacrosInput,
 } from "@/types";
 
 /** Wire item (snake_case search hit) → shared candidate shape used by both pickers. */
@@ -59,11 +60,12 @@ export const mealObservationApi = {
     resolve: (id: number, reference_id: number) =>
         api.post<CalculateObservationOutcome>(`/meal-observations/${id}/resolve`, { reference_id }),
 
-    /** Resolve ONE component's reference (ADR 0026) — others keep their sourcing. */
-    resolveComponent: (id: number, position: number, reference_id: number) =>
-        api.post<CalculateObservationOutcome>(`/meal-observations/${id}/resolve-component`, {
+    /** Manual macro override for ONE component — the user edits weight/macros
+     * directly; calories re-sync server-side (no reference picker). */
+    updateComponentMacros: (id: number, position: number, input: UpdateComponentMacrosInput) =>
+        api.post<CalculateObservationOutcome>(`/meal-observations/${id}/update-component-macros`, {
             position,
-            reference_id,
+            ...input,
         }),
 
     listPending: () => api.get<PendingObservation[]>("/meal-observations/pending"),

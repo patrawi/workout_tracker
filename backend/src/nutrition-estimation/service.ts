@@ -766,6 +766,96 @@ export function createNutritionEstimationService(deps: {
   }
 
   /**
+   * Manual macro override for ONE component (mobile redesign): the user edits
+   * weight / protein / carbs / fat directly — there is no reference picker on
+   * the user page anymore. Overrides collapse that nutrient's interval to the
+   * user's point value (user authority beats the estimator), calories always
+   * re-sync from the macros (4/4/9/7 kcal/g — see docs/nutrition-alcohol-domain.md),
+   * totals re-sum from the per-component contributions, and a confirmed
+   * observation re-finalizes + re-dual-writes nutrition_logs (same flow as
+   * resolveComponentReference).
+   */
+  async function updateComponentMacros(
+    observationId: number,
+    position: number,
+    overrides: { weight_g?: number; protein_g?: number; carbs_g?: number; fat_g?: number },
+    userId: number,
+  ): Promise<CalculateForReferenceResult> {
+    const detail = await repo.getObservationDetail(observationId, userId);
+    if (!detail) throw new NotFoundError("Meal observation");
+    const wasConfirmed = detail.status === "confirmed";
+    const prev = detail.latest_revision?.calculation;
+    if (!prev) throw new ConflictError("Observation has no calculation to override.");
+    if (position < 0 || position >= prev.per_component.length) {
+      throw new ValidationError("Component position is out of range.");
+    }
+
+    const calculation: CalculationResult = JSON.parse(JSON.stringify(prev));
+    const pc = calculation.per_component[position]!;
+    if (overrides.weight_g !== undefined) {
+      pc.consumed_weight_g = {
+        low: overrides.weight_g,
+        central: overrides.weight_g,
+        high: overrides.weight_g,
+      };
+    }
+    const protein = overrides.protein_g ?? pc.contribution.protein.central;
+    const carbs = overrides.carbs_g ?? pc.contribution.carbs.central;
+    const fat = overrides.fat_g ?? pc.contribution.fat.central;
+    const alcohol = pc.contribution.alcohol.central;
+    const calories = protein * 4 + carbs * 4 + fat * 9 + alcohol * 7;
+    pc.contribution.protein = { low: protein, central: protein, high: protein };
+    pc.contribution.carbs = { low: carbs, central: carbs, high: carbs };
+    pc.contribution.fat = { low: fat, central: fat, high: fat };
+    pc.contribution.alcohol = { low: alcohol, central: alcohol, high: alcohol };
+    pc.contribution.calories = { low: calories, central: calories, high: calories };
+
+    // Totals re-sum from the per-component contributions (now user-pointed).
+    const sumKeys = ["protein", "carbs", "fat", "alcohol", "calories"] as const;
+    for (const key of sumKeys) {
+      calculation.nutrients[key] = {
+        low: calculation.per_component.reduce((s, c) => s + c.contribution[key].low, 0),
+        central: calculation.per_component.reduce((s, c) => s + c.contribution[key].central, 0),
+        high: calculation.per_component.reduce((s, c) => s + c.contribution[key].high, 0),
+      };
+    }
+    calculation.drivers.push(`component '${pc.name}' macros set manually`);
+
+    const revision = await repo.insertRevision({
+      observation_id: observationId,
+      reference_id: null,
+      reference_provider: null,
+      reference_version: null,
+      calculation,
+    });
+    await repo.updateObservationEstimate(observationId, {
+      reference_id: null,
+      calculation,
+    }, userId);
+
+    if (wasConfirmed) {
+      await repo.updateRevisionStatus(revision.id, "confirmed");
+      await repo.supersedeConfirmedRevisions(observationId, revision.id);
+      await repo.upsertNutritionLogLink({
+        user_id: userId,
+        date: detail.date,
+        meal: detail.meal_type,
+        food_name: detail.menu_name,
+        ...centralValues(calculation),
+        observation_id: observationId,
+      });
+    }
+
+    const updated = (await repo.getObservationDetail(observationId, userId))!;
+    return {
+      observation: updated,
+      revision: wasConfirmed ? { ...revision, status: "confirmed" } : revision,
+      reference: detail.reference,
+      explanation: buildExplanation(updated, calculation),
+    };
+  }
+
+  /**
    * Confirm the latest pending revision: mark it confirmed (superseding older
    * confirmed ones), set the observation confirmed, and dual-write the central
    * point values into nutrition_logs with provenance markers (ADR 0022).
@@ -919,6 +1009,7 @@ export function createNutritionEstimationService(deps: {
     confirmEstimate,
     resolveReference,
     resolveComponentReference,
+    updateComponentMacros,
     getObservation,
     listPending,
     searchReferences,

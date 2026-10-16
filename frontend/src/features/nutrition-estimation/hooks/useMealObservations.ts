@@ -7,6 +7,7 @@ import type {
     CreateMealObservationInput,
     CreateOutcome,
     InterpretOutcome,
+    UpdateComponentMacrosInput,
 } from "@/types";
 
 interface UseMealObservationsReturn {
@@ -19,14 +20,14 @@ interface UseMealObservationsReturn {
     ) => Promise<InterpretOutcome>;
     create: (input: CreateMealObservationInput) => Promise<CreateOutcome>;
     confirm: (id: number) => Promise<CalculateObservationOutcome>;
-    /** ADR 0026 — resolve ONE component's reference; others keep their sourcing. */
-    resolveComponent: (id: number, position: number, referenceId: number) => Promise<CalculateObservationOutcome>;
+    /** Manual macro override for ONE ingredient (no reference picker). */
+    updateMacros: (id: number, position: number, input: UpdateComponentMacrosInput) => Promise<CalculateObservationOutcome>;
 
     // Loading states
     isInterpreting: boolean;
     isCreating: boolean;
     isConfirming: boolean;
-    isResolvingComponent: boolean;
+    isUpdatingMacros: boolean;
 }
 
 /**
@@ -111,24 +112,24 @@ export function useMealObservations(): UseMealObservationsReturn {
 
     const confirm = useCallback(async (id: number) => confirmRef.current(id), []);
 
-    const resolveComponentMutation = useMutation({
-        mutationFn: async ({ id, position, referenceId }: { id: number; position: number; referenceId: number }) => {
-            const res = await mealObservationApi.resolveComponent(id, position, referenceId);
+    const updateMacrosMutation = useMutation({
+        mutationFn: async ({ id, position, input }: { id: number; position: number; input: UpdateComponentMacrosInput }) => {
+            const res = await mealObservationApi.updateComponentMacros(id, position, input);
             if (res.success && res.data) return res.data;
-            throw new Error(res.error ?? "Failed to resolve the reference");
+            throw new Error(res.error ?? "Failed to save the ingredient");
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.mealObservations.all });
         },
     });
-    const resolveComponentRef = useRef(resolveComponentMutation.mutateAsync);
+    const updateMacrosRef = useRef(updateMacrosMutation.mutateAsync);
     useEffect(() => {
-        resolveComponentRef.current = resolveComponentMutation.mutateAsync;
-    }, [resolveComponentMutation.mutateAsync]);
+        updateMacrosRef.current = updateMacrosMutation.mutateAsync;
+    }, [updateMacrosMutation.mutateAsync]);
 
-    const resolveComponent = useCallback(
-        async (id: number, position: number, referenceId: number) =>
-            resolveComponentRef.current({ id, position, referenceId }),
+    const updateMacros = useCallback(
+        async (id: number, position: number, input: UpdateComponentMacrosInput) =>
+            updateMacrosRef.current({ id, position, input }),
         [],
     );
 
@@ -136,10 +137,10 @@ export function useMealObservations(): UseMealObservationsReturn {
         interpret,
         create,
         confirm,
-        resolveComponent,
+        updateMacros,
         isInterpreting: interpretMutation.isPending,
         isCreating: createMutation.isPending,
         isConfirming: confirmMutation.isPending,
-        isResolvingComponent: resolveComponentMutation.isPending,
+        isUpdatingMacros: updateMacrosMutation.isPending,
     };
 }

@@ -369,6 +369,15 @@ export interface CalculateObservationOutcome {
     explanation: ObservationExplanation;
 }
 
+/** Manual macro override for one ingredient (mobile redesign — no reference
+ * picker on the user page; calories re-sync server-side from 4/4/9/7). */
+export interface UpdateComponentMacrosInput {
+    weight_g?: number;
+    protein_g?: number;
+    carbs_g?: number;
+    fat_g?: number;
+}
+
 // ——— Reference search (GET /api/meal-observations/references/search) ———
 
 export interface ReferenceSearchItem {

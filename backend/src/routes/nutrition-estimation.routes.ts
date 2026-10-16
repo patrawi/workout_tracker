@@ -161,5 +161,28 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
         position: t.Integer({ minimum: 0 }),
         reference_id: t.Integer({ minimum: 1 }),
       }),
+    })
+    // Manual macro override for one component (mobile redesign): the user edits
+    // weight/macros directly — no reference picker. Calories re-sync server-side.
+    .post("/meal-observations/:id/update-component-macros", routeHandlerCtx(async ({ params, body, user_id }: any) => {
+      return await nutritionEstimationService.updateComponentMacros(
+        Number(params.id),
+        body.position,
+        {
+          weight_g: body.weight_g,
+          protein_g: body.protein_g,
+          carbs_g: body.carbs_g,
+          fat_g: body.fat_g,
+        },
+        user_id,
+      );
+    }), {
+      body: t.Object({
+        position: t.Integer({ minimum: 0 }),
+        weight_g: t.Optional(t.Number({ minimum: 0 })),
+        protein_g: t.Optional(t.Number({ minimum: 0 })),
+        carbs_g: t.Optional(t.Number({ minimum: 0 })),
+        fat_g: t.Optional(t.Number({ minimum: 0 })),
+      }),
     });
 }
