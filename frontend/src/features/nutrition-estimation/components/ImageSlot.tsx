@@ -1,31 +1,12 @@
-// One before/after photo slot (S2.2): file input + preview + remove, with the
-// shared 4 MB cap. Replaces the near-identical slot blocks in LogMealModal.
+// One before/after photo slot (S2.2): file input + preview + remove. Picked
+// files funnel through the shared image pipeline (decode → resize → JPEG), so
+// oversized originals (iPhone HEIC > 4 MB) compress instead of being rejected.
 import { useCallback, useState } from "react";
 import type { ChangeEvent } from "react";
+import { processImageFile } from "../lib/imagePipeline";
+import type { AttachedImage } from "../lib/imagePipeline";
 
-/** Binary cap before base64 encoding (server accepts up to 8M base64 chars). */
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-
-/** Attached photo kept as base64 (for interpret) + data URL (for the preview). */
-export interface AttachedImage {
-    base64: string;
-    dataUrl: string;
-}
-
-/** Module-local (un-exported to keep this file a component-only module): base64 for interpret + data URL for the preview. */
-function readFileAsImage(file: File): Promise<AttachedImage> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const dataUrl = String(reader.result);
-            // Strip the data: prefix — the API wants raw base64.
-            const comma = dataUrl.indexOf(",");
-            resolve({ base64: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, dataUrl });
-        };
-        reader.onerror = () => reject(new Error("Could not read the file"));
-        reader.readAsDataURL(file);
-    });
-}
+export type { AttachedImage } from "../lib/imagePipeline";
 
 interface ImageSlotProps {
     /** Slot title, e.g. "Before photo" — also drives the preview alt text. */
@@ -58,16 +39,12 @@ export default function ImageSlot({
             const file = e.target.files?.[0];
             e.target.value = ""; // allow re-picking the same file
             if (!file) return;
-            if (file.size > MAX_IMAGE_BYTES) {
-                onError(`"${file.name}" is over 4 MB — pick a smaller image.`);
-                return;
-            }
             onError(null);
             try {
-                onAttach(await readFileAsImage(file));
+                onAttach(await processImageFile(file));
                 setFileName(file.name);
-            } catch {
-                onError("Could not read that file — try another image.");
+            } catch (err) {
+                onError(err instanceof Error ? err.message : "Could not read that file — try another image.");
             }
         },
         [onAttach, onError],

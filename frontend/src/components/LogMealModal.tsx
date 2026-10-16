@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DialogBase from "./DialogBase";
 import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
+import CameraCapture from "@/features/nutrition-estimation/components/CameraCapture";
 import ImageSlot, { type AttachedImage } from "@/features/nutrition-estimation/components/ImageSlot";
 import { useMealObservations } from "@/features/nutrition-estimation/hooks/useMealObservations";
 import { mealObservationApi } from "@/lib/api/mealObservations";
@@ -116,6 +117,16 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const [userNote, setUserNote] = useState("");
     const [beforeImage, setBeforeImage] = useState<AttachedImage | null>(null);
     const [afterImage, setAfterImage] = useState<AttachedImage | null>(null);
+
+    /** Camera/gallery captures land in the first empty slot: before photo,
+     * then after photo. Both full → the after slot is replaced. */
+    const handleCaptured = useCallback(
+        (image: AttachedImage) => {
+            if (!beforeImage) setBeforeImage(image);
+            else setAfterImage(image);
+        },
+        [beforeImage],
+    );
 
     // Result state
     const [outcome, setOutcome] = useState<CreateOutcome | null>(null);
@@ -285,6 +296,10 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                     {/* ——— Step: form ——— */}
                     {step === "form" && (
                         <>
+                            {/* Camera-first capture (design: แนบรูป AI) — live viewfinder
+                                + gallery fallback, feeding the slots below. */}
+                            <CameraCapture onAttach={handleCaptured} onError={setImageError} />
+
                             <div className="space-y-4">
                                 <div>
                                     <label htmlFor="log-meal-name" className="text-xs text-surface-400 block mb-1.5">
