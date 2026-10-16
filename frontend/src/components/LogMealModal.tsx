@@ -195,6 +195,12 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
 
     // ——— Drawer drag-to-dismiss (iOS sheet): pull the grabber/header down ———
 
+    const handleClose = useCallback(() => {
+        // The toast lands as the modal clears — the page behind shows fresh totals.
+        if (confirmed) onLogged("Logged — daily totals updated");
+        onClose();
+    }, [confirmed, onLogged, onClose]);
+
     const [sheetDrag, setSheetDrag] = useState<SheetDrag>({ kind: "idle" });
     const dragInfoRef = useRef({ startY: 0, lastY: 0, lastT: 0, velocity: 0 });
     const sheetTimerRef = useRef<number | null>(null);
@@ -202,6 +208,14 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     useEffect(() => () => {
         if (sheetTimerRef.current !== null) window.clearTimeout(sheetTimerRef.current);
     }, []);
+
+    /** Slide the sheet out (gravity ease-in), then run the real close — the
+     *  single exit path for backdrop taps, ✕/Cancel, and the drag gesture. */
+    const dismissSheet = useCallback(() => {
+        if (sheetDrag.kind === "dismiss" || sheetDrag.kind === "settle") return;
+        setSheetDrag({ kind: "dismiss" });
+        sheetTimerRef.current = window.setTimeout(handleClose, 300);
+    }, [handleClose, sheetDrag.kind]);
 
     const beginSheetDrag = useCallback(
         (e: ReactPointerEvent) => {
@@ -228,8 +242,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             const y = Math.max(0, d.lastY - d.startY);
             const flung = d.velocity > 0.6;
             if (y > 120 || (flung && y > 24)) {
-                setSheetDrag({ kind: "dismiss" });
-                sheetTimerRef.current = window.setTimeout(onClose, 280);
+                dismissSheet();
             } else {
                 setSheetDrag({ kind: "settle" });
                 sheetTimerRef.current = window.setTimeout(() => setSheetDrag({ kind: "idle" }), 320);
@@ -243,7 +256,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             window.removeEventListener("pointerup", end);
             window.removeEventListener("pointercancel", end);
         };
-    }, [sheetDrag.kind, onClose]);
+    }, [sheetDrag.kind, dismissSheet]);
 
     const sheetStyle =
         sheetDrag.kind === "drag"
@@ -251,7 +264,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             : sheetDrag.kind === "settle"
                 ? { transform: "translateY(0px)", transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)" }
                 : sheetDrag.kind === "dismiss"
-                    ? { transform: "translateY(100%)", transition: "transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)" }
+                    ? { transform: "translateY(100%)", transition: "transform 0.3s cubic-bezier(0.55, 0, 1, 0.45)" }
                     : undefined;
 
     // Result state
@@ -376,12 +389,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         }
     }, [outcome, confirm]);
 
-    const handleClose = useCallback(() => {
-        // The toast lands as the modal clears — the page behind shows fresh totals.
-        if (confirmed) onLogged("Logged — daily totals updated");
-        onClose();
-    }, [confirmed, onLogged, onClose]);
-
     if (!open) return null;
 
     const stepLabels: Record<Step, string> = {
@@ -393,7 +400,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
     const busy = isInterpreting || isCreating || isConfirming || isResolvingComponent;
 
     return (
-        <DialogBase open={open} onClose={handleClose} ariaLabel="Log a meal" drawer>
+        <DialogBase open={open} onClose={dismissSheet} ariaLabel="Log a meal" drawer>
             <div
                 className="glass-card w-full flex flex-col animate-sheet-up max-h-[92dvh] overflow-hidden rounded-t-3xl sm:rounded-2xl"
                 style={sheetStyle}
@@ -416,10 +423,11 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 <h2 className="text-xl font-bold text-white">Log a meal</h2>
                                 <p className="text-sm text-surface-400 mt-1">{stepLabels[step]}</p>
                             </div>
+                            {/* Mobile closes via swipe or backdrop tap — the ✕ is desktop-only. */}
                             <button
                                 type="button"
-                                onClick={handleClose}
-                                className="text-surface-400 hover:text-white transition text-xl px-2 py-1 rounded-lg hover:bg-surface-200/50 active:scale-90"
+                                onClick={dismissSheet}
+                                className="hidden sm:block text-surface-400 hover:text-white transition text-xl px-2 py-1 rounded-lg hover:bg-surface-200/50 active:scale-90"
                                 aria-label="Close log meal modal"
                             >
                                 ✕
@@ -706,7 +714,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                         <>
                             <button
                                 type="button"
-                                onClick={handleClose}
+                                onClick={dismissSheet}
                                 className="px-5 py-3 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition active:scale-[0.97]"
                             >
                                 Cancel
@@ -748,7 +756,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                         confirmed ? (
                             <button
                                 type="button"
-                                onClick={handleClose}
+                                onClick={dismissSheet}
                                 className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition-colors"
                             >
                                 Done
@@ -757,7 +765,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                             <>
                                 <button
                                     type="button"
-                                    onClick={handleClose}
+                                    onClick={dismissSheet}
                                     className="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-400 hover:text-white hover:bg-surface-200/50 transition active:scale-[0.97]"
                                 >
                                     Cancel

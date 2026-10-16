@@ -15,8 +15,8 @@ interface DialogBaseProps {
 
 /**
  * Thin wrapper around native <dialog> with showModal().
- * closedby="any" enables light-dismiss (click backdrop to close) natively.
- * Includes a Safari fallback for browsers that don't support closedby.
+ * Light-dismiss: clicks on the backdrop call onClose (never closes natively,
+ * so the caller can run an exit animation first).
  */
 export default function DialogBase({
     open,
@@ -44,12 +44,12 @@ export default function DialogBase({
         onClose();
     }, [onClose]);
 
-    // Safari fallback: light-dismiss via click-on-backdrop detection
+    // Safari fallback: light-dismiss via click-on-backdrop detection.
+    // This is the ONLY light-dismiss path now — `closedby` would close the
+    // dialog instantly and bypass the caller's animated-dismissal flow.
     useEffect(() => {
         const dialog = ref.current;
         if (!dialog || !open) return;
-
-        if ("closedBy" in HTMLDialogElement.prototype) return;
 
         const handleClick = (e: MouseEvent) => {
             if (e.target !== dialog) return;
@@ -79,7 +79,6 @@ export default function DialogBase({
     return (
         <dialog
             ref={ref}
-            closedby="any"
             aria-label={ariaLabel}
             aria-labelledby={ariaLabelledby}
             className={`backdrop:bg-[oklch(0.05_0.005_260_/_0.7)] backdrop:backdrop-blur-sm bg-transparent p-0 overflow-visible ${
