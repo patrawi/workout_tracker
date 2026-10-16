@@ -95,6 +95,19 @@ function caloriesInKindBand(kind: string | undefined, calories: number): boolean
 }
 
 /**
+ * Over-dense only: the F3 net exists to catch unit-suspect / raw-density rows
+ * that read too MANY calories for their kind (ข้าวเม่า 364 in the rice band).
+ * Rows LIGHTER than the band (แตงกวา 4 kcal in the side band) are just light
+ * foods — treating them as violations auto-blocked "cucumber slices" against
+ * the exact cucumber row, so they score and auto-select freely.
+ */
+function caloriesAboveKindBand(kind: string | undefined, calories: number): boolean {
+  if (kind === undefined) return false;
+  const band = KIND_KCAL_BANDS[kind] ?? KIND_KCAL_BANDS.other!;
+  return calories > band[1];
+}
+
+/**
  * Tokenize a menu/reference name: split on whitespace and punctuation,
  * lowercase (affects latin only); Thai tokens are compared whole.
  */
@@ -103,6 +116,39 @@ export function tokenizeName(name: string): string[] {
     .split(/[\s\p{P}\p{S}]+/u)
     .map((t) => t.toLowerCase())
     .filter((t) => t.length > 0);
+}
+
+// --- Query-side filler (VLM component names, 2026-10) ---
+// The VLM sprinkles preparation words into component names ("cooked white
+// rice", "cucumber slices") that ThaiFCD rows never carry. Counting them in
+// the coverage denominator poisons every score — "cooked white rice" scored
+// 0.67 against the exact staple (2/3 tokens) and fell to the kind prior.
+// Filler tokens are dropped from the coverage count. State words (raw/fried/
+// grilled/steamed) are NOT filler — they steer the raw-state penalty and
+// match preparation-qualified rows.
+const QUERY_FILLER_TOKENS = new Set([
+  "cooked",
+  "sliced",
+  "slices",
+  "slice",
+  "chopped",
+  "diced",
+  "marinated",
+  "seasoned",
+  "fresh",
+  "mixed",
+  "plain",
+  "pieces",
+  "piece",
+  "strips",
+]);
+
+/** Query tokens that count toward coverage (filler removed; falls back to the
+ *  full token list when everything is filler). */
+export function effectiveQueryTokens(name: string): string[] {
+  const tokens = tokenizeName(name);
+  const effective = tokens.filter((t) => !QUERY_FILLER_TOKENS.has(t));
+  return effective.length > 0 ? effective : tokens;
 }
 
 // --- Preparation-state awareness (ข้าวเหนียวหมูย่าง incident, 2026-10) ---
@@ -178,7 +224,7 @@ function refNameParts(ref: ReferenceRow): { primary: Set<string>; qualifier: Set
  * reference name (ข้าวเหนียวสุก → ข้าวเหนียว).
  */
 export function scoreReference(menuName: string, ref: ReferenceRow): number {
-  const queryTokens = tokenizeName(menuName);
+  const queryTokens = effectiveQueryTokens(menuName);
   if (queryTokens.length === 0) return 0;
   const refTokens = new Set([
     ...tokenizeName(ref.nameEn ?? ""),
@@ -202,16 +248,37 @@ export function scoreReference(menuName: string, ref: ReferenceRow): number {
  */
 function adjustedScore(menuName: string, ref: ReferenceRow, base: number): number {
   if (base === 0) return 0;
-  const queryTokens = tokenizeName(menuName);
+  const queryTokens = effectiveQueryTokens(menuName);
   const { primary, qualifier } = refNameParts(ref);
   const hitsPrimary = queryTokens.some((t) => tokenCovers(t, primary));
   const hitsQualifier = queryTokens.some((t) => qualifier.has(t));
   let score = base;
   if (!hitsPrimary && hitsQualifier) score = Math.min(score, 0.5);
-  if (refState([...primary, ...qualifier]) === "raw" && !isQueryRaw(queryTokens)) {
+  if (
+    refState([...primary, ...qualifier]) === "raw" &&
+    !isQueryRaw(queryTokens) &&
+    // Raw-state distortion matters only for calorie-dense staples (the
+    // ข้าวเหนียวดิบ 354 incident). Raw vegetables (แตงกวา 15 kcal) are eaten
+    // raw by default — penalizing them made every salad side fall to prior.
+    ref.per100.calories >= RAW_PENALTY_KCAL_FLOOR
+  ) {
     score *= 0.5;
   }
   return score;
+}
+
+/** Raw-state penalty applies only at or above this calorie density (kcal/100g). */
+export const RAW_PENALTY_KCAL_FLOOR = 150;
+
+/** Score multiplier for rows outside the component kind's calorie band. */
+export const KIND_BAND_MISS_PENALTY = 0.9;
+
+function refTokenCount(ref: ReferenceRow): number {
+  // Preparation-state tokens don't add identity — "แตงกวา, ดิบ | Cucumber,
+  // raw" is as specific as the food gets despite its raw qualifier.
+  return tokenizeName(`${ref.nameTh ?? ""} ${ref.nameEn ?? ""}`).filter(
+    (t) => !RAW_STATE_TOKENS.has(t) && !COOKED_STATE_TOKENS.has(t),
+  ).length;
 }
 
 interface Scored {
@@ -243,27 +310,54 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
     const scored: Scored[] = pool
       .map((ref) => ({
         ref,
-        score: adjustedScore(menuName, ref, scoreReference(menuName, ref)),
+        score:
+          adjustedScore(menuName, ref, scoreReference(menuName, ref)) *
+          // Kind-band miss penalty (VLM kind hint, 2026-10): a row that is
+          // denser than the component's kind ("cooked white rice" → rice kind,
+          // but แป้งข้าวเจ้า/rice flour sits at ~360 kcal/100g) loses close
+          // races without being blocked outright.
+          (hints.kind !== undefined && caloriesAboveKindBand(hints.kind, ref.per100.calories)
+            ? KIND_BAND_MISS_PENALTY
+            : 1),
       }))
-      .sort((a, b) => b.score - a.score || providerRank(a.ref.provider) - providerRank(b.ref.provider));
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          // Equal scores: the terser name is the purer candidate ("แตงกวา |
+          // Cucumber, raw" over "ปลิงขาว | Sea cucumber, white, ..."), so it
+          // leads — the specificity tie-break below can then separate it.
+          refTokenCount(a.ref) - refTokenCount(b.ref) ||
+          providerRank(a.ref.provider) - providerRank(b.ref.provider),
+      );
 
     const best = scored[0]!;
     const runnerUp = scored[1];
     // BaoWio rows are unit-suspect (mixed serving conventions) — they may lead
     // the picker but never auto-select (F2).
     const bestCanAuto = best.ref.provider !== "baowio";
-    if (
-      bestCanAuto &&
-      best.score >= autoThreshold &&
-      (runnerUp === undefined || best.score - runnerUp.score >= marginThreshold)
-    ) {
-      if (!caloriesInKindBand(hints.kind, best.ref.per100.calories)) {
-        return {
-          tier: "ambiguous",
-          candidates: scored.slice(0, 3).map((s) => ({ ...s.ref, score: s.score })),
-        };
+    if (bestCanAuto && best.score >= autoThreshold) {
+      const margin = best.score - (runnerUp?.score ?? 0);
+      // Specificity tie-break: near-ties happen when the query tokens also
+      // appear inside long kitchen-sink names ("fried egg" full-scores
+      // "Fried rice with pork, vegetable and egg"). When the leader says far
+      // less than the runner-up, the leader is the real candidate.
+      const specificitySeparates =
+        runnerUp !== undefined &&
+        margin < marginThreshold &&
+        refTokenCount(best.ref) * 1.5 <= refTokenCount(runnerUp.ref);
+      if (
+        runnerUp === undefined ||
+        margin >= marginThreshold ||
+        specificitySeparates
+      ) {
+        if (caloriesAboveKindBand(hints.kind, best.ref.per100.calories)) {
+          return {
+            tier: "ambiguous",
+            candidates: scored.slice(0, 3).map((s) => ({ ...s.ref, score: s.score })),
+          };
+        }
+        return { tier: "auto", reference: best.ref, score: best.score };
       }
-      return { tier: "auto", reference: best.ref, score: best.score };
     }
 
     // Vector fallback (ADR 0014): engaged when the lexical best misses the
@@ -290,7 +384,7 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
           (runnerUpEntry === undefined ||
             bestEntry.adjusted - runnerUpEntry.adjusted >= VECTOR_MARGIN_THRESHOLD)
         ) {
-          if (!caloriesInKindBand(hints.kind, bestEntry.hit.per100.calories)) {
+          if (caloriesAboveKindBand(hints.kind, bestEntry.hit.per100.calories)) {
             return {
               tier: "ambiguous",
               candidates: vectorHits.slice(0, 3).map((hit) => ({ ...hit, score: hit.similarity })),

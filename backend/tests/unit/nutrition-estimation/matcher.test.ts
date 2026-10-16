@@ -122,11 +122,11 @@ describe("matchReference — tiers", () => {
     }
   });
 
-  test("top score above threshold but margin too small → ambiguous with top 3 sorted desc", async () => {
+  test("near-tied rows without a terser leader → ambiguous with top 3 sorted desc", async () => {
     const repo = makeRepo([
-      row({ id: 1, nameEn: "Fried Rice" }),
-      row({ id: 2, nameEn: "Fried Rice Noodle Soup" }),
-      row({ id: 3, nameEn: "Fried Rice Omelette" }),
+      row({ id: 1, nameEn: "Fried Rice Deluxe" }),
+      row({ id: 2, nameEn: "Fried Rice Supreme" }),
+      row({ id: 3, nameEn: "Fried Rice Special" }),
       row({ id: 4, nameEn: "Green Curry" }),
     ]);
     const matcher = createReferenceMatcher(repo);
@@ -139,6 +139,21 @@ describe("matchReference — tiers", () => {
       for (let i = 1; i < scores.length; i++) {
         expect(scores[i]!).toBeLessThanOrEqual(scores[i - 1]! + 1e-9);
       }
+    }
+  });
+
+  test("terser leader wins a near-tie (specificity tie-break) → auto", async () => {
+    const repo = makeRepo([
+      row({ id: 1, nameEn: "Fried Rice" }),
+      row({ id: 2, nameEn: "Fried Rice Noodle Soup" }),
+      row({ id: 3, nameEn: "Fried Rice Omelette" }),
+    ]);
+    const matcher = createReferenceMatcher(repo);
+    const outcome = await matcher.matchReference("fried rice");
+    expect(outcome.tier).toBe("auto");
+    if (outcome.tier === "auto") {
+      expect(outcome.reference.id).toBe(1);
+      expect(outcome.score).toBeCloseTo(1);
     }
   });
 

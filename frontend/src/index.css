@@ -297,13 +297,11 @@
     animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
-  /* Top toast: drops in from the screen edge, lifts back out to dismiss. */
+  /* Top toast: drops in from the screen edge. No fill-mode — once finished the
+     transform is free for the exit transition (drawer-dismiss mechanism); X
+     centering lives in the `translate` property so keyframes only touch Y. */
   .animate-toast-drop {
-    animation: toast-drop 0.45s cubic-bezier(0.32, 0.72, 0, 1) both;
-  }
-
-  .animate-toast-lift {
-    animation: toast-lift 0.3s cubic-bezier(0.55, 0, 1, 0.45) both;
+    animation: toast-drop 0.45s cubic-bezier(0.32, 0.72, 0, 1);
   }
 }
 
@@ -425,23 +423,11 @@
 
 @keyframes toast-drop {
   from {
-    transform: translate(-50%, -140%);
+    transform: translateY(-140%);
   }
 
   to {
-    transform: translate(-50%, 0);
-  }
-}
-
-@keyframes toast-lift {
-  from {
-    transform: translate(-50%, 0);
-    opacity: 1;
-  }
-
-  to {
-    transform: translate(-50%, -140%);
-    opacity: 0;
+    transform: translateY(0);
   }
 }
 
@@ -455,8 +441,7 @@
   .step-in-right,
   .step-in-left,
   .animate-pop-in,
-  .animate-toast-drop,
-  .animate-toast-lift {
+  .animate-toast-drop {
     animation: none !important;
   }
 
