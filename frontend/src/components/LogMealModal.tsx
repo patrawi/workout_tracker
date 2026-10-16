@@ -174,48 +174,36 @@ function MacroField({ label, value, onChange }: { label: string; value: string; 
 
 // ——— Component ———
 
-/** Compact per-slot status on the photo step: preview (with remove) or an
- *  empty dashed placeholder — mirrors the design's รูปก่อนกิน/รูปหลังกิน row. */
-function SlotThumb({
+/** The captured meal photo, surfaced at the top of the step only once it
+ *  exists — before that the step is just the live viewfinder (quick capture). */
+function CapturedPhotoCard({
     label,
-    required = false,
     image,
     onRemove,
 }: {
     label: string;
-    required?: boolean;
-    image: AttachedImage | null;
+    image: AttachedImage;
     onRemove: () => void;
 }) {
     return (
-        <div className="rounded-xl border border-surface-300/20 p-2">
+        <div className="animate-pop-in rounded-xl border border-surface-300/20 p-2">
             <div className="flex items-center justify-between gap-1 mb-1.5">
-                <span className="text-[11px] text-surface-400 truncate">
-                    {label} <span className="text-surface-300/50">· {required ? "จำเป็น" : "ไม่บังคับ"}</span>
-                </span>
-                {image && (
-                    <button
-                        type="button"
-                        onClick={onRemove}
-                        className="text-red-400/70 hover:text-red-400 text-[11px] px-1 shrink-0 transition active:scale-90"
-                        aria-label={`Remove ${label}`}
-                    >
-                        ✕
-                    </button>
-                )}
+                <span className="text-[11px] text-surface-400 truncate">{label}</span>
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="text-red-400/70 hover:text-red-400 text-[11px] px-1 shrink-0 transition active:scale-90"
+                    aria-label={`Remove ${label}`}
+                >
+                    ✕
+                </button>
             </div>
-            {image ? (
-                <img
-                    key={image.dataUrl}
-                    src={image.dataUrl}
-                    alt={`${label} preview`}
-                    className="animate-pop-in h-20 w-full rounded-lg object-cover border border-surface-300/30"
-                />
-            ) : (
-                <div className="h-20 rounded-lg border border-dashed border-surface-300/30 flex items-center justify-center text-[11px] text-surface-400/60">
-                    {required ? "ถ่ายหรือเลือกรูป" : "รอรูป"}
-                </div>
-            )}
+            <img
+                key={image.dataUrl}
+                src={image.dataUrl}
+                alt={`${label} preview`}
+                className="h-20 w-full rounded-lg object-cover border border-surface-300/30"
+            />
         </div>
     );
 }
@@ -230,14 +218,18 @@ interface LogMealModalProps {
 }
 
 /**
- * Two-step meal logging (ADR 0030 + mobile redesign): step 1 is photo capture
- * only — live camera (auto-prompts permission) or gallery; step 2 collects the
- * details; then the VLM estimates → auto create + confirm → result shows the
- * photo and central nutrition numbers. Steps push/pop with iOS-style spring
- * motion. No portion modes, no range editing, no review step — correction is
- * post-hoc via the provenance list. Never-block: a failed analysis stays on
- * the details step for retry; a failed confirm keeps a manual fallback button.
- * All state lives here; the parent only opens/closes (remount via key to reset).
+ * Two-step meal logging (ADR 0030 + mobile redesign): step 1 is quick capture
+ * — one photo of the meal before eating, live camera (auto-prompts permission)
+ * or gallery; step 2 collects the details; then the VLM estimates → auto
+ * create + confirm → result shows the photo and central nutrition numbers.
+ * Steps push/pop with iOS-style spring motion. The after photo is deliberately
+ * out of this flow — people photograph food before eating; a leftovers shot
+ * only matters in retrospective review, which needs image persistence
+ * (ADR 0013/0023) first. No portion modes, no range editing, no review step —
+ * correction is post-hoc via the provenance list. Never-block: a failed
+ * analysis stays on the details step for retry; a failed confirm keeps a
+ * manual fallback button. All state lives here; the parent only opens/closes
+ * (remount via key to reset).
  */
 export default function LogMealModal({ open, onClose, defaultDate, onLogged }: LogMealModalProps) {
     const { interpret, create, confirm, updateMacros, isInterpreting, isCreating, isConfirming, isUpdatingMacros } =
@@ -265,17 +257,12 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
      * must honor (e.g. weights they measured) and persisted with the observation. */
     const [userNote, setUserNote] = useState("");
     const [beforeImage, setBeforeImage] = useState<AttachedImage | null>(null);
-    const [afterImage, setAfterImage] = useState<AttachedImage | null>(null);
 
-    /** Camera/gallery captures land in the first empty slot: before photo,
-     * then after photo. Both full → the after slot is replaced. */
-    const handleCaptured = useCallback(
-        (image: AttachedImage) => {
-            if (!beforeImage) setBeforeImage(image);
-            else setAfterImage(image);
-        },
-        [beforeImage],
-    );
+    /** Quick capture fills the single meal-photo slot — a second capture
+     *  retakes it (the camera stays live so retakes are one tap away). */
+    const handleCaptured = useCallback((image: AttachedImage) => {
+        setBeforeImage(image);
+    }, []);
 
     // ——— Step navigation (drives the push/pop transition) ———
 
@@ -381,7 +368,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             const result = await interpret(
                 menuName.trim(),
                 beforeImage.base64,
-                afterImage?.base64,
+                undefined,
                 userNote.trim() || undefined,
             );
             if (result.status !== "ok" || result.proposal.components.length === 0) {
@@ -396,8 +383,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
             if (!menuName.trim() && dishName) setMenuName(dishName);
             // Point weights only — the user never sees or edits ranges (ADR 0030);
             // the interval engine still runs (oil bands keep honest uncertainty).
-            // Without an after image the fraction defaults to All (a valid ADR 0015
-            // quartile); a VLM-proposed fraction arrives only with one.
+            // No after image in this flow → consumed fractions default to All
+            // (a valid ADR 0015 quartile).
             res = await create({
                 date,
                 meal,
@@ -405,7 +392,6 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                 portion_mode: "estimated",
                 ...(mealSource.trim() ? { meal_source: mealSource.trim() } : {}),
                 ...(userNote.trim() ? { user_note: userNote.trim() } : {}),
-                has_after_image: afterImage !== null,
                 components: proposal.components.map((c) => ({
                     name: c.name,
                     kind: c.kind,
@@ -433,7 +419,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                     : "Saved as a draft, but logging failed — press Confirm & log to retry.",
             );
         }
-    }, [menuName, beforeImage, afterImage, userNote, date, meal, mealSource, interpret, create, confirm, showToast]);
+    }, [menuName, beforeImage, userNote, date, meal, mealSource, interpret, create, confirm, showToast]);
     // ——— Result rendering ———
 
     const estimate = updated
@@ -519,8 +505,8 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                         {/* ——— Step 1: photo ——— */}
                         {step === "photo" && (
                             <div className="space-y-4">
-                                {/* Camera-first capture (design: แนบรูป AI) — live viewfinder
-                                    + gallery fallback, feeding the slot row below. */}
+                                {/* Camera-first capture (design: แนบรูป AI) — the
+                                    viewfinder owns the top of the step, always. */}
                                 <CameraCapture onAttach={handleCaptured} onError={setImageError} />
 
                                 {imageError && (
@@ -529,10 +515,15 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                     </p>
                                 )}
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <SlotThumb label="รูปก่อนกิน" required image={beforeImage} onRemove={() => setBeforeImage(null)} />
-                                    <SlotThumb label="รูปหลังกิน" image={afterImage} onRemove={() => setAfterImage(null)} />
-                                </div>
+                                {/* The captured photo lands below the camera, appearing
+                                    only after a capture/pick — the camera never moves. */}
+                                {beforeImage && (
+                                    <CapturedPhotoCard
+                                        label="รูปก่อนกิน"
+                                        image={beforeImage}
+                                        onRemove={() => setBeforeImage(null)}
+                                    />
+                                )}
                             </div>
                         )}
 
@@ -616,26 +607,15 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                 </div>
 
                                 <div className="space-y-3">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <ImageSlot
-                                            label="Before photo"
-                                            required
-                                            inputLabel="Before photo"
-                                            image={beforeImage}
-                                            onAttach={setBeforeImage}
-                                            onRemove={() => setBeforeImage(null)}
-                                            onError={setImageError}
-                                        />
-                                        <ImageSlot
-                                            label="After photo"
-                                            hint="After eating — leftovers/broth"
-                                            inputLabel="After photo"
-                                            image={afterImage}
-                                            onAttach={setAfterImage}
-                                            onRemove={() => setAfterImage(null)}
-                                            onError={setImageError}
-                                        />
-                                    </div>
+                                    <ImageSlot
+                                        label="Before photo"
+                                        required
+                                        inputLabel="Before photo"
+                                        image={beforeImage}
+                                        onAttach={setBeforeImage}
+                                        onRemove={() => setBeforeImage(null)}
+                                        onError={setImageError}
+                                    />
 
                                     {imageError && (
                                         <p role="alert" className="text-xs text-amber-400">

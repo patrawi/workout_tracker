@@ -1,9 +1,9 @@
 // Camera-first capture block: a large live viewfinder with rear/front flip and
 // torch as on-frame overlays (native camera-app style) plus an always-available
 // gallery fallback beside the shutter. Captures funnel through the shared image
-// pipeline, so oversized phone originals never reach the API. The shutter feeds
-// whichever slot the parent routes it to; the camera stays live so an
-// after-photo can follow.
+// pipeline, so oversized phone originals never reach the API. The shutter fills
+// the parent's single meal-photo slot (before eating); the camera stays live so
+// a retake is one tap away.
 // Graceful degradation: permission denied → message + gallery still usable;
 // no mediaDevices at all → hidden <input capture> inputs open the OS camera.
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -162,8 +162,9 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
 
     return (
         <div className="space-y-3">
-            {/* Viewfinder — the hero of the photo step: fills the drawer width,
-                flip + torch live on the frame like a native camera app. */}
+            {/* Viewfinder — the hero of the photo step: full-height always, the
+                captured-photo card sits below it. Flip + torch live on the frame
+                like a native camera app. */}
             <div className="relative aspect-[4/5] max-h-[52dvh] w-full overflow-hidden rounded-2xl border border-surface-300/30 bg-black">
                 <video
                     ref={videoRef}
@@ -239,7 +240,7 @@ export default function CameraCapture({ onAttach, onError }: CameraCaptureProps)
             </div>
 
             <p className="text-[11px] text-surface-400">
-                ภาพจะเข้าช่องรูปที่ยังว่างก่อน — รูปก่อนกิน แล้วค่อยรูปหลังกิน · ถ้ากล้องใช้ไม่ได้ ยังเลือกจากแกลเลอรีได้เสมอ
+                ถ่ายรูปอาหารก่อนทาน — ถ่ายซ้ำเพื่อแทนที่รูปได้ · ถ้ากล้องใช้ไม่ได้ ยังเลือกจากแกลเลอรีได้เสมอ
             </p>
 
             {/* Hidden inputs: plain gallery pick + OS-camera fallbacks for browsers
