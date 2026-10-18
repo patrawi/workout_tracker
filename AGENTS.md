@@ -60,7 +60,7 @@ Layered architecture with clear separation:
 - `POST /api/auth/google` with `{ id_token }` — verifies the Google ID token via the tokeninfo endpoint (one network round trip per login; logins are rare — see `backend/src/lib/google-token.ts`), validates issuer/audience(`GOOGLE_CLIENT_ID`)/exp/email_verified, upserts a `users` row by `google_sub`, and issues a JWT carrying `user_id`. **Claim-first-login rule**: a brand-new Google account takes over the seeded placeholder owner row (id=1, `google_sub='pending-owner'`) on the first login, transferring all legacy single-user data to the owner.
 - `POST /api/auth/login` with the master password — owner bypass; its JWT carries `user_id: 1`.
 
-All per-user queries (workouts, sessions, rest days, bodyweight, nutrition, water, profile, history, analytics) are scoped by `user_id`, resolved from the JWT in `app.ts` (defaults to 1 for legacy tokens and when auth is disabled). The food catalog and nutrition references are global (shared).
+All per-user queries (workouts, sessions, rest days, bodyweight, nutrition, water, profile, history, analytics) are scoped by `user_id`, resolved from the JWT in `app.ts` (defaults to 1 for legacy tokens and when auth is disabled). The food catalog is global (shared) — except **Manual References** (ADR 0031): `nutrition_references.user_id` marks owner-saved rows, which match only for that user (`user_id IS NULL OR user_id = me` in the matcher and reference search).
 
 **AI parsing flow**: Raw text -> `POST /api/workouts/parse` -> Gemini AI -> structured JSON array -> returned to frontend for human review -> `POST /api/workouts/confirm` saves to DB.
 

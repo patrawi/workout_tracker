@@ -2,7 +2,7 @@
 // The estimate tables own the full model (observations + components + evidence +
 // hints + revisions); `nutrition_logs` only receives a dual-written point row
 // with provenance markers when an estimate is confirmed.
-import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { cosineDistance } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -169,6 +169,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
     provider: nutritionReferences.provider,
     provider_food_code: nutritionReferences.provider_food_code,
     version: nutritionReferences.version,
+    user_id: nutritionReferences.user_id,
     name_en: nutritionReferences.name_en,
     name_th: nutritionReferences.name_th,
     protein: nutritionReferences.protein,
@@ -183,6 +184,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
     provider: string;
     provider_food_code: string;
     version: string;
+    user_id: number | null;
     name_en: string | null;
     name_th: string | null;
     protein: number;
@@ -200,6 +202,7 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
       version: row.version,
       nameEn: row.name_en,
       nameTh: row.name_th,
+      userId: row.user_id,
       per100: {
         protein: row.protein,
         carbs: row.carbs,
@@ -208,6 +211,33 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
         calories: row.calories,
       },
     };
+  }
+
+  /** Catalog scope (ADR 0031): global rows plus the requesting user's Manual
+   *  References. Undefined userId = unscoped (legacy callers). */
+  function referenceScope(userId?: number) {
+    return userId === undefined
+      ? undefined
+      : or(isNull(nutritionReferences.user_id), eq(nutritionReferences.user_id, userId));
+  }
+
+  /** The user's Manual Reference with this exact name (ADR 0031 identity).
+   *  The service normalizes names (NFC, trim, space collapse) before calling —
+   *  SQL matches trim+lower only, which is consistent for rows written through
+   *  the service. */
+  async function findManualRefByName(userId: number, name: string): Promise<ReferenceRow | null> {
+    const [row] = await dbInstance
+      .select(REFERENCE_COLUMNS)
+      .from(nutritionReferences)
+      .where(
+        and(
+          eq(nutritionReferences.provider, "manual"),
+          eq(nutritionReferences.user_id, userId),
+          sql`lower(trim(${nutritionReferences.name_th})) = ${name.trim().toLowerCase()}`,
+        ),
+      )
+      .limit(1);
+    return row ? mapReferenceRow(row) : null;
   }
 
   function mapObservationRow(row: typeof mealObservations.$inferSelect): PersistedObservation {
@@ -552,35 +582,106 @@ export function createNutritionEstimationRepository(dbInstance: PostgresJsDataba
     // ——— ReferenceMatcherRepo implementation (ADR 0014 hybrid retrieval) ———
 
     /** Exact food-code lookup, case-insensitive on the trimmed code (spec §7 tier 0). */
-    async findByFoodCode(code: string): Promise<ReferenceRow | null> {
+    async findByFoodCode(code: string, userId?: number): Promise<ReferenceRow | null> {
       const normalized = code.trim().toLowerCase();
       if (!normalized) return null;
       const [row] = await dbInstance
         .select(REFERENCE_COLUMNS)
         .from(nutritionReferences)
-        .where(sql`lower(${nutritionReferences.provider_food_code}) = ${normalized}`)
+        .where(
+          and(
+            sql`lower(${nutritionReferences.provider_food_code}) = ${normalized}`,
+            referenceScope(userId),
+          ),
+        )
         .limit(1);
       return row ? mapReferenceRow(row) : null;
     },
 
     /** Candidate pool for lexical matching (Nutrition Reference Catalog). */
-    async listReferences(): Promise<ReferenceRow[]> {
-      const rows = await dbInstance.select(REFERENCE_COLUMNS).from(nutritionReferences);
+    async listReferences(userId?: number): Promise<ReferenceRow[]> {
+      const rows = await dbInstance
+        .select(REFERENCE_COLUMNS)
+        .from(nutritionReferences)
+        .where(referenceScope(userId));
       return rows.map(mapReferenceRow);
     },
 
     /** pgvector fallback: nearest references by cosine similarity. */
     async searchByEmbedding(
       embedding: number[],
-      k = 10,
+      opts: { k?: number; userId?: number } = {},
     ): Promise<Array<ReferenceRow & { similarity: number }>> {
       const distance = cosineDistance(nutritionReferences.embedding, embedding);
       const rows = await dbInstance
         .select({ ...REFERENCE_COLUMNS, similarity: sql<number>`1 - (${distance})` })
         .from(nutritionReferences)
+        .where(referenceScope(opts.userId))
         .orderBy(distance)
-        .limit(k);
+        .limit(opts.k ?? 10);
       return rows.map((row) => ({ ...mapReferenceRow(row), similarity: Number(row.similarity) }));
+    },
+
+    /** Save a Manual Reference (ADR 0031): insert on first sight of the name,
+     *  update macros/embedding when the user re-saves it. Name is the identity —
+     *  already NFC-normalized and trimmed by the service. The ON CONFLICT
+     *  backstop covers a double-submit race (the find above missed, then the
+     *  concurrent insert landed first); `updated` may then lie harmlessly. */
+    async upsertManualReference(input: {
+      user_id: number;
+      name: string;
+      per100: Macronutrients;
+      embedding: number[] | null;
+    }): Promise<{ reference: ReferenceRow; updated: boolean }> {
+      const existing = await findManualRefByName(input.user_id, input.name);
+      if (existing) {
+        await dbInstance
+          .update(nutritionReferences)
+          .set({
+            protein: input.per100.protein,
+            carbs: input.per100.carbs,
+            fat: input.per100.fat,
+            alcohol: input.per100.alcohol,
+            calories: input.per100.calories,
+            embedding: input.embedding,
+          })
+          .where(eq(nutritionReferences.id, existing.id));
+        return { reference: { ...existing, per100: input.per100 }, updated: true };
+      }
+      const [row] = await dbInstance
+        .insert(nutritionReferences)
+        .values({
+          provider: "manual",
+          provider_food_code: input.name,
+          version: "1",
+          user_id: input.user_id,
+          name_th: input.name,
+          name_en: null,
+          protein: input.per100.protein,
+          carbs: input.per100.carbs,
+          fat: input.per100.fat,
+          alcohol: input.per100.alcohol,
+          calories: input.per100.calories,
+          embedding: input.embedding,
+        })
+        .onConflictDoUpdate({
+          target: [
+            nutritionReferences.provider,
+            nutritionReferences.provider_food_code,
+            nutritionReferences.version,
+            nutritionReferences.user_id,
+          ],
+          set: {
+            protein: input.per100.protein,
+            carbs: input.per100.carbs,
+            fat: input.per100.fat,
+            alcohol: input.per100.alcohol,
+            calories: input.per100.calories,
+            embedding: input.embedding,
+          },
+        })
+        .returning(REFERENCE_COLUMNS);
+      return { reference: mapReferenceRow(row!), updated: false };
     },
   };
 }

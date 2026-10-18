@@ -23,6 +23,7 @@ const REF_A: ReferenceRow = {
     version: "2024.1",
     nameEn: "Steamed rice",
     nameTh: "ข้าวสวย",
+    userId: null,
     per100: { protein: 3, carbs: 28, fat: 0.5, alcohol: 0, calories: 130 },
 };
 const REF_B: ReferenceRow = {
@@ -32,6 +33,7 @@ const REF_B: ReferenceRow = {
     version: "2024.1",
     nameEn: "Stir fried pork",
     nameTh: "หมูผัด",
+    userId: null,
     per100: { protein: 20, carbs: 5, fat: 12, alcohol: 0, calories: 210 },
 };
 

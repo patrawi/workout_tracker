@@ -8,6 +8,7 @@ import {
 import { InfeasibleEvidenceError } from "../../../src/nutrition-estimation/types";
 import type {
   CalculationResult,
+  Macronutrients,
 } from "../../../src/nutrition-estimation/types";
 import type {
   CreateObservationInput,
@@ -31,6 +32,8 @@ interface State {
   revisions: any[];
   nutritionLogs: any[];
   references: Map<number, ReferenceRow>;
+  /** Manual References (ADR 0031) — owner-scoped rows keyed by (user, name). */
+  manualRefs: ReferenceRow[];
   nextId: number;
 }
 
@@ -43,6 +46,7 @@ function createFakeRepo() {
     revisions: [],
     nutritionLogs: [],
     references: new Map(),
+    manualRefs: [],
     nextId: 1,
   };
 
@@ -197,8 +201,52 @@ function createFakeRepo() {
       obs.calculation = update.calculation;
     },
 
-    async listReferences(): Promise<ReferenceRow[]> {
-      return [...state.references.values()];
+    async listReferences(userId?: number): Promise<ReferenceRow[]> {
+      const global = [...state.references.values()];
+      if (userId === undefined) return global;
+      const own = state.manualRefs.filter((r) => r.userId === userId);
+      return [...global, ...own];
+    },
+
+    async findManualReferenceByName(
+      userId: number,
+      name: string,
+    ): Promise<ReferenceRow | null> {
+      const n = name.trim().toLowerCase();
+      return (
+        state.manualRefs.find(
+          (r) => r.userId === userId && (r.nameTh ?? "").trim().toLowerCase() === n,
+        ) ?? null
+      );
+    },
+
+    async upsertManualReference(input: {
+      user_id: number;
+      name: string;
+      per100: Macronutrients;
+      embedding: number[] | null;
+    }): Promise<{ reference: ReferenceRow; updated: boolean }> {
+      const n = input.name.trim().toLowerCase();
+      const existing = state.manualRefs.find(
+        (r) => r.userId === input.user_id && (r.nameTh ?? "").trim().toLowerCase() === n,
+      );
+      if (existing) {
+        existing.per100 = input.per100;
+        existing.nameTh = input.name;
+        return { reference: existing, updated: true };
+      }
+      const row: ReferenceRow = {
+        id: nextId(),
+        provider: "manual",
+        providerFoodCode: input.name,
+        version: "1",
+        nameTh: input.name,
+        nameEn: null,
+        userId: input.user_id,
+        per100: input.per100,
+      };
+      state.manualRefs.push(row);
+      return { reference: row, updated: false };
     },
   };
   return { repo: repo as unknown as NutritionEstimationRepository, state };
@@ -213,6 +261,7 @@ const REF: ReferenceRow = {
   version: "2024.1",
   nameEn: "Stir fried basil pork",
   nameTh: "ผัดกะเพราหมู",
+  userId: null,
   per100: { protein: 10, carbs: 20, fat: 5, alcohol: 0, calories: 200 },
 };
 const REF2: ReferenceRow = { ...REF, id: 102, providerFoodCode: "TFC-002", nameTh: "ผัดกะเพราไก่" };
@@ -1329,5 +1378,168 @@ describe("searchReferences — vector tier (ADR 0014)", () => {
 
     expect(result.items).toHaveLength(0);
     expect(embedCalls).toBe(0);
+  });
+});
+
+// ——— saveComponentReference (ADR 0031) ———
+
+function saveCalc(): CalculationResult {
+  const point = (v: number) => ({ low: v, central: v, high: v });
+  return {
+    nutrients: {
+      protein: point(30),
+      carbs: point(10),
+      fat: point(5),
+      alcohol: point(0),
+      calories: point(205), // 30×4 + 10×4 + 5×9
+    },
+    relaxed: false,
+    relaxed_constraints: [],
+    drivers: [],
+    per_component: [
+      {
+        name: "หมูแดดเดียว",
+        consumed_weight_g: point(50),
+        contribution: {
+          protein: point(30),
+          carbs: point(10),
+          fat: point(5),
+          alcohol: point(0),
+          calories: point(205),
+        },
+      },
+    ],
+  };
+}
+
+async function saveScenario(calc: CalculationResult = saveCalc(), userId = 1) {
+  const { repo, state } = createFakeRepo();
+  const embedCalls: string[] = [];
+  const service = createNutritionEstimationService({
+    repo,
+    matcher: gapMatcher(),
+    embed: async (text: string) => {
+      embedCalls.push(text);
+      return [0.1, 0.2];
+    },
+  });
+  const obsId = await repo.insertObservation({
+    user_id: userId,
+    date: "2026-10-18",
+    meal_type: "Lunch",
+    menu_name: "ข้าวราดแกง",
+    portion_mode: "estimated",
+    meal_source: null,
+    user_note: null,
+    status: "confirmed",
+    reference_id: null,
+    match_tier: null,
+    calculation: calc,
+    components: [
+      {
+        name: "หมูแดดเดียว",
+        kind: "main",
+        weight_mode: "estimated",
+        weight_low: 50,
+        weight_central: 50,
+        weight_high: 50,
+        consumed_fraction: 1,
+        position: 0,
+      },
+    ],
+  });
+  await repo.insertRevision({
+    observation_id: obsId,
+    reference_id: null,
+    reference_provider: null,
+    reference_version: null,
+    calculation: calc,
+  });
+  return { repo, state, service, embedCalls, obsId, userId };
+}
+
+describe("saveComponentReference (ADR 0031)", () => {
+  test("derives per-100 g from the user-point macros over the consumed mass", async () => {
+    const { service, obsId, embedCalls } = await saveScenario();
+    const { reference, updated } = await service.saveComponentReference(
+      obsId,
+      0,
+      { name: "หมูแดดเดียว" },
+      1,
+    );
+    expect(updated).toBe(false);
+    expect(reference.provider).toBe("manual");
+    expect(reference.userId).toBe(1);
+    expect(reference.nameTh).toBe("หมูแดดเดียว");
+    // 30 g protein on 50 g eaten → 60 g/100 g; 205 kcal on 50 g → 410 kcal/100 g.
+    expect(reference.per100.protein).toBeCloseTo(60);
+    expect(reference.per100.carbs).toBeCloseTo(20);
+    expect(reference.per100.fat).toBeCloseTo(10);
+    expect(reference.per100.calories).toBeCloseTo(410);
+    expect(embedCalls).toEqual(["หมูแดดเดียว"]);
+  });
+
+  test("re-saving the same name updates the same row (name is the identity)", async () => {
+    const { service, obsId } = await saveScenario();
+    const first = await service.saveComponentReference(obsId, 0, { name: "หมูแดดเดียว" }, 1);
+    const second = await service.saveComponentReference(obsId, 0, { name: "  หมูแดดเดียว  " }, 1);
+    expect(second.updated).toBe(true);
+    expect(second.reference.id).toBe(first.reference.id);
+  });
+
+  test("a different name intentionally creates a separate reference", async () => {
+    const { service, obsId } = await saveScenario();
+    const a = await service.saveComponentReference(obsId, 0, { name: "หมูแดดเดียว" }, 1);
+    const b = await service.saveComponentReference(obsId, 0, { name: "หมูเค็มแดดเดียว" }, 1);
+    expect(b.updated).toBe(false);
+    expect(b.reference.id).not.toBe(a.reference.id);
+  });
+
+  test("rejects a component whose consumed mass is below 10 g", async () => {
+    const calc = saveCalc();
+    calc.per_component[0]!.consumed_weight_g = { low: 5, central: 5, high: 5 };
+    const { service, obsId } = await saveScenario(calc);
+    expect(service.saveComponentReference(obsId, 0, { name: "x" }, 1)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
+
+  test("rejects a derived density above the 900 kcal/100 g physical cap", async () => {
+    const calc = saveCalc();
+    calc.per_component[0]!.contribution.fat = { low: 50, central: 50, high: 50 };
+    calc.per_component[0]!.contribution.calories = { low: 700, central: 700, high: 700 };
+    const { service, obsId } = await saveScenario(calc);
+    // 700 kcal on 50 g → 1400 kcal/100 g.
+    expect(service.saveComponentReference(obsId, 0, { name: "x" }, 1)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
+
+  test("an embedding failure is non-fatal — the row saves un-embedded", async () => {
+    const { repo, state, obsId } = await saveScenario();
+    const service = createNutritionEstimationService({
+      repo,
+      matcher: gapMatcher(),
+      embed: async () => {
+        throw new Error("gemini down");
+      },
+    });
+    const { reference } = await service.saveComponentReference(obsId, 0, { name: "หมูแดดเดียว" }, 1);
+    expect(reference.id).toBeGreaterThan(0);
+    expect(state.manualRefs).toHaveLength(1);
+  });
+
+  test("another user's observation is not found (ownership)", async () => {
+    const { service, obsId } = await saveScenario(saveCalc(), 1);
+    expect(service.saveComponentReference(obsId, 0, { name: "x" }, 2)).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+  });
+
+  test("an out-of-range position is a validation error", async () => {
+    const { service, obsId } = await saveScenario();
+    expect(service.saveComponentReference(obsId, 5, { name: "x" }, 1)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
   });
 });

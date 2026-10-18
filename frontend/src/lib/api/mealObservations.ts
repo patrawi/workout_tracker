@@ -68,6 +68,14 @@ export const mealObservationApi = {
             ...input,
         }),
 
+    /** Save a corrected component as the user's Manual Reference (ADR 0031) —
+     * per-100 g derived server-side; name is the (user, name) identity. */
+    saveComponentReference: (id: number, position: number, name: string) =>
+        api.post<{ reference: { id: number; nameTh: string | null }; updated: boolean }>(
+            `/meal-observations/${id}/save-component-reference`,
+            { position, name },
+        ),
+
     listPending: () => api.get<PendingObservation[]>("/meal-observations/pending"),
 
     getDetail: (id: number) =>

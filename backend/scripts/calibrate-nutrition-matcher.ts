@@ -94,7 +94,7 @@ const CROSS_LINGUAL_CASES: Array<{ query: string; family: RegExp }> = [
 for (const { query, family } of CROSS_LINGUAL_CASES) {
   const hits = await repo.searchByEmbedding(
     await createEmbeddingClient(config.geminiApiKey!).embed(query),
-    10,
+    { k: 10 },
   );
   const rank = hits.findIndex((h) => family.test(`${h.nameTh ?? ""} ${h.nameEn ?? ""}`));
   const ok = rank !== -1 && rank < 3;

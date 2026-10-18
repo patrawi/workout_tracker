@@ -71,7 +71,9 @@ export interface ReferenceMacros {
   per100: Macronutrients;
 }
 
-/** A provider-normalized Nutrition Reference Catalog record (ADR 0011, 0020). */
+/** A provider-normalized Nutrition Reference Catalog record (ADR 0011, 0020).
+ *  `user_id` is null for global catalog rows; a Manual Reference (ADR 0031)
+ *  carries its owning user and matches only for them. */
 export interface ReferenceRow {
   id: number;
   provider: string;
@@ -79,6 +81,7 @@ export interface ReferenceRow {
   version: string;
   nameEn: string | null;
   nameTh: string | null;
+  userId: number | null;
   per100: Macronutrients;
 }
 

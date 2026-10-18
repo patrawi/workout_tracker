@@ -32,8 +32,18 @@ import { ValidationError, NotFoundError, ConflictError } from "../lib/errors";
 import type { InterpretOutcome } from "./vlm/deepseek-vision";
 
 export interface MatcherLike {
-  matchReference(menuName: string, hints?: { kind?: string }): Promise<MatchOutcomeLike>;
+  matchReference(
+    menuName: string,
+    hints?: { kind?: string; userId?: number },
+  ): Promise<MatchOutcomeLike>;
 }
+
+// Manual Reference save guards (ADR 0031): a reference below 10 g of eaten
+// mass would extrapolate noise into per-100 g values, and nothing edible
+// exceeds 900 kcal/100 g (pure fat is 884).
+export const MANUAL_REF_MIN_CONSUMED_G = 10;
+export const MANUAL_REF_MAX_KCAL_PER100 = 900;
+export const MANUAL_REF_NAME_MAX_LENGTH = 120;
 
 export type MatchOutcomeLike =
   | { tier: "auto"; reference: ReferenceRow; score: number }
@@ -538,7 +548,10 @@ export function createNutritionEstimationService(deps: {
       const resolutions: ComponentResolution[] = [];
       const estimateNotes: string[] = [];
       for (const component of components) {
-        const match = await matcher.matchReference(component.name, { kind: component.kind });
+        const match = await matcher.matchReference(component.name, {
+          kind: component.kind,
+          userId: input.user_id,
+        });
         if (match.tier === "auto" && match.reference.per100.calories > 0) {
           resolutions.push({
             per100: match.reference.per100,
@@ -856,6 +869,75 @@ export function createNutritionEstimationService(deps: {
   }
 
   /**
+   * Save a corrected component as the user's Manual Reference (ADR 0031).
+   * Derives per-100 g values from the component's persisted user-point macros
+   * over its consumed mass (already served × fraction — no fraction math here),
+   * guards the degenerate cases, normalizes the name (NFC/trim/space-collapse)
+   * as the (user, name) identity, then upserts and re-embeds. An embedding
+   * failure is non-fatal: the row persists un-embedded and lexical matching
+   * works while the backfill script recovers it. Never touches the current
+   * observation — references affect only future matches (ADR 0031).
+   */
+  async function saveComponentReference(
+    observationId: number,
+    position: number,
+    input: { name: string },
+    userId: number,
+  ): Promise<{ reference: ReferenceRow; updated: boolean }> {
+    const detail = await repo.getObservationDetail(observationId, userId);
+    if (!detail) throw new NotFoundError("Meal observation");
+    const calc = detail.latest_revision?.calculation;
+    if (!calc) throw new ConflictError("Observation has no calculation to save from.");
+    if (position < 0 || position >= calc.per_component.length) {
+      throw new ValidationError("Component position is out of range.");
+    }
+    const pc = calc.per_component[position]!;
+    const mass = pc.consumed_weight_g.central;
+    if (!Number.isFinite(mass) || mass < MANUAL_REF_MIN_CONSUMED_G) {
+      throw new ValidationError(
+        `Consumed mass must be at least ${MANUAL_REF_MIN_CONSUMED_G} g to save a reference.`,
+      );
+    }
+    const protein = pc.contribution.protein.central;
+    const carbs = pc.contribution.carbs.central;
+    const fat = pc.contribution.fat.central;
+    const alcohol = pc.contribution.alcohol.central;
+    if ([protein, carbs, fat, alcohol].some((v) => !Number.isFinite(v) || v < 0)) {
+      throw new ValidationError("Macros must be finite, non-negative numbers.");
+    }
+    const per100: Macronutrients = {
+      protein: (protein / mass) * 100,
+      carbs: (carbs / mass) * 100,
+      fat: (fat / mass) * 100,
+      alcohol: (alcohol / mass) * 100,
+      // Persisted calories are already the 4/4/9/7 resync — scale, don't recompute.
+      calories: (pc.contribution.calories.central / mass) * 100,
+    };
+    if (!Number.isFinite(per100.calories) || per100.calories > MANUAL_REF_MAX_KCAL_PER100) {
+      throw new ValidationError(
+        `Reference density exceeds the ${MANUAL_REF_MAX_KCAL_PER100} kcal/100 g physical cap.`,
+      );
+    }
+    const name = input.name.normalize("NFC").trim().replace(/\s+/g, " ");
+    if (!name || name.length > MANUAL_REF_NAME_MAX_LENGTH) {
+      throw new ValidationError(
+        `Reference name must be 1–${MANUAL_REF_NAME_MAX_LENGTH} characters.`,
+      );
+    }
+    let embedding: number[] | null = null;
+    if (embed) {
+      try {
+        embedding = await embed(name);
+      } catch {
+        // Non-fatal (ADR 0031): lexical matching still works; the backfill
+        // script picks up NULL embeddings.
+        embedding = null;
+      }
+    }
+    return await repo.upsertManualReference({ user_id: userId, name, per100, embedding });
+  }
+
+  /**
    * Confirm the latest pending revision: mark it confirmed (superseding older
    * confirmed ones), set the observation confirmed, and dual-write the central
    * point values into nutrition_logs with provenance markers (ADR 0022).
@@ -944,13 +1026,14 @@ export function createNutritionEstimationService(deps: {
   async function searchReferences(
     query: string,
     limit?: number,
+    userId?: number,
   ): Promise<ReferenceSearchResult> {
     const trimmed = typeof query === "string" ? query.trim() : "";
     if (!trimmed) return { items: [] };
 
     const cap = clampSearchLimit(limit);
     const lowered = trimmed.toLowerCase();
-    const pool = await repo.listReferences();
+    const pool = await repo.listReferences(userId);
 
     const codeMatch = pool.find(
       (row) => row.providerFoodCode.toLowerCase() === lowered,
@@ -978,7 +1061,7 @@ export function createNutritionEstimationService(deps: {
       typeof repo.searchByEmbedding === "function"
     ) {
       const queryEmbedding = await embed(trimmed);
-      const hits = await repo.searchByEmbedding(queryEmbedding, cap);
+      const hits = await repo.searchByEmbedding(queryEmbedding, { k: cap, userId });
       const seen = new Set(items.map((item) => item.id));
       const vectorItems = hits
         .filter((hit) => hit.similarity >= SEARCH_VECTOR_FLOOR && !seen.has(hit.id))
@@ -1010,6 +1093,7 @@ export function createNutritionEstimationService(deps: {
     resolveReference,
     resolveComponentReference,
     updateComponentMacros,
+    saveComponentReference,
     getObservation,
     listPending,
     searchReferences,

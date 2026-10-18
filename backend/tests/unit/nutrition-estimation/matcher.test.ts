@@ -20,6 +20,7 @@ function row(overrides: Partial<ReferenceRow> & { id: number }): ReferenceRow {
     version: "2024.1",
     nameEn: null,
     nameTh: null,
+    userId: null,
     per100: { protein: 10, carbs: 20, fat: 5, alcohol: 0, calories: 200 },
     ...overrides,
   };
@@ -434,5 +435,67 @@ describe("matchReference — preparation-state awareness (raw vs cooked)", () =>
     } else if (outcome.tier === "ambiguous") {
       expect(outcome.candidates.map((c) => c.id)).toContain(1281);
     }
+  });
+});
+
+// ADR 0031 — Manual References: user-owned rows match only for their owner,
+// get a small similarity bonus in the vector tier, and are exempt from the
+// over-dense kind-band demotion (the user is the authority on their own saved
+// numbers; the ≤900 kcal save guard caps typos). The raw-state penalty applies
+// to them unchanged.
+describe("matchReference — Manual References (ADR 0031)", () => {
+  const saltyPork = { protein: 25, carbs: 4, fat: 18, alcohol: 0, calories: 290 };
+
+  test("owner bonus promotes an owner row across the vector auto bar", async () => {
+    // Lexical must miss both rows (latin query vs Thai-only names) so the
+    // vector fallback tier is the decider.
+    const owner = row({ id: 9001, provider: "manual", userId: 7, nameTh: "หมูแดดเดียว", per100: saltyPork });
+    const global = row({ id: 1654, nameEn: "Sausage, pork, fried" });
+    const searchByEmbedding = mock(async () => [
+      { ...owner, similarity: 0.83 }, // below the 0.85 auto bar on its own
+      { ...global, similarity: 0.78 },
+    ]);
+    const matcher = createReferenceMatcher(makeRepo([owner, global], searchByEmbedding), {
+      embed: async () => [1],
+    });
+    const outcome = await matcher.matchReference("moo dad deaw", { userId: 7 });
+    expect(outcome.tier).toBe("auto");
+    if (outcome.tier === "auto") expect(outcome.reference.id).toBe(9001);
+  });
+
+  test("without ownership the same vector race stays below the auto bar", async () => {
+    const owner = row({ id: 9001, provider: "manual", userId: 7, nameTh: "หมูแดดเดียว", per100: saltyPork });
+    const searchByEmbedding = mock(async () => [{ ...owner, similarity: 0.83 }]);
+    const matcher = createReferenceMatcher(makeRepo([owner], searchByEmbedding), {
+      embed: async () => [1],
+    });
+    const outcome = await matcher.matchReference("moo dad deaw");
+    expect(outcome.tier).toBe("ambiguous");
+  });
+
+  test("an owner row above its kind band auto-selects (band exemption)", async () => {
+    const pool = [
+      row({ id: 9002, provider: "manual", userId: 7, nameTh: "หมูแดดเดียว", per100: { ...saltyPork, calories: 750 } }),
+    ];
+    const matcher = createReferenceMatcher(makeRepo(pool));
+    const outcome = await matcher.matchReference("หมูแดดเดียว", { kind: "main", userId: 7 });
+    expect(outcome.tier).toBe("auto");
+    if (outcome.tier === "auto") expect(outcome.reference.id).toBe(9002);
+  });
+
+  test("a global row above its kind band is still demoted to ambiguous", async () => {
+    const pool = [
+      row({ id: 1655, nameTh: "หมูแดดเดียว", per100: { ...saltyPork, calories: 750 } }),
+    ];
+    const matcher = createReferenceMatcher(makeRepo(pool));
+    const outcome = await matcher.matchReference("หมูแดดเดียว", { kind: "main" });
+    expect(outcome.tier).toBe("ambiguous");
+  });
+
+  test("the owner scope reaches the pool queries", async () => {
+    const repo = makeRepo([row({ id: 1, nameTh: "ข้าวหมูแดง" })]);
+    const matcher = createReferenceMatcher(repo);
+    await matcher.matchReference("ข้าวหมูแดง", { userId: 7 });
+    expect(repo.listReferences).toHaveBeenCalledWith(7);
   });
 });

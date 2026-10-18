@@ -82,11 +82,12 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
     // Reference search for the pending-meal resolution picker (design spec §7).
     // Static path registered before /:id; query params arrive as strings, so
     // limit is coerced here (invalid → undefined → service default 10).
-    .get("/meal-observations/references/search", routeHandlerCtx(async ({ query }) => {
+    .get("/meal-observations/references/search", routeHandlerCtx(async ({ query, user_id }: any) => {
       const parsed = query.limit !== undefined ? Number.parseInt(query.limit, 10) : Number.NaN;
       return await nutritionEstimationService.searchReferences(
         query.q,
         Number.isFinite(parsed) ? parsed : undefined,
+        user_id,
       );
     }), {
       query: t.Object({
@@ -183,6 +184,22 @@ export function registerNutritionEstimationRoutes(app: any, ctx: AppContext): vo
         protein_g: t.Optional(t.Number({ minimum: 0 })),
         carbs_g: t.Optional(t.Number({ minimum: 0 })),
         fat_g: t.Optional(t.Number({ minimum: 0 })),
+      }),
+    })
+    // Save a corrected component as the user's Manual Reference (ADR 0031):
+    // per-100 g derived server-side from the persisted macros ÷ consumed mass;
+    // name is the (user, name) identity — re-saving updates, new name inserts.
+    .post("/meal-observations/:id/save-component-reference", routeHandlerCtx(async ({ params, body, user_id }: any) => {
+      return await nutritionEstimationService.saveComponentReference(
+        Number(params.id),
+        body.position,
+        { name: body.name },
+        user_id,
+      );
+    }), {
+      body: t.Object({
+        position: t.Integer({ minimum: 0 }),
+        name: t.String({ minLength: 1, maxLength: 120 }),
       }),
     });
 }

@@ -7,6 +7,7 @@ import BusyButton from "@/features/nutrition-estimation/components/BusyButton";
 import CameraCapture from "@/features/nutrition-estimation/components/CameraCapture";
 import ImageSlot, { type AttachedImage } from "@/features/nutrition-estimation/components/ImageSlot";
 import { useMealObservations } from "@/features/nutrition-estimation/hooks/useMealObservations";
+import { mealObservationApi } from "@/lib/api/mealObservations";
 import { estimateFromCreateOutcome, estimateFromRecalculation } from "@/features/nutrition-estimation/estimate";
 import { roundToWhole, roundToOneDecimal } from "@/features/nutrition-estimation/format";
 import type {
@@ -35,14 +36,20 @@ type SheetDrag = { kind: "idle" } | { kind: "drag"; y: number } | { kind: "settl
 function ProvenanceList({
     perComponent,
     onSave,
+    onSaveReference,
     saving,
 }: {
     perComponent: MealComponentBreakdown[];
     onSave: (position: number, input: UpdateComponentMacrosInput) => Promise<void>;
+    onSaveReference: (position: number, name: string) => Promise<void>;
     saving: boolean;
 }) {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
     const [draft, setDraft] = useState({ weight: "", protein: "", carbs: "", fat: "" });
+    // "บันทึกเป็น reference" (ADR 0031): store this correction as the user's
+    // own catalog row so the same dish prices correctly next time.
+    const [saveRef, setSaveRef] = useState(false);
+    const [refName, setRefName] = useState("");
 
     const openCard = (i: number, c: MealComponentBreakdown) => {
         if (openIndex === i) {
@@ -55,6 +62,7 @@ function ProvenanceList({
             carbs: String(roundToOneDecimal(c.contribution.carbs.central)),
             fat: String(roundToOneDecimal(c.contribution.fat.central)),
         });
+        setRefName(c.name);
         setOpenIndex(i);
     };
 
@@ -70,6 +78,10 @@ function ProvenanceList({
             carbs_g: Number(draft.carbs),
             fat_g: Number(draft.fat),
         });
+        if (saveRef && refName.trim()) {
+            await onSaveReference(openIndex, refName.trim());
+        }
+        setSaveRef(false);
         setOpenIndex(null);
     };
 
@@ -132,6 +144,26 @@ function ProvenanceList({
                                         <MacroField label="Carbs (g)" value={draft.carbs} onChange={(v) => setDraft((d) => ({ ...d, carbs: v }))} />
                                         <MacroField label="Fat (g)" value={draft.fat} onChange={(v) => setDraft((d) => ({ ...d, fat: v }))} />
                                     </div>
+
+                                    <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={saveRef}
+                                            onChange={(e) => setSaveRef(e.target.checked)}
+                                            className="accent-emerald-400 h-4 w-4"
+                                        />
+                                        บันทึกเป็น reference เผื่อมื้อหน้า
+                                    </label>
+                                    {saveRef && (
+                                        <input
+                                            type="text"
+                                            value={refName}
+                                            onChange={(e) => setRefName(e.target.value)}
+                                            placeholder="ชื่ออาหาร เช่น หมูแดดเดียว"
+                                            maxLength={120}
+                                            className="glass-input w-full px-3 py-2 text-sm text-white"
+                                        />
+                                    )}
 
                                     <button
                                         type="button"
@@ -441,6 +473,21 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
         [outcome, updateMacros, showToast],
     );
 
+    /** Persist the correction as the user's Manual Reference (ADR 0031) —
+     *  fires after the macro save; failure surfaces a toast, never blocks. */
+    const handleSaveReference = useCallback(
+        async (position: number, name: string) => {
+            if (!outcome) return;
+            try {
+                await mealObservationApi.saveComponentReference(outcome.observation.id, position, name);
+                showToast(`บันทึก “${name}” เป็น reference แล้ว`);
+            } catch (err) {
+                showToast(err instanceof Error ? err.message : "Failed to save the reference.");
+            }
+        },
+        [outcome, showToast],
+    );
+
     /** Manual fallback when the auto-confirm failed (never-block, ADR 0030). */
     const handleConfirmRetry = useCallback(async () => {
         if (!outcome) return;
@@ -697,6 +744,7 @@ export default function LogMealModal({ open, onClose, defaultDate, onLogged }: L
                                             (updated ?? outcome).observation.calculation?.per_component ?? []
                                         }
                                         onSave={handleSaveMacros}
+                                        onSaveReference={handleSaveReference}
                                         saving={isUpdatingMacros}
                                     />
                                 </div>

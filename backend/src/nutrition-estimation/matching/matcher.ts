@@ -9,12 +9,16 @@ import type { ReferenceRow } from "../types";
 export type { ReferenceRow } from "../types";
 
 export interface ReferenceMatcherRepo {
-  /** Candidate pool (Nutrition Reference Catalog). */
-  listReferences(): Promise<ReferenceRow[]>;
+  /** Candidate pool (Nutrition Reference Catalog) — global rows plus, when a
+   *  userId is given, that user's Manual References (ADR 0031). */
+  listReferences(userId?: number): Promise<ReferenceRow[]>;
   /** Exact food-code lookup (hybrid tier 0): case-insensitive, trimmed. */
-  findByFoodCode(code: string): Promise<ReferenceRow | null>;
+  findByFoodCode(code: string, userId?: number): Promise<ReferenceRow | null>;
   /** Optional pgvector fallback. */
-  searchByEmbedding?(embedding: number[]): Promise<Array<ReferenceRow & { similarity: number }>>;
+  searchByEmbedding?(
+    embedding: number[],
+    opts?: { k?: number; userId?: number },
+  ): Promise<Array<ReferenceRow & { similarity: number }>>;
 }
 
 export type MatchOutcome =
@@ -63,6 +67,30 @@ export function providerRank(provider: string): number {
   if (provider === "thaifcd") return 1;
   if (provider === "baowio") return 2;
   return 3;
+}
+
+/**
+ * Owner preference (ADR 0031): a Manual Reference is the food this user
+ * actually eats, so it should not lose a close race to a generic catalog
+ * row. Added in both tiers — decisive on the fine-grained vector scale; on
+ * the lexical scale it re-affirms the providerRank tie-break and can carry
+ * a fractional near-miss over a tier threshold. Calibrate alongside the
+ * thresholds (scripts/calibrate-nutrition-matcher.ts).
+ */
+export const OWNER_SIMILARITY_BONUS = 0.05;
+
+function isOwned(ref: ReferenceRow, userId: number | undefined): boolean {
+  return userId !== undefined && ref.userId !== null && ref.userId === userId;
+}
+
+function ownerBonus(ref: ReferenceRow, userId: number | undefined): number {
+  return isOwned(ref, userId) ? OWNER_SIMILARITY_BONUS : 0;
+}
+
+/** The over-dense kind-band net never demotes the user's own Manual
+ *  References (ADR 0031) — they are the authority on their own numbers. */
+function demotesForKind(ref: ReferenceRow, hints: { kind?: string; userId?: number }): boolean {
+  return caloriesAboveKindBand(hints.kind, ref.per100.calories) && !isOwned(ref, hints.userId);
 }
 
 export interface MatcherOptions {
@@ -293,18 +321,18 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
 
   async function matchReference(
     menuName: string,
-    hints: { kind?: string } = {},
+    hints: { kind?: string; userId?: number } = {},
   ): Promise<MatchOutcome> {
     // Tier 0: exact food-code lookup (spec §7 — hybrid = food-code + lexical +
     // pgvector). A trimmed, case-insensitive code match auto-selects and skips
     // lexical scoring entirely.
     const code = menuName.trim();
     if (code) {
-      const byCode = await repo.findByFoodCode(code);
+      const byCode = await repo.findByFoodCode(code, hints.userId);
       if (byCode) return { tier: "auto", reference: byCode, score: 1 };
     }
 
-    const pool = await repo.listReferences();
+    const pool = await repo.listReferences(hints.userId);
     if (pool.length === 0) return { tier: "gap" };
 
     const scored: Scored[] = pool
@@ -316,9 +344,8 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
           // denser than the component's kind ("cooked white rice" → rice kind,
           // but แป้งข้าวเจ้า/rice flour sits at ~360 kcal/100g) loses close
           // races without being blocked outright.
-          (hints.kind !== undefined && caloriesAboveKindBand(hints.kind, ref.per100.calories)
-            ? KIND_BAND_MISS_PENALTY
-            : 1),
+          (demotesForKind(ref, hints) ? KIND_BAND_MISS_PENALTY : 1) +
+          ownerBonus(ref, hints.userId),
       }))
       .sort(
         (a, b) =>
@@ -350,7 +377,7 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
         margin >= marginThreshold ||
         specificitySeparates
       ) {
-        if (caloriesAboveKindBand(hints.kind, best.ref.per100.calories)) {
+        if (demotesForKind(best.ref, hints)) {
           return {
             tier: "ambiguous",
             candidates: scored.slice(0, 3).map((s) => ({ ...s.ref, score: s.score })),
@@ -367,12 +394,15 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
       typeof opts.embed === "function";
     if (canUseVector) {
       const embedding = await opts.embed!(menuName);
-      const vectorHits = (await repo.searchByEmbedding!(embedding))
+      const vectorHits = (await repo.searchByEmbedding!(embedding, { userId: hints.userId }))
         .filter((hit) => hit.similarity >= VECTOR_AMBIGUOUS_THRESHOLD)
         .sort((a, b) => b.similarity - a.similarity || providerRank(a.provider) - providerRank(b.provider));
       const ranked = vectorHits.map((hit) => ({
         hit,
-        adjusted: hit.similarity - vectorHandicapStep(hit.provider) * VECTOR_PROVIDER_HANDICAP,
+        adjusted:
+          hit.similarity -
+          vectorHandicapStep(hit.provider) * VECTOR_PROVIDER_HANDICAP +
+          ownerBonus(hit, hints.userId),
       }));
       const bestEntry = ranked[0];
       const runnerUpEntry = ranked[1];
@@ -384,7 +414,7 @@ export function createReferenceMatcher(repo: ReferenceMatcherRepo, opts: Matcher
           (runnerUpEntry === undefined ||
             bestEntry.adjusted - runnerUpEntry.adjusted >= VECTOR_MARGIN_THRESHOLD)
         ) {
-          if (caloriesAboveKindBand(hints.kind, bestEntry.hit.per100.calories)) {
+          if (demotesForKind(bestEntry.hit, hints)) {
             return {
               tier: "ambiguous",
               candidates: vectorHits.slice(0, 3).map((hit) => ({ ...hit, score: hit.similarity })),

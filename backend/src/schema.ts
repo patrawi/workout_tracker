@@ -317,6 +317,9 @@ export const nutritionReferences = pgTable(
         provider: text("provider").notNull(),
         provider_food_code: text("provider_food_code").notNull(),
         version: text("version").notNull(),
+        // Null for global catalog rows; set for Manual References (ADR 0031) —
+        // a manual row matches only for its owner.
+        user_id: integer("user_id"),
         name_en: text("name_en"),
         name_th: text("name_th"),
         protein: real("protein").default(0).notNull(),
@@ -329,10 +332,14 @@ export const nutritionReferences = pgTable(
         created_at: timestamp("created_at", { mode: "string" }).defaultNow(),
     },
     (table) => [
+        // user_id participates in the unique key (ADR 0031): two users may save
+        // the same dish name as Manual References. Postgres treats NULLs as
+        // distinct in unique indexes, so global rows keep the old guarantee.
         uniqueIndex("nutrition_references_provider_code_version_idx").on(
             table.provider,
             table.provider_food_code,
             table.version,
+            table.user_id,
         ),
         index("nutrition_references_name_th_idx").on(table.name_th),
         index("nutrition_references_name_en_idx").on(table.name_en),
